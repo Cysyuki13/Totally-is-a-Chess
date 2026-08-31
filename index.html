@@ -160,6 +160,17 @@
             box-shadow: 0 8px 25px rgba(231, 76, 60, 0.45);
         }
 
+        .btn-success {
+            background: var(--success);
+            color: #1a1a2e;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #55ef9a;
+            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.45);
+        }
+
         .btn-row {
             display: flex;
             flex-wrap: wrap;
@@ -636,6 +647,45 @@
             display: none;
         }
 
+        .ready-status-row {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin: 12px 0;
+            flex-wrap: wrap;
+        }
+
+        .ready-status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .ready-status-item .ready-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+
+        .ready-status-item .ready-dot.waiting {
+            background: #888;
+        }
+
+        .ready-status-item .ready-dot.ready {
+            background: #2ecc71;
+            box-shadow: 0 0 12px rgba(46, 204, 113, 0.5);
+        }
+
+        .ready-status-item .ready-dot.not-ready {
+            background: #e74c3c;
+        }
+
         @media (max-width: 768px) {
             .game-top-bar {
                 padding: 6px 10px;
@@ -701,6 +751,15 @@
                 padding: 8px 14px;
                 font-size: 0.8rem;
                 min-width: 70px;
+            }
+
+            .ready-status-row {
+                gap: 12px;
+            }
+
+            .ready-status-item {
+                font-size: 0.8rem;
+                padding: 4px 10px;
             }
         }
     </style>
@@ -838,14 +897,28 @@
         </div>
     </div>
 
-    <!-- 等待大廳 -->
+    <!-- 等待大廳（含準備按鈕） -->
     <div class="overlay hidden" id="waitingOverlay" style="inset:0;">
         <div class="panel">
-            <h2>等待玩家加入...</h2>
-            <p>分享您的房號：</p>
-            <div class="code-display" id="waitingCodeDisplay">----</div>
-            <p style="opacity:0.7;">等待另一位玩家輸入此房號加入</p>
-            <button class="btn btn-danger" style="margin-top:16px;" onclick="cancelWaiting()">取消</button>
+            <h2>🏠 遊戲大廳</h2>
+            <p>房號：<strong class="code-display" id="waitingCodeDisplay" style="font-size:2.2rem;padding:8px 16px;display:inline-block;">----</strong></p>
+            <div class="ready-status-row">
+                <div class="ready-status-item">
+                    <span>🤍 白方 (你)</span>
+                    <span class="ready-dot waiting" id="myReadyDot"></span>
+                    <span id="myReadyText">等待中</span>
+                </div>
+                <div class="ready-status-item">
+                    <span>🖤 黑方 (對手)</span>
+                    <span class="ready-dot waiting" id="opponentReadyDot"></span>
+                    <span id="opponentReadyText">等待中</span>
+                </div>
+            </div>
+            <p id="waitingStatus" style="opacity:0.7;margin-top:8px;">等待對手加入...</p>
+            <div class="btn-row" style="margin-top:12px;">
+                <button class="btn btn-success" id="readyBtn" onclick="setReady()" disabled>✅ 準備</button>
+                <button class="btn btn-danger" onclick="cancelWaiting()">✕ 取消</button>
+            </div>
         </div>
     </div>
 
@@ -939,7 +1012,12 @@
         let dragMoved = false;
         let suppressClick = false;
         let settingsReceived = false;
-        let settingsTimeout = null; // 客户端超时定时器
+        let settingsTimeout = null;
+
+        // ---- 准备状态 ----
+        let myReady = false;
+        let opponentReady = false;
+        let gameStarted = false;
 
         const DRAG_THRESHOLD = 6;
         const TARGET_RADIUS = 0.7;
@@ -1526,7 +1604,6 @@
         }
 
         function startTimer() {
-            // 无限模式或非多人模式不启动计时器
             if (timerState.isInfinite || roomSettings.timePerPlayer <= 0 || currentMode !== 'multiplayer') {
                 stopTimer();
                 return;
@@ -1567,7 +1644,6 @@
             timerState.active = true;
             timerState.paused = false;
             updateTimerDisplay();
-            // 如果非无限模式且定时器未运行，则启动
             if (!timerState.isInfinite && !timerState.interval) {
                 startTimer();
             }
@@ -1995,7 +2071,6 @@
 
         function createPieceModel(type, color, hp, maxHp, params) {
             const group = new THREE.Group();
-            // 根据队伍颜色设置材质颜色
             const baseColor = color === 'white' ? 0xf5f0e1 : 0x2a2a2a;
             const accentColor = color === 'white' ? 0xe8dcc8 : 0x3a3a3a;
 
@@ -2004,19 +2079,15 @@
 
             const p = params || PIECE_PARAMS[type] || {};
 
-            // 辅助函数：创建网格并应用部件变换
             const addMesh = (geo, matUsed, x, y, z, partKey, rot) => {
                 const materialClone = matUsed.clone();
                 const mesh = new THREE.Mesh(geo, materialClone);
-                // 设置初始位置
                 mesh.position.set(x, y, z);
-                // 设置初始旋转（如果有）
                 if (rot) mesh.rotation.copy(rot);
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
                 mesh.userData.origColor = materialClone.color.getHex();
 
-                // 应用部件变换（如果存在）
                 if (p.parts && p.parts[partKey]) {
                     const trans = p.parts[partKey];
                     if (trans.position) {
@@ -2033,7 +2104,6 @@
                 return mesh;
             };
 
-            // 基座
             const baseRadius = type === 'king' || type === 'queen' ? 0.35 : 0.3;
             addMesh(new THREE.CylinderGeometry(baseRadius, baseRadius * 1.15, 0.12, 16), mat, 0, 0.06, 0, 'base');
 
@@ -2055,9 +2125,7 @@
                     const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd,
                         headWidth: hw, headHeight: hh, headDepth: hd } = p;
                     addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    // 颈部（默认倾斜 -0.3 rad）
                     const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02, 'neck', new THREE.Euler(-0.3, 0, 0));
-                    // 头部（默认倾斜 -0.15 rad）
                     const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08, 'head', new THREE.Euler(-0.15, 0, 0));
                     break;
                 }
@@ -2086,10 +2154,8 @@
                 default: break;
             }
 
-            // 添加自定义部件（从 p.parts 中读取，排除内建键）
             if (p.parts) {
                 for (const [id, partData] of Object.entries(p.parts)) {
-                    // 跳过内建键（已经处理过）
                     if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id)) continue;
                     const geo = createGeometryFromPart(partData.type, partData.geometryParams || {});
                     const partMat = new THREE.MeshStandardMaterial({
@@ -2110,13 +2176,9 @@
 
             addHealthBarToModel(group, hp, maxHp);
 
-            // ---- 新增：骑士方向修正 ----
             if (type === 'knight') {
-                if (color === 'white') {
-                    if (color === 'white') group.rotation.y = Math.PI; // 白方旋转180度
-                    if (color === 'black') group.rotation.y = 0; // 默认
-                }
-                // 黑方保持原样（0度）
+                if (color === 'white') group.rotation.y = Math.PI;
+                if (color === 'black') group.rotation.y = 0;
             }
 
             return group;
@@ -2130,11 +2192,9 @@
                 for (let c = 0; c < 8; c++) {
                     const piece = gameState.getPiece(r, c);
                     if (piece) {
-                        // 获取完整的参数（包含 parts）
                         const params = PIECE_PARAMS[piece.type] || {};
                         const obj = createPieceModel(piece.type, piece.color, piece.hp, piece.maxHp, params);
                         obj.position.set(c - 3.5, 0, 3.5 - r);
-                        // 忽略 params.position，保持棋盘对齐
                         obj.userData = {
                             row: r,
                             col: c,
@@ -3434,14 +3494,18 @@
 
             const pieceObj = pieceObjects[`${fromR},${fromC}`];
 
-            // ----- 远程分支：无3D对象时直接应用伤害 -----
             if (!pieceObj && isRemote) {
-                // 1. 处理敌方伤害（十字方向上的敌方棋子）
                 const enemyColor = ability.damage > 0 ? (gameState.getPiece(fromR, fromC)?.color === 'white' ? 'black' : 'white') : null;
-                const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                const directions = [
+                    [0, 1],
+                    [0, -1],
+                    [1, 0],
+                    [-1, 0]
+                ];
                 const targets = [];
                 for (const [dr, dc] of directions) {
-                    const tr = fromR + dr, tc = fromC + dc;
+                    const tr = fromR + dr,
+                        tc = fromC + dc;
                     if (gameState.isInBounds(tr, tc)) {
                         const target = gameState.getPiece(tr, tc);
                         if (target && target.color === enemyColor) {
@@ -3458,7 +3522,6 @@
                     }
                 }
 
-                // 2. 处理自身伤害（兵所在位置，可能移动了）
                 const pawnPos = (fromR === toR && fromC === toC) ? { r: fromR, c: fromC } : { r: toR, c: toC };
                 const pawn = gameState.getPiece(pawnPos.r, pawnPos.c);
                 if (pawn) {
@@ -3471,7 +3534,6 @@
                     }
                 }
 
-                // 3. 更新回合、历史、状态
                 gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
                 gameState.moveHistory.push({
                     type: 'ability',
@@ -3496,13 +3558,11 @@
                 return;
             }
 
-            // ----- 原有逻辑（本地执行，pieceObj 必须存在） -----
             if (!pieceObj) {
                 isAnimating = false;
                 return;
             }
 
-            // 原地爆炸（兵不移动）
             if (fromR === toR && fromC === toC) {
                 createCrossExplosion(toR, toC, ability.damage, ability.selfDamage, () => {
                     const pawn = gameState.getPiece(toR, toC);
@@ -3548,7 +3608,6 @@
                 return;
             }
 
-            // 兵移动后爆炸
             const startPos = pieceObj.position.clone();
             const targetPos = get3DPosition(toR, toC, 0);
             const duration = 0.3;
@@ -4335,12 +4394,14 @@
             stopTimer();
             if (peer) peer.destroy();
             hideRemoteAim();
-            // 重置 settings 状态，避免残留
             settingsReceived = false;
             if (settingsTimeout) {
                 clearTimeout(settingsTimeout);
                 settingsTimeout = null;
             }
+            myReady = false;
+            opponentReady = false;
+            gameStarted = false;
             document.getElementById('mainMenu').classList.remove('hidden');
             document.getElementById('aiDifficultyMenu').classList.add('hidden');
             document.getElementById('multiplayerMenu').classList.add('hidden');
@@ -4412,12 +4473,16 @@
             roomCode = Math.floor(1000 + Math.random() * 9000).toString();
             isHost = true;
             playerColor = 'white';
+            myReady = false;
+            opponentReady = false;
+            gameStarted = false;
 
             settingsReceived = true;
 
             document.getElementById('roomSettings').classList.add('hidden');
             document.getElementById('waitingCodeDisplay').textContent = roomCode;
             document.getElementById('waitingOverlay').classList.remove('hidden');
+            updateReadyUI();
 
             initPeer(roomCode, true);
         }
@@ -4431,6 +4496,9 @@
             roomCode = code;
             isHost = false;
             playerColor = 'black';
+            myReady = false;
+            opponentReady = false;
+            gameStarted = false;
             document.getElementById('multiplayerStatus').textContent = '正在連線...';
 
             initPeer(code, false);
@@ -4438,12 +4506,100 @@
 
         function cancelWaiting() {
             if (peer) peer.destroy();
+            myReady = false;
+            opponentReady = false;
             document.getElementById('waitingOverlay').classList.add('hidden');
             document.getElementById('multiplayerMenu').classList.remove('hidden');
         }
 
         // ============================================================
-        //  PEERJS - 修复客户端无法进入游戏的核心逻辑
+        //  READY SYSTEM
+        // ============================================================
+        function setReady() {
+            if (myReady || gameStarted) return;
+            myReady = true;
+            updateReadyUI();
+            if (peerConnection?.open) {
+                peerConnection.send({ type: 'ready' });
+            }
+            checkBothReady();
+        }
+
+        function updateReadyUI() {
+            const myDot = document.getElementById('myReadyDot');
+            const myText = document.getElementById('myReadyText');
+            const oppDot = document.getElementById('opponentReadyDot');
+            const oppText = document.getElementById('opponentReadyText');
+            const status = document.getElementById('waitingStatus');
+            const btn = document.getElementById('readyBtn');
+
+            // 我方
+            if (myReady) {
+                myDot.className = 'ready-dot ready';
+                myText.textContent = '已準備 ✓';
+                btn.disabled = true;
+                btn.textContent = '✅ 已準備';
+            } else {
+                myDot.className = 'ready-dot not-ready';
+                myText.textContent = '未準備';
+                btn.disabled = false;
+                btn.textContent = '✅ 準備';
+            }
+
+            // 對手
+            if (opponentReady) {
+                oppDot.className = 'ready-dot ready';
+                oppText.textContent = '已準備 ✓';
+            } else {
+                oppDot.className = 'ready-dot waiting';
+                oppText.textContent = '等待中...';
+            }
+
+            // 狀態文字
+            if (myReady && opponentReady) {
+                status.textContent = '🎮 雙方已準備！遊戲即將開始...';
+                status.style.color = '#2ecc71';
+            } else if (opponentReady) {
+                status.textContent = '👤 對手已準備，請點擊「準備」開始！';
+                status.style.color = '#f1c40f';
+            } else if (myReady) {
+                status.textContent = '⏳ 等待對手準備...';
+                status.style.color = '#f1c40f';
+            } else {
+                const hasOpponent = document.getElementById('waitingCodeDisplay').textContent !== '----';
+                if (hasOpponent && peerConnection?.open) {
+                    status.textContent = '👥 對手已加入！請點擊「準備」開始';
+                    status.style.color = '#f0e6d3';
+                } else {
+                    status.textContent = '⏳ 等待對手加入...';
+                    status.style.color = '#f0e6d3';
+                }
+            }
+        }
+
+        function checkBothReady() {
+            if (myReady && opponentReady && !gameStarted) {
+                gameStarted = true;
+                // 双方都准备完毕，启动游戏
+                setTimeout(() => {
+                    if (currentMode === 'multiplayer') {
+                        // 隐藏等待大厅
+                        document.getElementById('waitingOverlay').classList.add('hidden');
+                        // 确保顶栏显示
+                        document.getElementById('topBar').classList.remove('hidden');
+                        // 初始化游戏
+                        if (!gameState || gameOverFlag) {
+                            initNewGame();
+                        } else {
+                            restartGame();
+                        }
+                    }
+                }, 300);
+            }
+        }
+
+        // ============================================================
+        //  PEERJS
         // ============================================================
         function initPeer(code, hosting) {
             const peerId = hosting ? 'chess-' + code : undefined;
@@ -4455,10 +4611,9 @@
                     peer.on('connection', (conn) => {
                         console.log('收到連線請求');
                         peerConnection = conn;
-                        // 【修复】主机收到连接后，立即设置多人模式并初始化游戏
                         currentMode = 'multiplayer';
                         setupPeerConnection();
-                        // 延迟发送设置，确保连接稳定
+                        // 发送设置
                         setTimeout(() => {
                             if (peerConnection?.open) {
                                 peerConnection.send({
@@ -4471,15 +4626,9 @@
                                 });
                             }
                         }, 300);
-                        document.getElementById('waitingOverlay').classList.add('hidden');
+                        // 更新UI：对手已加入
+                        updateReadyUI();
                         document.getElementById('topBar').classList.remove('hidden');
-                        // 如果游戏还未初始化，或已经结束，则初始化
-                        if (!gameState || gameOverFlag) {
-                            initNewGame();
-                        } else {
-                            // 如果已经存在游戏，重新开始以应用设置
-                            restartGame();
-                        }
                     });
                 } else {
                     const targetId = 'chess-' + code;
@@ -4491,9 +4640,13 @@
                     }
                     peerConnection = conn;
                     setupPeerConnection();
-                    document.getElementById('multiplayerStatus').textContent = '連線成功！等待遊戲開始...';
+                    document.getElementById('multiplayerStatus').textContent = '連線成功！';
 
-                    // 设置超时，若 5 秒内未收到 settings，则报错返回
+                    // 显示等待大厅
+                    document.getElementById('waitingCodeDisplay').textContent = code;
+                    document.getElementById('waitingOverlay').classList.remove('hidden');
+                    document.getElementById('topBar').classList.remove('hidden');
+
                     settingsTimeout = setTimeout(() => {
                         if (!settingsReceived) {
                             document.getElementById('multiplayerStatus').textContent = '⚠️ 等待房間設定超時，請重新加入';
@@ -4522,7 +4675,6 @@
         function setupPeerConnection() {
             peerConnection.on('data', (data) => {
                 if (data.type === 'settings') {
-                    // 收到设置，清除超时
                     if (settingsTimeout) {
                         clearTimeout(settingsTimeout);
                         settingsTimeout = null;
@@ -4544,31 +4696,31 @@
                     }
                     updateTimerDisplay();
 
-                    // 【修复】客户端收到设置后，进入多人模式
                     if (!isHost) {
                         currentMode = 'multiplayer';
-                        // ---- 强制隐藏所有覆盖层（保险） ----
-                        const overlays = ['mainMenu', 'aiDifficultyMenu', 'multiplayerMenu', 'roomSettings', 'waitingOverlay', 'gameOverOverlay'];
+                        const overlays = ['mainMenu', 'aiDifficultyMenu', 'multiplayerMenu', 'roomSettings'];
                         overlays.forEach(id => {
                             const el = document.getElementById(id);
                             if (el) el.classList.add('hidden');
                         });
-                        // 显示顶部栏
-                        const topBar = document.getElementById('topBar');
-                        if (topBar) topBar.classList.remove('hidden');
-                        // 清空状态提示
+                        // 显示等待大厅（客户端）
+                        document.getElementById('waitingCodeDisplay').textContent = roomCode;
+                        document.getElementById('waitingOverlay').classList.remove('hidden');
+                        document.getElementById('topBar').classList.remove('hidden');
                         const statusEl = document.getElementById('multiplayerStatus');
                         if (statusEl) statusEl.textContent = '';
-                        // 延迟一帧初始化游戏，确保 DOM 更新完成
-                        setTimeout(() => {
-                            if (!gameState || gameOverFlag) {
-                                initNewGame();
-                            } else {
-                                restartGame();
-                            }
-                        }, 50);
+                        // 启用准备按钮
+                        updateReadyUI();
                     }
                     console.log('收到房間設定，已進入多人模式:', roomSettings);
+                    return;
+                }
+
+                if (data.type === 'ready') {
+                    // 对手已准备
+                    opponentReady = true;
+                    updateReadyUI();
+                    checkBothReady();
                     return;
                 }
 
@@ -4746,9 +4898,7 @@
                 document.getElementById('timerDisplay').style.display = 'flex';
                 if (settingsReceived) {
                     resetTimers(roomSettings.timePerPlayer);
-                    if (roomSettings.timePerPlayer > 0) {
-                        // 计时器会在 switchTimer 时启动
-                    } else {
+                    if (roomSettings.timePerPlayer > 0) {} else {
                         timerState.isInfinite = true;
                         document.getElementById('timerWhiteText').textContent = '∞';
                         document.getElementById('timerBlackText').textContent = '∞';
