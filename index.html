@@ -901,7 +901,8 @@
     <div class="overlay hidden" id="waitingOverlay" style="inset:0;">
         <div class="panel">
             <h2>🏠 遊戲大廳</h2>
-            <p>房號：<strong class="code-display" id="waitingCodeDisplay" style="font-size:2.2rem;padding:8px 16px;display:inline-block;">----</strong></p>
+            <p>房號：<strong class="code-display" id="waitingCodeDisplay"
+                    style="font-size:2.2rem;padding:8px 16px;display:inline-block;">----</strong></p>
             <div class="ready-status-row">
                 <div class="ready-status-item">
                     <span>🤍 白方 (你)</span>
@@ -4546,13 +4547,17 @@
                 btn.textContent = '✅ 準備';
             }
 
-            // 對手
+            // 對手：只要 peerConnection 存在即视为已连接
+            const isOpponentConnected = !!peerConnection;
             if (opponentReady) {
                 oppDot.className = 'ready-dot ready';
                 oppText.textContent = '已準備 ✓';
+            } else if (isOpponentConnected) {
+                oppDot.className = 'ready-dot waiting';
+                oppText.textContent = '等待準備...';
             } else {
                 oppDot.className = 'ready-dot waiting';
-                oppText.textContent = '等待中...';
+                oppText.textContent = '等待加入...';
             }
 
             // 狀態文字
@@ -4565,15 +4570,12 @@
             } else if (myReady) {
                 status.textContent = '⏳ 等待對手準備...';
                 status.style.color = '#f1c40f';
+            } else if (isOpponentConnected) {
+                status.textContent = '👥 對手已加入！請點擊「準備」開始';
+                status.style.color = '#f0e6d3';
             } else {
-                const hasOpponent = document.getElementById('waitingCodeDisplay').textContent !== '----';
-                if (hasOpponent && peerConnection?.open) {
-                    status.textContent = '👥 對手已加入！請點擊「準備」開始';
-                    status.style.color = '#f0e6d3';
-                } else {
-                    status.textContent = '⏳ 等待對手加入...';
-                    status.style.color = '#f0e6d3';
-                }
+                status.textContent = '⏳ 等待對手加入...';
+                status.style.color = '#f0e6d3';
             }
         }
 
@@ -4613,7 +4615,6 @@
                         peerConnection = conn;
                         currentMode = 'multiplayer';
                         setupPeerConnection();
-                        // 发送设置
                         setTimeout(() => {
                             if (peerConnection?.open) {
                                 peerConnection.send({
@@ -4626,8 +4627,10 @@
                                 });
                             }
                         }, 300);
-                        // 更新UI：对手已加入
+                        // 立即更新 UI
                         updateReadyUI();
+                        // 延迟再更新一次，确保 DOM 刷新
+                        setTimeout(updateReadyUI, 100);
                         document.getElementById('topBar').classList.remove('hidden');
                     });
                 } else {
@@ -4646,14 +4649,16 @@
                     document.getElementById('waitingCodeDisplay').textContent = code;
                     document.getElementById('waitingOverlay').classList.remove('hidden');
                     document.getElementById('topBar').classList.remove('hidden');
+                    // ---------- 新增：立即启用准备按钮 ----------
+                    updateReadyUI();
 
+                    // ---------- 延长超时至 20 秒 ----------
                     settingsTimeout = setTimeout(() => {
                         if (!settingsReceived) {
-                            document.getElementById('multiplayerStatus').textContent = '⚠️ 等待房間設定超時，請重新加入';
-                            if (peer) peer.destroy();
-                            backToMenu();
+                            // 只显示提示，不自动退出
+                            document.getElementById('multiplayerStatus').textContent = '⚠️ 等待房間設定超時，請手動取消後重試';
                         }
-                    }, 5000);
+                    }, 20000); // 原为 5000，现改为 20000
                 }
             });
 
@@ -4898,7 +4903,7 @@
                 document.getElementById('timerDisplay').style.display = 'flex';
                 if (settingsReceived) {
                     resetTimers(roomSettings.timePerPlayer);
-                    if (roomSettings.timePerPlayer > 0) {} else {
+                    if (roomSettings.timePerPlayer > 0) { } else {
                         timerState.isInfinite = true;
                         document.getElementById('timerWhiteText').textContent = '∞';
                         document.getElementById('timerBlackText').textContent = '∞';
