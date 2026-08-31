@@ -4547,20 +4547,26 @@
                     // 【修复】客户端收到设置后，进入多人模式
                     if (!isHost) {
                         currentMode = 'multiplayer';
-                        // 隐藏所有菜单，显示游戏界面
-                        document.getElementById('multiplayerMenu').classList.add('hidden');
-                        document.getElementById('waitingOverlay').classList.add('hidden');
-                        document.getElementById('roomSettings').classList.add('hidden');
-                        document.getElementById('mainMenu').classList.add('hidden');
-                        document.getElementById('topBar').classList.remove('hidden');
+                        // ---- 强制隐藏所有覆盖层（保险） ----
+                        const overlays = ['mainMenu', 'aiDifficultyMenu', 'multiplayerMenu', 'roomSettings', 'waitingOverlay', 'gameOverOverlay'];
+                        overlays.forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) el.classList.add('hidden');
+                        });
+                        // 显示顶部栏
+                        const topBar = document.getElementById('topBar');
+                        if (topBar) topBar.classList.remove('hidden');
                         // 清空状态提示
-                        document.getElementById('multiplayerStatus').textContent = '';
-                        // 初始化游戏
-                        if (!gameState || gameOverFlag) {
-                            initNewGame();
-                        } else {
-                            restartGame();
-                        }
+                        const statusEl = document.getElementById('multiplayerStatus');
+                        if (statusEl) statusEl.textContent = '';
+                        // 延迟一帧初始化游戏，确保 DOM 更新完成
+                        setTimeout(() => {
+                            if (!gameState || gameOverFlag) {
+                                initNewGame();
+                            } else {
+                                restartGame();
+                            }
+                        }, 50);
                     }
                     console.log('收到房間設定，已進入多人模式:', roomSettings);
                     return;
@@ -4724,6 +4730,7 @@
         }
 
         function initNewGame() {
+            document.getElementById('topBar').classList.remove('hidden');
             gameState = new ChessGame();
             gameOverFlag = false;
             selectedPiece = null;
