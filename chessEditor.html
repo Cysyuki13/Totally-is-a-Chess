@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>♟ 棋子模型編輯器</title>
+    <style>
+        /* ===== 全局樣式 ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background: #1a1a2e;
+            color: #f0e6d3;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e8c547;
+            border-radius: 4px;
+        }
+
+        /* ===== 頂欄 ===== */
+        #topBar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 24px;
+            background: rgba(22, 33, 62, 0.92);
+            backdrop-filter: blur(6px);
+            border-bottom: 2px solid #e8c547;
+            z-index: 20;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        #topBar h1 {
+            font-size: 1.3rem;
+            color: #e8c547;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #topBar h1 small {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            font-weight: 400;
+            letter-spacing: 0;
+        }
+        .top-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            background: #e8c547;
+            color: #1a1a2e;
+            box-shadow: 0 2px 10px rgba(232, 197, 71, 0.25);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 18px rgba(232, 197, 71, 0.4);
+        }
+        .btn-secondary {
+            background: #3a3a5c;
+            color: #f0e6d3;
+            box-shadow: none;
+        }
+        .btn-secondary:hover {
+            background: #4a4a6c;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+        }
+        .btn-danger {
+            background: #e74c3c;
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(231, 76, 60, 0.25);
+        }
+        .btn-danger:hover {
+            background: #ff6b5e;
+            box-shadow: 0 4px 18px rgba(231, 76, 60, 0.4);
+        }
+        .btn-success {
+            background: #2ecc71;
+            color: #1a1a2e;
+            box-shadow: 0 2px 10px rgba(46, 204, 113, 0.25);
+        }
+        .btn-success:hover {
+            background: #55ef9a;
+            box-shadow: 0 4px 18px rgba(46, 204, 113, 0.4);
+        }
+
+        /* ===== 主體佈局 ===== */
+        #main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ===== 3D 場景 ===== */
+        #sceneContainer {
+            flex: 1;
+            position: relative;
+            background: #12121f;
+            overflow: hidden;
+            min-width: 0;
+        }
+        #sceneContainer canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* 場景左下提示 */
+        #sceneHint {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: #aaa;
+            pointer-events: none;
+            white-space: nowrap;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        /* ===== 參數面板 ===== */
+        #panel {
+            width: 380px;
+            min-width: 320px;
+            max-width: 460px;
+            background: rgba(22, 33, 62, 0.95);
+            backdrop-filter: blur(6px);
+            border-left: 2px solid #e8c547;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        #panelHeader {
+            padding: 14px 20px 10px;
+            border-bottom: 1px solid rgba(232, 197, 71, 0.2);
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #panelHeader h2 {
+            font-size: 1rem;
+            color: #e8c547;
+            letter-spacing: 1px;
+        }
+        #panelHeader .badge {
+            font-size: 0.65rem;
+            background: rgba(232, 197, 71, 0.15);
+            padding: 2px 12px;
+            border-radius: 12px;
+            color: #e8c547;
+        }
+
+        #panelBody {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 16px 24px;
+        }
+
+        /* ===== 摺疊面板 ===== */
+        .accordion-item {
+            margin: 6px 0;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .accordion-item.active {
+            border-color: rgba(232, 197, 71, 0.5);
+            box-shadow: 0 0 20px rgba(232, 197, 71, 0.05);
+        }
+        .accordion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+            gap: 12px;
+        }
+        .accordion-header:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .accordion-header .piece-icon {
+            font-size: 1.4rem;
+            width: 32px;
+            text-align: center;
+        }
+        .accordion-header .piece-name {
+            font-weight: 700;
+            font-size: 0.95rem;
+            flex: 1;
+        }
+        .accordion-header .piece-color-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+        }
+        .accordion-header .arrow {
+            transition: transform 0.25s;
+            font-size: 0.7rem;
+            opacity: 0.5;
+        }
+        .accordion-item.active .accordion-header .arrow {
+            transform: rotate(180deg);
+        }
+        .accordion-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            padding: 0 16px;
+        }
+        .accordion-item.active .accordion-body {
+            max-height: 600px;
+            padding: 0 16px 16px;
+            overflow-y: auto;
+        }
+
+        /* ===== 參數控制 ===== */
+        .param-group {
+            margin: 10px 0 6px;
+        }
+        .param-group .param-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-bottom: 2px;
+        }
+        .param-group .param-label .val {
+            color: #e8c547;
+            font-weight: 600;
+            min-width: 32px;
+            text-align: right;
+        }
+        .param-group input[type="range"] {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            outline: none;
+            transition: background 0.2s;
+        }
+        .param-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #e8c547;
+            cursor: pointer;
+            border: 2px solid #1a1a2e;
+            box-shadow: 0 0 8px rgba(232, 197, 71, 0.3);
+        }
+        .param-group input[type="range"]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #e8c547;
+            cursor: pointer;
+            border: 2px solid #1a1a2e;
+        }
+        .param-group input[type="color"] {
+            width: 100%;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+        }
+        .param-group input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+        .param-group input[type="color"]::-webkit-color-swatch {
+            border-radius: 6px;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .param-row {
+            display: flex;
+            gap: 12px;
+        }
+        .param-row .param-group {
+            flex: 1;
+        }
+
+        /* ===== 響應式 ===== */
+        @media (max-width: 820px) {
+            #panel {
+                width: 280px;
+                min-width: 200px;
+            }
+            #topBar h1 {
+                font-size: 1rem;
+            }
+            .btn {
+                padding: 6px 12px;
+                font-size: 0.75rem;
+            }
+            .accordion-header .piece-icon {
+                font-size: 1.1rem;
+                width: 24px;
+            }
+            .accordion-header .piece-name {
+                font-size: 0.8rem;
+            }
+        }
+        @media (max-width: 640px) {
+            #main {
+                flex-direction: column;
+            }
+            #panel {
+                width: 100%;
+                max-width: 100%;
+                border-left: none;
+                border-top: 2px solid #e8c547;
+                height: 45vh;
+                min-height: 300px;
+            }
+            #sceneContainer {
+                height: 55vh;
+                min-height: 200px;
+            }
+            #sceneHint {
+                bottom: 8px;
+                font-size: 0.6rem;
+                padding: 4px 12px;
+                white-space: normal;
+            }
+        }
+        @media (max-width: 480px) {
+            #topBar {
+                padding: 6px 12px;
+            }
+            #topBar h1 {
+                font-size: 0.85rem;
+            }
+            .btn {
+                padding: 4px 10px;
+                font-size: 0.7rem;
+            }
+            #panelBody {
+                padding: 4px 8px 12px;
+            }
+            .accordion-body {
+                padding: 0 8px;
+            }
+            .accordion-item.active .accordion-body {
+                padding: 0 8px 12px;
+            }
+            .param-group .param-label {
+                font-size: 0.7rem;
+            }
+        }
+
+        /* ===== 匯出對話框 ===== */
+        #exportModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+        }
+        #exportModal.open {
+            display: flex;
+        }
+        #exportModal .modal-box {
+            background: #1a1a2e;
+            border: 2px solid #e8c547;
+            border-radius: 16px;
+            padding: 28px 32px;
+            max-width: 720px;
+            width: 92%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #exportModal .modal-box h2 {
+            color: #e8c547;
+            margin-bottom: 12px;
+            font-size: 1.2rem;
+        }
+        #exportModal .modal-box textarea {
+            flex: 1;
+            min-height: 280px;
+            background: #0f0f1a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            padding: 14px;
+            resize: vertical;
+            outline: none;
+            tab-size: 2;
+            line-height: 1.5;
+        }
+        #exportModal .modal-box textarea:focus {
+            border-color: #e8c547;
+        }
+        #exportModal .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+        #exportModal .modal-actions .btn {
+            padding: 10px 24px;
+        }
+        .copy-toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2ecc71;
+            color: #1a1a2e;
+            padding: 10px 28px;
+            border-radius: 12px;
+            font-weight: 700;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            box-shadow: 0 8px 30px rgba(46, 204, 113, 0.3);
+        }
+        .copy-toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== 頂欄 ===== -->
+    <div id="topBar">
+        <h1>
+            ♟ 棋子模型編輯器
+            <small>拖曳旋轉 · 滾輪縮放</small>
+        </h1>
+        <div class="top-actions">
+            <button class="btn btn-secondary" onclick="resetAll()">↺ 重置</button>
+            <button class="btn btn-success" onclick="exportCode()">📤 匯出代碼</button>
+        </div>
+    </div>
+
+    <!-- ===== 主體 ===== -->
+    <div id="main">
+        <!-- 3D 場景 -->
+        <div id="sceneContainer">
+            <div id="sceneHint">🖱 左鍵拖曳旋轉 · 滾輪縮放 · 右鍵平移</div>
+        </div>
+
+        <!-- 參數面板 -->
+        <div id="panel">
+            <div id="panelHeader">
+                <h2>⚙ 參數調整</h2>
+                <span class="badge">即時預覽</span>
+            </div>
+            <div id="panelBody">
+                <!-- 動態由 JS 生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 匯出對話框 ===== -->
+    <div id="exportModal">
+        <div class="modal-box">
+            <h2>📤 匯出棋子模型代碼</h2>
+            <p style="opacity:0.6;font-size:0.85rem;margin-bottom:12px;">
+                複製下方代碼，替換原 <code style="background:#2a2a4a;padding:2px 8px;border-radius:4px;">createPieceModel</code> 函數
+            </p>
+            <textarea id="exportCodeArea" spellcheck="false"></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeExport()">關閉</button>
+                <button class="btn btn-success" onclick="copyExport()">📋 複製</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 複製提示 ===== -->
+    <div class="copy-toast" id="copyToast">✅ 已複製到剪貼簿</div>
+
+    <!-- ===== Three.js (使用 r128 穩定版，支援傳統 script 載入) ===== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js">
+    </script>
+
+    <script>
+        // ===================================================================
+        //  1. 參數定義（預設值 = 原始遊戲數值）
+        // ===================================================================
+        const DEFAULT_PARAMS = {
+            pawn: {
+                baseRadius: 0.18,
+                baseHeight: 0.28,
+                topRadius: 0.20,
+                topHeight: 0.08,
+                sphereRadius: 0.18,
+                color: '#f5f0e1',
+                roughness: 0.25,
+                metalness: 0.20
+            },
+            rook: {
+                bodyRadius: 0.26,
+                bodyHeight: 0.38,
+                crownRadius: 0.31,
+                crownHeight: 0.10,
+                color: '#f5f0e1',
+                roughness: 0.25,
+                metalness: 0.20
+            },
+            knight: {
+                bodyRadius: 0.26,
+                bodyHeight: 0.38,
+                neckWidth: 0.22,
+                neckHeight: 0.30,
+                neckDepth: 0.22,
+                headWidth: 0.16,
+                headHeight: 0.22,
+                headDepth: 0.30,
+                color: '#f5f0e1',
+                roughness: 0.25,
+                metalness: 0.20
+            },
+            bishop: {
+                bodyRadius: 0.22,
+                bodyHeight: 0.42,
+                sphereRadius: 0.10,
+                color: '#f5f0e1',
+                roughness: 0.25,
+                metalness: 0.20
+            },
+            queen: {
+                bodyRadius: 0.28,
+                bodyHeight: 0.32,
+                crownRadius: 0.23,
+                crownHeight: 0.20,
+                spikeRadius: 0.06,
+                color: '#f5f0e1',
+                roughness: 0.25,
+                metalness: 0.20
+            },
+            king: {
+                bodyRadius: 0.30,
+                bodyHeight: 0.40,
+                crownRadius: 0.30,
+                crownHeight: 0.10,
+                crossWidth: 0.08,
+                crossHeight: 0.22,
+                crossDepth: 0.08,
+                color: '#f5f0e1',
+                roughness: 0.25,
+                metalness: 0.20
+            }
+        };
+
+        // 當前參數（深拷貝）
+        let currentParams = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
+
+        // 棋子類型列表（順序）
+        const PIECE_TYPES = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
+        const PIECE_NAMES = {
+            pawn: '兵',
+            rook: '車',
+            knight: '馬',
+            bishop: '象',
+            queen: '后',
+            king: '王'
+        };
+        const PIECE_ICONS = {
+            pawn: '♟',
+            rook: '♜',
+            knight: '♞',
+            bishop: '♝',
+            queen: '♛',
+            king: '♚'
+        };
+
+        // ===================================================================
+        //  2. Three.js 場景
+        // ===================================================================
+        let scene, camera, renderer, controls;
+        let pieceGroups = {}; // 每種棋子的 Group
+
+        const container = document.getElementById('sceneContainer');
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x12121f);
+
+            // 相機
+            const w = container.clientWidth || 600;
+            const h = container.clientHeight || 400;
+            camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 60);
+            camera.position.set(0, 5, 9);
+            camera.lookAt(0, 0.3, 0);
+
+            // 渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(w, h);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            container.prepend(renderer.domElement);
+
+            // 控制器 (r128 使用 THREE.OrbitControls)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0.4, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.minDistance = 3;
+            controls.maxDistance = 18;
+            controls.update();
+
+            // 燈光
+            const ambient = new THREE.AmbientLight(0x404060, 0.6);
+            scene.add(ambient);
+
+            const hemi = new THREE.HemisphereLight(0xffeedd, 0x443322, 1.0);
+            scene.add(hemi);
+
+            const key = new THREE.DirectionalLight(0xffffff, 2.2);
+            key.position.set(4, 10, 6);
+            key.castShadow = true;
+            key.shadow.mapSize.width = 1024;
+            key.shadow.mapSize.height = 1024;
+            key.shadow.bias = -0.001;
+            scene.add(key);
+
+            const fill = new THREE.DirectionalLight(0x8899ff, 0.5);
+            fill.position.set(-3, 5, -4);
+            scene.add(fill);
+
+            const rim = new THREE.DirectionalLight(0xffffff, 0.4);
+            rim.position.set(-2, 1, 8);
+            scene.add(rim);
+
+            // 地面（半透明格線）
+            const gridHelper = new THREE.GridHelper(8, 8, 0xe8c547, 0x444466);
+            gridHelper.position.y = -0.05;
+            scene.add(gridHelper);
+
+            // 地面圓盤
+            const discGeo = new THREE.RingGeometry(3.8, 4.2, 48);
+            const discMat = new THREE.MeshBasicMaterial({
+                color: 0xe8c547,
+                transparent: true,
+                opacity: 0.08,
+                side: THREE.DoubleSide
+            });
+            const disc = new THREE.Mesh(discGeo, discMat);
+            disc.rotation.x = -Math.PI / 2;
+            disc.position.y = -0.04;
+            scene.add(disc);
+
+            // 標籤 (用 Sprite 做文字)
+            createLabels();
+
+            // 響應式
+            window.addEventListener('resize', onResize);
+
+            // 渲染循環
+            animate();
+        }
+
+        function onResize() {
+            const w = container.clientWidth || 600;
+            const h = container.clientHeight || 400;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ===================================================================
+        //  3. 文字標籤 (Sprite)
+        // ===================================================================
+        function createLabels() {
+            const labels = [
+                { text: '♟ 兵', x: -4.2 },
+                { text: '♜ 車', x: -2.52 },
+                { text: '♞ 馬', x: -0.84 },
+                { text: '♝ 象', x: 0.84 },
+                { text: '♛ 后', x: 2.52 },
+                { text: '♚ 王', x: 4.2 }
+            ];
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            for (const label of labels) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // 陰影
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 12;
+
+                ctx.font = 'bold 28px "Segoe UI", "Microsoft JhengHei", sans-serif';
+                ctx.fillStyle = '#e8c547';
+                ctx.fillText(label.text, canvas.width / 2, canvas.height / 2 + 2);
+
+                ctx.shadowBlur = 0;
+                ctx.font = 'bold 28px "Segoe UI", "Microsoft JhengHei", sans-serif';
+                ctx.fillStyle = '#e8c547';
+                ctx.fillText(label.text, canvas.width / 2, canvas.height / 2);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.needsUpdate = true;
+                const mat = new THREE.SpriteMaterial({
+                    map: texture,
+                    transparent: true,
+                    depthTest: false,
+                    sizeAttenuation: true,
+                });
+                const sprite = new THREE.Sprite(mat);
+                sprite.scale.set(1.6, 0.4, 1);
+                sprite.position.set(label.x, -0.2, 0);
+                scene.add(sprite);
+            }
+        }
+
+        // ===================================================================
+        //  4. 棋子模型生成器 (與原始遊戲相容)
+        // ===================================================================
+        function buildPiece(type, params, colorOverride) {
+            const group = new THREE.Group();
+
+            const color = colorOverride || params.color || '#f5f0e1';
+            const roughness = params.roughness ?? 0.25;
+            const metalness = params.metalness ?? 0.20;
+
+            const baseMat = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: roughness,
+                metalness: metalness,
+            });
+            const accentMat = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: Math.min(1, roughness + 0.1),
+                metalness: Math.max(0, metalness - 0.05),
+            });
+
+            const addMesh = (geo, mat, x, y, z, rot) => {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                if (rot) mesh.rotation.copy(rot);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                group.add(mesh);
+                return mesh;
+            };
+
+            const baseRadius = (type === 'king' || type === 'queen') ? 0.35 : 0.30;
+            // 底部基座
+            addMesh(
+                new THREE.CylinderGeometry(baseRadius, baseRadius * 1.15, 0.12, 16),
+                baseMat, 0, 0.06, 0
+            );
+
+            switch (type) {
+                case 'pawn': {
+                    const { baseRadius: br, baseHeight: bh, topRadius: tr, topHeight: th, sphereRadius: sr } = params;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.2, bh, 12), baseMat, 0, 0.06 + bh / 2, 0);
+                    addMesh(new THREE.CylinderGeometry(tr * 1.1, tr, th, 12), accentMat, 0, 0.06 + bh + th / 2, 0);
+                    addMesh(new THREE.SphereGeometry(sr, 12, 12), baseMat, 0, 0.06 + bh + th + sr * 0.7, 0);
+                    break;
+                }
+                case 'rook': {
+                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch } = params;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);
+                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), accentMat, 0, 0.06 + bh + ch / 2, 0);
+                    break;
+                }
+                case 'knight': {
+                    const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd,
+                        headWidth: hw, headHeight: hh, headDepth: hd } = params;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);
+                    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), baseMat, 0.05, 0.06 + bh + nh / 2, -0.02);
+                    neck.rotation.x = -0.3;
+                    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), accentMat, 0.12, 0.06 + bh + nh + hh / 2 - 0.02,
+                        0.08);
+                    head.rotation.x = -0.15;
+                    break;
+                }
+                case 'bishop': {
+                    const { bodyRadius: br, bodyHeight: bh, sphereRadius: sr } = params;
+                    addMesh(new THREE.ConeGeometry(br, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);
+                    addMesh(new THREE.SphereGeometry(sr, 10, 10), accentMat, 0, 0.06 + bh + sr * 0.7, 0);
+                    break;
+                }
+                case 'queen': {
+                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch, spikeRadius: spr } = params;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);
+                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.15, ch, 16), accentMat, 0, 0.06 + bh + ch / 2, 0);
+                    addMesh(new THREE.SphereGeometry(spr, 8, 8), accentMat, 0, 0.06 + bh + ch + spr * 1.2, 0);
+                    break;
+                }
+                case 'king': {
+                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch,
+                        crossWidth: cw, crossHeight: ch2, crossDepth: cd } = params;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);
+                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), accentMat, 0, 0.06 + bh + ch / 2, 0);
+                    addMesh(new THREE.BoxGeometry(cw, ch2, cd), accentMat, 0, 0.06 + bh + ch + ch2 / 2, 0);
+                    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), accentMat, 0, 0.06 + bh + ch + ch2 * 0.75,
+                        0);
+                    break;
+                }
+                default: break;
+            }
+
+            return group;
+        }
+
+        // ===================================================================
+        //  5. 更新場景中的棋子
+        // ===================================================================
+        function rebuildAllPieces() {
+            // 清除舊棋子
+            for (const key of PIECE_TYPES) {
+                if (pieceGroups[key]) {
+                    scene.remove(pieceGroups[key]);
+                    pieceGroups[key] = null;
+                }
+            }
+
+            const spacing = 1.68;
+            const startX = -(PIECE_TYPES.length - 1) * spacing / 2;
+
+            for (let i = 0; i < PIECE_TYPES.length; i++) {
+                const type = PIECE_TYPES[i];
+                const params = currentParams[type];
+                const group = buildPiece(type, params);
+                group.position.set(startX + i * spacing, 0, 0);
+                const yOffsets = { pawn: 0, rook: 0.02, knight: 0.02, bishop: 0.02, queen: 0.03, king: 0.04 };
+                group.position.y = yOffsets[type] || 0;
+                scene.add(group);
+                pieceGroups[type] = group;
+            }
+        }
+
+        // ===================================================================
+        //  6. 參數面板 UI 生成
+        // ===================================================================
+        const panelBody = document.getElementById('panelBody');
+
+        const PARAM_DEFS = {
+            pawn: [
+                { key: 'baseRadius', label: '底部半徑', min: 0.06, max: 0.36, step: 0.005 },
+                { key: 'baseHeight', label: '底部高度', min: 0.12, max: 0.48, step: 0.005 },
+                { key: 'topRadius', label: '頂部半徑', min: 0.06, max: 0.34, step: 0.005 },
+                { key: 'topHeight', label: '頂部高度', min: 0.02, max: 0.20, step: 0.005 },
+                { key: 'sphereRadius', label: '球體半徑', min: 0.04, max: 0.32, step: 0.005 },
+            ],
+            rook: [
+                { key: 'bodyRadius', label: '身體半徑', min: 0.10, max: 0.44, step: 0.005 },
+                { key: 'bodyHeight', label: '身體高度', min: 0.16, max: 0.60, step: 0.005 },
+                { key: 'crownRadius', label: '冠部半徑', min: 0.14, max: 0.48, step: 0.005 },
+                { key: 'crownHeight', label: '冠部高度', min: 0.04, max: 0.22, step: 0.005 },
+            ],
+            knight: [
+                { key: 'bodyRadius', label: '身體半徑', min: 0.10, max: 0.44, step: 0.005 },
+                { key: 'bodyHeight', label: '身體高度', min: 0.16, max: 0.60, step: 0.005 },
+                { key: 'neckWidth', label: '頸部寬度', min: 0.08, max: 0.38, step: 0.005 },
+                { key: 'neckHeight', label: '頸部高度', min: 0.12, max: 0.50, step: 0.005 },
+                { key: 'neckDepth', label: '頸部深度', min: 0.08, max: 0.38, step: 0.005 },
+                { key: 'headWidth', label: '頭部寬度', min: 0.06, max: 0.32, step: 0.005 },
+                { key: 'headHeight', label: '頭部高度', min: 0.08, max: 0.38, step: 0.005 },
+                { key: 'headDepth', label: '頭部深度', min: 0.12, max: 0.44, step: 0.005 },
+            ],
+            bishop: [
+                { key: 'bodyRadius', label: '身體半徑', min: 0.08, max: 0.40, step: 0.005 },
+                { key: 'bodyHeight', label: '身體高度', min: 0.20, max: 0.68, step: 0.005 },
+                { key: 'sphereRadius', label: '球體半徑', min: 0.04, max: 0.22, step: 0.005 },
+            ],
+            queen: [
+                { key: 'bodyRadius', label: '身體半徑', min: 0.12, max: 0.46, step: 0.005 },
+                { key: 'bodyHeight', label: '身體高度', min: 0.16, max: 0.52, step: 0.005 },
+                { key: 'crownRadius', label: '冠部半徑', min: 0.10, max: 0.40, step: 0.005 },
+                { key: 'crownHeight', label: '冠部高度', min: 0.08, max: 0.32, step: 0.005 },
+                { key: 'spikeRadius', label: '尖刺半徑', min: 0.02, max: 0.16, step: 0.005 },
+            ],
+            king: [
+                { key: 'bodyRadius', label: '身體半徑', min: 0.14, max: 0.48, step: 0.005 },
+                { key: 'bodyHeight', label: '身體高度', min: 0.20, max: 0.60, step: 0.005 },
+                { key: 'crownRadius', label: '冠部半徑', min: 0.14, max: 0.46, step: 0.005 },
+                { key: 'crownHeight', label: '冠部高度', min: 0.04, max: 0.20, step: 0.005 },
+                { key: 'crossWidth', label: '十字寬度', min: 0.02, max: 0.18, step: 0.005 },
+                { key: 'crossHeight', label: '十字高度', min: 0.08, max: 0.36, step: 0.005 },
+                { key: 'crossDepth', label: '十字深度', min: 0.02, max: 0.18, step: 0.005 },
+            ],
+        };
+
+        function buildPanel() {
+            panelBody.innerHTML = '';
+            for (const type of PIECE_TYPES) {
+                const defs = PARAM_DEFS[type];
+                const params = currentParams[type];
+                const icon = PIECE_ICONS[type];
+                const name = PIECE_NAMES[type];
+
+                const item = document.createElement('div');
+                item.className = 'accordion-item';
+                item.dataset.type = type;
+
+                // Header
+                const header = document.createElement('div');
+                header.className = 'accordion-header';
+                header.innerHTML = `
+              <span class="piece-icon">${icon}</span>
+              <span class="piece-name">${name}</span>
+              <span class="piece-color-dot" style="background:${params.color};"></span>
+              <span class="arrow">▾</span>
+            `;
+                header.addEventListener('click', () => {
+                    const active = item.classList.contains('active');
+                    document.querySelectorAll('.accordion-item').forEach(el => el.classList.remove('active'));
+                    if (!active) item.classList.add('active');
+                });
+                item.appendChild(header);
+
+                // Body
+                const body = document.createElement('div');
+                body.className = 'accordion-body';
+
+                // 顏色 & 材質
+                const colorRow = document.createElement('div');
+                colorRow.className = 'param-row';
+                colorRow.innerHTML = `
+              <div class="param-group">
+                <div class="param-label"><span>顏色</span></div>
+                <input type="color" id="color_${type}" value="${params.color}" />
+              </div>
+              <div class="param-group">
+                <div class="param-label"><span>粗糙度</span><span class="val" id="roughness_val_${type}">${params.roughness.toFixed(2)}</span></div>
+                <input type="range" id="roughness_${type}" min="0" max="1" step="0.01" value="${params.roughness}" />
+              </div>
+              <div class="param-group">
+                <div class="param-label"><span>金屬感</span><span class="val" id="metalness_val_${type}">${params.metalness.toFixed(2)}</span></div>
+                <input type="range" id="metalness_${type}" min="0" max="1" step="0.01" value="${params.metalness}" />
+              </div>
+            `;
+                body.appendChild(colorRow);
+
+                // 幾何參數
+                const geoDiv = document.createElement('div');
+                geoDiv.style.marginTop = '6px';
+                for (const def of defs) {
+                    const val = params[def.key];
+                    const group = document.createElement('div');
+                    group.className = 'param-group';
+                    group.innerHTML = `
+                <div class="param-label"><span>${def.label}</span><span class="val" id="val_${type}_${def.key}">${val.toFixed(3)}</span></div>
+                <input type="range" id="slider_${type}_${def.key}" 
+                       min="${def.min}" max="${def.max}" step="${def.step}" value="${val}" />
+              `;
+                    geoDiv.appendChild(group);
+                }
+                body.appendChild(geoDiv);
+
+                // 重置按鈕 (小)
+                const resetBtn = document.createElement('button');
+                resetBtn.className = 'btn btn-secondary';
+                resetBtn.style.cssText =
+                    'padding:4px 12px;font-size:0.7rem;margin-top:6px;width:100%;justify-content:center;';
+                resetBtn.textContent = '↺ 重置此棋子';
+                resetBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    resetPiece(type);
+                });
+                body.appendChild(resetBtn);
+
+                item.appendChild(body);
+                panelBody.appendChild(item);
+
+                // ---- 綁定事件 ----
+                // 顏色
+                const colorInput = document.getElementById(`color_${type}`);
+                colorInput.addEventListener('input', () => {
+                    params.color = colorInput.value;
+                    const dot = item.querySelector('.piece-color-dot');
+                    if (dot) dot.style.background = colorInput.value;
+                    rebuildAllPieces();
+                });
+
+                // 粗糙度
+                const roughInput = document.getElementById(`roughness_${type}`);
+                const roughVal = document.getElementById(`roughness_val_${type}`);
+                roughInput.addEventListener('input', () => {
+                    params.roughness = parseFloat(roughInput.value);
+                    roughVal.textContent = params.roughness.toFixed(2);
+                    rebuildAllPieces();
+                });
+
+                // 金屬感
+                const metalInput = document.getElementById(`metalness_${type}`);
+                const metalVal = document.getElementById(`metalness_val_${type}`);
+                metalInput.addEventListener('input', () => {
+                    params.metalness = parseFloat(metalInput.value);
+                    metalVal.textContent = params.metalness.toFixed(2);
+                    rebuildAllPieces();
+                });
+
+                // 幾何滑塊
+                for (const def of defs) {
+                    const slider = document.getElementById(`slider_${type}_${def.key}`);
+                    const valDisplay = document.getElementById(`val_${type}_${def.key}`);
+                    slider.addEventListener('input', () => {
+                        const v = parseFloat(slider.value);
+                        params[def.key] = v;
+                        valDisplay.textContent = v.toFixed(3);
+                        rebuildAllPieces();
+                    });
+                }
+            }
+
+            // 預設展開第一個
+            const first = document.querySelector('.accordion-item');
+            if (first) first.classList.add('active');
+        }
+
+        // ===================================================================
+        //  7. 重置功能
+        // ===================================================================
+        function resetPiece(type) {
+            currentParams[type] = JSON.parse(JSON.stringify(DEFAULT_PARAMS[type]));
+            // 重新生成面板
+            const wasActive = document.querySelector(`.accordion-item[data-type="${type}"]`)?.classList.contains('active');
+            buildPanel();
+            if (wasActive) {
+                const item = document.querySelector(`.accordion-item[data-type="${type}"]`);
+                if (item) item.classList.add('active');
+            }
+            rebuildAllPieces();
+        }
+
+        function resetAll() {
+            if (!confirm('確定要重置所有棋子參數嗎？')) return;
+            currentParams = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
+            buildPanel();
+            rebuildAllPieces();
+            const first = document.querySelector('.accordion-item');
+            if (first) { first.classList.add('active'); }
+        }
+
+        // ===================================================================
+        //  8. 匯出功能
+        // ===================================================================
+        function exportCode() {
+            const modal = document.getElementById('exportModal');
+            const area = document.getElementById('exportCodeArea');
+
+            let code = `// ============================================================\n`;
+            code += `//  棋子模型參數 (由編輯器匯出)\n`;
+            code += `//  替換原 createPieceModel 函數中的參數\n`;
+            code += `// ============================================================\n\n`;
+
+            code += `const PIECE_PARAMS = ${JSON.stringify(currentParams, null, 2)};\n\n`;
+
+            code += `// 使用範例：\n`;
+            code += `// function createPieceModel(type, color, hp, maxHp) {\n`;
+            code += `//   const params = PIECE_PARAMS[type];\n`;
+            code += `//   const group = new THREE.Group();\n`;
+            code += `//   // ... 使用 params 中的數值構建模型 ...\n`;
+            code += `//   return group;\n`;
+            code += `// }\n\n`;
+
+            code += `// ============================================================\n`;
+            code += `//  完整 buildPiece 函數 (可直接使用)\n`;
+            code += `// ============================================================\n\n`;
+
+            code += `function buildPiece(type, colorOverride) {\n`;
+            code += `  const params = PIECE_PARAMS[type];\n`;
+            code += `  if (!params) return new THREE.Group();\n`;
+            code += `  const color = colorOverride || params.color || '#f5f0e1';\n`;
+            code += `  const roughness = params.roughness ?? 0.25;\n`;
+            code += `  const metalness = params.metalness ?? 0.20;\n`;
+            code += `  const group = new THREE.Group();\n`;
+            code +=
+                `  const baseMat = new THREE.MeshStandardMaterial({ color, roughness, metalness });\n`;
+            code +=
+                `  const accentMat = new THREE.MeshStandardMaterial({ color, roughness: Math.min(1, roughness + 0.1), metalness: Math.max(0, metalness - 0.05) });\n`;
+            code +=
+                `  const addMesh = (geo, mat, x, y, z, rot) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (rot) m.rotation.copy(rot); m.castShadow = true; m.receiveShadow = true; group.add(m); return m; };\n`;
+            code +=
+                `  const baseRadius = (type === 'king' || type === 'queen') ? 0.35 : 0.30;\n`;
+            code +=
+                `  addMesh(new THREE.CylinderGeometry(baseRadius, baseRadius * 1.15, 0.12, 16), baseMat, 0, 0.06, 0);\n`;
+
+            for (const type of PIECE_TYPES) {
+                code += `  if (type === '${type}') {\n`;
+                if (type === 'pawn') {
+                    code +=
+                        `    const { baseRadius: br, baseHeight: bh, topRadius: tr, topHeight: th, sphereRadius: sr } = params;\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(br, br * 1.2, bh, 12), baseMat, 0, 0.06 + bh / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(tr * 1.1, tr, th, 12), accentMat, 0, 0.06 + bh + th / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.SphereGeometry(sr, 12, 12), baseMat, 0, 0.06 + bh + th + sr * 0.7, 0);\n`;
+                } else if (type === 'rook') {
+                    code +=
+                        `    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch } = params;\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), accentMat, 0, 0.06 + bh + ch / 2, 0);\n`;
+                } else if (type === 'knight') {
+                    code +=
+                        `    const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd, headWidth: hw, headHeight: hh, headDepth: hd } = params;\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);\n`;
+                    code +=
+                        `    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), baseMat, 0.05, 0.06 + bh + nh / 2, -0.02);\n`;
+                    code += `    neck.rotation.x = -0.3;\n`;
+                    code +=
+                        `    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), accentMat, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08);\n`;
+                    code += `    head.rotation.x = -0.15;\n`;
+                } else if (type === 'bishop') {
+                    code +=
+                        `    const { bodyRadius: br, bodyHeight: bh, sphereRadius: sr } = params;\n`;
+                    code +=
+                        `    addMesh(new THREE.ConeGeometry(br, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.SphereGeometry(sr, 10, 10), accentMat, 0, 0.06 + bh + sr * 0.7, 0);\n`;
+                } else if (type === 'queen') {
+                    code +=
+                        `    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch, spikeRadius: spr } = params;\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(cr, cr * 1.15, ch, 16), accentMat, 0, 0.06 + bh + ch / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.SphereGeometry(spr, 8, 8), accentMat, 0, 0.06 + bh + ch + spr * 1.2, 0);\n`;
+                } else if (type === 'king') {
+                    code +=
+                        `    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch, crossWidth: cw, crossHeight: ch2, crossDepth: cd } = params;\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), baseMat, 0, 0.06 + bh / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), accentMat, 0, 0.06 + bh + ch / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.BoxGeometry(cw, ch2, cd), accentMat, 0, 0.06 + bh + ch + ch2 / 2, 0);\n`;
+                    code +=
+                        `    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), accentMat, 0, 0.06 + bh + ch + ch2 * 0.75, 0);\n`;
+                }
+                code += `    return group;\n`;
+                code += `  }\n`;
+            }
+
+            code += `  return group;\n`;
+            code += `}\n`;
+
+            area.value = code;
+            modal.classList.add('open');
+        }
+
+        function closeExport() {
+            document.getElementById('exportModal').classList.remove('open');
+        }
+
+        function copyExport() {
+            const area = document.getElementById('exportCodeArea');
+            navigator.clipboard.writeText(area.value).then(() => {
+                const toast = document.getElementById('copyToast');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            }).catch(() => {
+                area.select();
+                document.execCommand('copy');
+                const toast = document.getElementById('copyToast');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            });
+        }
+
+        document.getElementById('exportModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeExport();
+        });
+
+        // ===================================================================
+        //  9. 初始化
+        // ===================================================================
+        function init() {
+            initScene();
+            buildPanel();
+            rebuildAllPieces();
+            const first = document.querySelector('.accordion-item');
+            if (first) first.classList.add('active');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+
+        // 暴露全局函數
+        window.resetAll = resetAll;
+        window.exportCode = exportCode;
+        window.closeExport = closeExport;
+        window.copyExport = copyExport;
+        window.resetPiece = resetPiece;
+    </script>
+</body>
+</html>
