@@ -2,10 +2,12 @@
 <html lang="zh-Hant">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TotallyChess</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TotallyIsAChess</title>
+    <link rel="icon" type="image/png" href="Chess_icon.png" />
     <style>
+        /* 样式保持不变（原样） */
         :root {
             --bg: #1a1a2e;
             --panel: #16213e;
@@ -224,11 +226,13 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 20px;
+            padding: 8px 16px;
             background: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(6px);
             -webkit-backdrop-filter: blur(6px);
             pointer-events: none;
+            flex-wrap: wrap;
+            gap: 4px;
         }
 
         .game-top-bar>* {
@@ -238,14 +242,14 @@
         .turn-indicator {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 1.1rem;
+            gap: 8px;
+            font-size: 1rem;
             font-weight: 700;
         }
 
         .turn-dot {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
             display: inline-block;
             box-shadow: 0 0 12px currentColor;
@@ -265,7 +269,7 @@
         .check-warning {
             color: #ff6b5e;
             font-weight: 900;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             animation: pulse 0.8s infinite;
         }
 
@@ -279,6 +283,69 @@
             50% {
                 opacity: 0.4;
             }
+        }
+
+        .timer-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .timer-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .timer-item.active {
+            background: rgba(232, 197, 71, 0.25);
+            box-shadow: 0 0 20px rgba(232, 197, 71, 0.15);
+        }
+
+        .timer-item .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .timer-item .dot.white {
+            background: #f0e6d3;
+        }
+
+        .timer-item .dot.black {
+            background: #2a2a2a;
+            border: 1px solid #888;
+        }
+
+        .timer-item .time {
+            min-width: 42px;
+            text-align: center;
+        }
+
+        .timer-item .time.warning {
+            color: #ff6b5e;
+            animation: pulse 0.5s infinite;
+        }
+
+        .timer-item .time.infinity {
+            min-width: 28px;
+            font-size: 1.2rem;
+        }
+
+        .timer-sep {
+            opacity: 0.3;
+            padding: 0 2px;
         }
 
         .promotion-choices {
@@ -429,17 +496,171 @@
             margin-left: 6px;
         }
 
+        .settings-group {
+            text-align: left;
+            margin: 16px 0;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .settings-group label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 6px;
+            font-size: 0.95rem;
+            color: var(--gold);
+        }
+
+        .settings-group .desc {
+            font-size: 0.8rem;
+            opacity: 0.6;
+            margin-bottom: 8px;
+        }
+
+        .mode-btn,
+        .time-btn {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            min-width: 80px;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            background: #2a2a4a;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.25s;
+            font-family: inherit;
+            font-weight: 600;
+        }
+
+        .mode-btn:hover,
+        .time-btn:hover {
+            background: #3a3a5c;
+        }
+
+        .mode-btn.active,
+        .time-btn.active {
+            border-color: var(--gold);
+            background: var(--gold);
+            color: #1a1a2e;
+        }
+
+        .mode-btn .icon {
+            font-size: 1.2rem;
+            margin-right: 4px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: var(--text);
+            cursor: pointer;
+            padding: 4px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--gold);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .checkbox-group .color-tag {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+        }
+
+        .checkbox-group .color-tag.white-tag {
+            background: #f0e6d3;
+        }
+
+        .checkbox-group .color-tag.black-tag {
+            background: #2a2a2a;
+            border-color: #888;
+        }
+
+        .ability-disabled-hint {
+            font-size: 0.8rem;
+            opacity: 0.5;
+            padding: 4px 0;
+            font-style: italic;
+        }
+
+        .remote-aim-indicator {
+            position: fixed;
+            z-index: 50;
+            pointer-events: none;
+            border: 3px solid #ff8800;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(255, 136, 0, 0.6);
+            animation: aimPulse 0.8s infinite alternate;
+            display: none;
+        }
+
+        @keyframes aimPulse {
+            0% {
+                transform: scale(0.9);
+                opacity: 0.6;
+            }
+
+            100% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+        }
+
+        .remote-aim-line {
+            position: fixed;
+            z-index: 49;
+            pointer-events: none;
+            height: 3px;
+            background: linear-gradient(90deg, #ff8800, #ffcc00);
+            box-shadow: 0 0 20px rgba(255, 136, 0, 0.5);
+            transform-origin: left center;
+            display: none;
+        }
+
         @media (max-width: 768px) {
             .game-top-bar {
-                flex-wrap: wrap;
-                gap: 6px;
-                padding: 8px 12px;
+                padding: 6px 10px;
+                gap: 4px;
             }
 
             .game-top-bar>div:last-child {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 4px;
+            }
+
+            .turn-indicator {
+                font-size: 0.8rem;
+                gap: 4px;
+            }
+
+            .timer-display {
+                font-size: 0.75rem;
+                padding: 2px 8px;
+                gap: 4px;
+            }
+
+            .timer-item .time {
+                min-width: 32px;
             }
 
             #actionBar {
@@ -469,6 +690,18 @@
                 letter-spacing: 8px;
                 padding: 12px 16px;
             }
+
+            .settings-group {
+                padding: 10px 12px;
+                margin: 12px 0;
+            }
+
+            .mode-btn,
+            .time-btn {
+                padding: 8px 14px;
+                font-size: 0.8rem;
+                min-width: 70px;
+            }
         }
     </style>
 </head>
@@ -476,24 +709,34 @@
 <body>
 
     <div id="gameCanvas"></div>
-
-    <div id="damageOverlay"
-        style="position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:100;"></div>
+    <div id="damageOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:100;">
+    </div>
 
     <div class="game-top-bar hidden" id="topBar">
-        <div class="turn-indicator">
-            <span id="turnText">白方回合</span>
-            <span class="turn-dot white" id="turnDot"></span>
-        </div>
-        <div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div class="turn-indicator">
+                <span id="turnText">白方回合</span>
+                <span class="turn-dot white" id="turnDot"></span>
+            </div>
+            <div id="timerDisplay" class="timer-display">
+                <span class="timer-item" id="timerWhite">
+                    <span class="dot white"></span>
+                    <span class="time" id="timerWhiteText">05:00</span>
+                </span>
+                <span class="timer-sep">|</span>
+                <span class="timer-item" id="timerBlack">
+                    <span class="dot black"></span>
+                    <span class="time" id="timerBlackText">05:00</span>
+                </span>
+            </div>
             <span id="checkWarning" class="check-warning hidden">⚠ 將軍!</span>
         </div>
-        <div>
-            <button class="btn btn-danger" id="freeCamBtn" style="padding:8px 16px;font-size:0.85rem;"
-                onclick="toggleFreeCamera()">📷 自由視角: 開</button>
-            <button class="btn btn-secondary" style="padding:8px 16px;font-size:0.85rem;" onclick="confirmRestart()">🔄
-                重新開始</button>
-            <button class="btn btn-secondary" style="padding:8px 16px;font-size:0.85rem;" onclick="backToMenu()">🏠
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <button class="btn btn-danger" id="freeCamBtn" style="padding:6px 12px;font-size:0.8rem;"
+                onclick="toggleFreeCamera()">📷 自由</button>
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="confirmRestart()">🔄
+                重開</button>
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="backToMenu()">🏠
                 主選單</button>
         </div>
     </div>
@@ -507,6 +750,10 @@
 
     <div id="aimHint">🎯 移動滑鼠自由瞄準 · 點擊左鍵發射 · 右鍵取消</div>
 
+    <div class="remote-aim-indicator" id="remoteAimIndicator"></div>
+    <div class="remote-aim-line" id="remoteAimLine"></div>
+
+    <!-- 主選單 -->
     <div class="overlay" id="mainMenu" style="inset:0;">
         <div class="panel">
             <h1>♞ 西洋棋</h1>
@@ -518,6 +765,7 @@
         </div>
     </div>
 
+    <!-- AI 難度 -->
     <div class="overlay hidden" id="aiDifficultyMenu" style="inset:0;">
         <div class="panel">
             <h2>選擇難度</h2>
@@ -531,12 +779,13 @@
         </div>
     </div>
 
+    <!-- 雙人連線選單 -->
     <div class="overlay hidden" id="multiplayerMenu" style="inset:0;">
         <div class="panel">
             <h2>雙人連線對戰</h2>
             <p>透過 PeerJS 連線，輸入4位數房號進行配對</p>
             <div class="btn-row">
-                <button class="btn" onclick="createRoom()">🏠 創建房間</button>
+                <button class="btn" onclick="showRoomSettings()">🏠 創建房間</button>
             </div>
             <p style="margin-top:16px;font-weight:700;">或輸入房號加入：</p>
             <input type="text" class="code-input" id="roomCodeInput" maxlength="4" placeholder="0000"
@@ -549,6 +798,47 @@
         </div>
     </div>
 
+    <!-- 房間設定 -->
+    <div class="overlay hidden" id="roomSettings" style="inset:0;">
+        <div class="panel">
+            <h2>🏠 房間設定</h2>
+            <div class="settings-group">
+                <label>🎮 遊戲模式</label>
+                <div class="btn-row" style="justify-content:center;gap:8px;margin-top:4px;">
+                    <button class="mode-btn" data-mode="normal" onclick="setRoomGameMode('normal')"><span
+                            class="icon">♟</span> 一般模式</button>
+                    <button class="mode-btn active" data-mode="totally" onclick="setRoomGameMode('totally')"><span
+                            class="icon">⚡</span> Totally模式</button>
+                </div>
+                <div class="desc" style="margin-top:6px;">一般模式：無技能，純西洋棋規則。Totally模式：棋子擁有特殊技能。</div>
+            </div>
+            <div class="settings-group" id="abilitySettingsGroup">
+                <label>⚔️ 能力權限</label>
+                <div class="desc">決定哪些顏色的棋子可以使用技能（僅 Totally 模式生效）</div>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" id="abilityWhite" checked><span class="color-tag white-tag"></span> 白方
+                        (主持) 可使用能力</label>
+                    <label><input type="checkbox" id="abilityBlack" checked><span class="color-tag black-tag"></span> 黑方
+                        (對手) 可使用能力</label>
+                </div>
+            </div>
+            <div class="settings-group">
+                <label>⏱ 時間限制</label>
+                <div class="btn-row" style="justify-content:center;gap:8px;margin-top:4px;">
+                    <button class="time-btn active" data-time="300" onclick="setRoomTimeLimit(300)">5分鐘</button>
+                    <button class="time-btn" data-time="600" onclick="setRoomTimeLimit(600)">10分鐘</button>
+                    <button class="time-btn" data-time="0" onclick="setRoomTimeLimit(0)">無限時間</button>
+                </div>
+                <div class="desc" style="margin-top:6px;">每位玩家擁有的思考時間，歸零即判負（無限模式除外）。</div>
+            </div>
+            <div class="btn-row" style="margin-top:12px;">
+                <button class="btn" onclick="createRoomWithSettings()">🚀 創建房間</button>
+                <button class="btn btn-secondary" onclick="backToMultiplayerMenu()">← 返回</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 等待大廳 -->
     <div class="overlay hidden" id="waitingOverlay" style="inset:0;">
         <div class="panel">
             <h2>等待玩家加入...</h2>
@@ -559,6 +849,7 @@
         </div>
     </div>
 
+    <!-- 兵升變 -->
     <div class="overlay hidden" id="promotionOverlay" style="inset:0;">
         <div class="panel">
             <h2>兵升變</h2>
@@ -572,6 +863,7 @@
         </div>
     </div>
 
+    <!-- 遊戲結束 -->
     <div class="overlay hidden" id="gameOverOverlay" style="inset:0;">
         <div class="panel">
             <h2>遊戲結束</h2>
@@ -584,9 +876,14 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js">
+    </script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js">
+    </script>
     <script>
+        // ============================================================
+        //  GLOBALS
+        // ============================================================
         let scene, camera, renderer, raycaster, clock;
         let boardGroup, piecesGroup, highlightsGroup, ghostLineGroup;
         let boardSquares = [];
@@ -614,162 +911,43 @@
         let touchActive = false;
         let selectedPiecePulse = 0;
 
-        // ===== 自由瞄準相關 =====
         let isAiming = false;
         let ghostLine = null;
         let aimWorldPos = null;
         let aimTargetPiece = null;
         let aimValid = false;
-        let lastAimedPieceKeys = new Set(); // 記錄當前被瞄準警告的棋子
+        let lastAimedPieceKeys = new Set();
+
+        let remoteAimActive = false;
+        let remoteAimFromR = -1,
+            remoteAimFromC = -1;
+        let remoteAimTargetX = 0,
+            remoteAimTargetZ = 0;
+        let remoteAimTimer = null;
+        let aimMoveThrottleTimer = null;
+        let lastAimSendX = 0,
+            lastAimSendZ = 0;
+        const AIM_SEND_THROTTLE = 60;
 
         let cameraTheta = 0.5;
         let cameraPhi = 0.8;
         let cameraRadius = 12;
         let isFreeCameraActive = true;
         let isDraggingCamera = false;
-        let dragStartX = 0, dragStartY = 0;
+        let dragStartX = 0,
+            dragStartY = 0;
         let dragMoved = false;
         let suppressClick = false;
+        let settingsReceived = false;
+        let settingsTimeout = null; // 客户端超时定时器
+
         const DRAG_THRESHOLD = 6;
-
-        // ★ 命中範圍與圓圈半徑嚴格一致 (RingGeometry 外徑為 0.75)
         const TARGET_RADIUS = 0.7;
-
         const PIECE_VALUES = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 20000 };
 
-        const ABILITIES = {
-            pawn: {
-                name: '冲锋爆炸',
-                damage: 50,
-                selfDamage: 50,
-                getTargets: (game, r, c) => {
-                    const piece = game.getPiece(r, c);
-                    if (!piece) return [];
-                    const dir = piece.color === 'white' ? 1 : -1;
-                    const startRow = piece.color === 'white' ? 1 : 6;
-                    let maxSteps = 0;
-                    // 检查第一步
-                    if (game.isInBounds(r + dir, c) && !game.getPiece(r + dir, c)) {
-                        maxSteps = 1;
-                        // 检查第二步（初始位置）
-                        if (r === startRow && game.isInBounds(r + 2 * dir, c) && !game.getPiece(r + 2 * dir, c)) {
-                            maxSteps = 2;
-                        }
-                    }
-                    // 尝试 maxSteps + 1 步（再走一步）
-                    if (maxSteps > 0) {
-                        const targetR = r + dir * (maxSteps + 1);
-                        if (game.isInBounds(targetR, c) && !game.getPiece(targetR, c)) {
-                            return [{ r: targetR, c: c }];
-                        }
-                        // 否则回退到 maxSteps 步（正常走 maxSteps 步后爆炸）
-                        const fallbackR = r + dir * maxSteps;
-                        if (game.isInBounds(fallbackR, c) && !game.getPiece(fallbackR, c)) {
-                            return [{ r: fallbackR, c: c }];
-                        }
-                    }
-                    // 完全无法移动或目标被占，原地爆炸
-                    return [{ r: r, c: c }];
-                }
-            },
-            rook: {
-                name: '加農炮 (Cannon)',
-                damage: 50,
-                getTargets: (game, r, c) => {
-                    let targets = [];
-                    for (let i = 0; i < 8; i++) {
-                        for (let j = 0; j < 8; j++) {
-                            if (i === r && j === c) continue;
-                            const tp = game.getPiece(i, j);
-                            if (tp) {
-                                targets.push({ r: i, c: j });
-                            }
-                        }
-                    }
-                    return targets;
-                }
-            },
-            default: {
-                name: '普通攻擊 (Strike)',
-                damage: 40,
-                getTargets: (game, r, c) => {
-                    let targets = [];
-                    for (const dr of [-1, 0, 1]) {
-                        for (const dc of [-1, 0, 1]) {
-                            if (dr === 0 && dc === 0) continue;
-                            if (game.isInBounds(r + dr, c + dc)) targets.push({ r: r + dr, c: c + dc });
-                        }
-                    }
-                    return targets;
-                }
-            }
-        };
-
-        const PIECE_PARAMS = {
-            "pawn": {
-                "baseRadius": 0.12,
-                "baseHeight": 0.28,
-                "topRadius": 0.185,
-                "topHeight": 0.04,
-                "sphereRadius": 0.18,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2
-            },
-            "rook": {
-                "bodyRadius": 0.2,
-                "bodyHeight": 0.44,
-                "crownRadius": 0.285,
-                "crownHeight": 0.13,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2
-            },
-            "knight": {
-                "bodyRadius": 0.23,
-                "bodyHeight": 0.49,
-                "neckWidth": 0.19,
-                "neckHeight": 0.205,
-                "neckDepth": 0.215,
-                "headWidth": 0.2,
-                "headHeight": 0.165,
-                "headDepth": 0.345,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2
-            },
-            "bishop": {
-                "bodyRadius": 0.22,
-                "bodyHeight": 0.68,
-                "sphereRadius": 0.095,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2
-            },
-            "queen": {
-                "bodyRadius": 0.22,
-                "bodyHeight": 0.52,
-                "crownRadius": 0.27,
-                "crownHeight": 0.2,
-                "spikeRadius": 0.13,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2
-            },
-            "king": {
-                "bodyRadius": 0.235,
-                "bodyHeight": 0.5,
-                "crownRadius": 0.25,
-                "crownHeight": 0.12,
-                "crossWidth": 0.07,
-                "crossHeight": 0.28,
-                "crossDepth": 0.105,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2
-            }
-        };
-
+        // ============================================================
+        //  CHESS GAME CLASS
+        // ============================================================
         class ChessGame {
             constructor() {
                 this.board = [];
@@ -880,14 +1058,29 @@
                         break;
                     }
                     case 'knight': {
-                        const knightMoves = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
+                        const knightMoves = [
+                            [-2, -1],
+                            [-2, 1],
+                            [-1, -2],
+                            [-1, 2],
+                            [1, -2],
+                            [1, 2],
+                            [2, -1],
+                            [2, 1]
+                        ];
                         knightMoves.forEach(([dr, dc]) => addMove(r + dr, c + dc));
                         break;
                     }
                     case 'bishop': {
-                        for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+                        for (const [dr, dc] of [
+                            [-1, -1],
+                            [-1, 1],
+                            [1, -1],
+                            [1, 1]
+                        ]) {
                             for (let i = 1; i < 8; i++) {
-                                const tr = r + dr * i, tc = c + dc * i;
+                                const tr = r + dr * i,
+                                    tc = c + dc * i;
                                 if (!this.isInBounds(tr, tc)) break;
                                 const target = b[tr][tc];
                                 if (!target) moves.push({ r: tr, c: tc, capture: false });
@@ -897,9 +1090,15 @@
                         break;
                     }
                     case 'rook': {
-                        for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                        for (const [dr, dc] of [
+                            [-1, 0],
+                            [1, 0],
+                            [0, -1],
+                            [0, 1]
+                        ]) {
                             for (let i = 1; i < 8; i++) {
-                                const tr = r + dr * i, tc = c + dc * i;
+                                const tr = r + dr * i,
+                                    tc = c + dc * i;
                                 if (!this.isInBounds(tr, tc)) break;
                                 const target = b[tr][tc];
                                 if (!target) moves.push({ r: tr, c: tc, capture: false });
@@ -909,9 +1108,19 @@
                         break;
                     }
                     case 'queen': {
-                        for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+                        for (const [dr, dc] of [
+                            [-1, -1],
+                            [-1, 0],
+                            [-1, 1],
+                            [0, -1],
+                            [0, 1],
+                            [1, -1],
+                            [1, 0],
+                            [1, 1]
+                        ]) {
                             for (let i = 1; i < 8; i++) {
-                                const tr = r + dr * i, tc = c + dc * i;
+                                const tr = r + dr * i,
+                                    tc = c + dc * i;
                                 if (!this.isInBounds(tr, tc)) break;
                                 const target = b[tr][tc];
                                 if (!target) moves.push({ r: tr, c: tc, capture: false });
@@ -921,7 +1130,16 @@
                         break;
                     }
                     case 'king': {
-                        for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+                        for (const [dr, dc] of [
+                            [-1, -1],
+                            [-1, 0],
+                            [-1, 1],
+                            [0, -1],
+                            [0, 1],
+                            [1, -1],
+                            [1, 0],
+                            [1, 1]
+                        ]) {
                             addMove(r + dr, c + dc);
                         }
                         const ks = color === 'white' ? this.castlingRights.whiteKingside : this.castlingRights.blackKingside;
@@ -985,63 +1203,6 @@
                     }
                 }
                 return legal;
-            }
-            getLegalAbilities(r, c) {
-                const piece = this.board[r][c];
-                if (!piece) return [];
-                const abilityDef = ABILITIES[piece.type];
-                if (!abilityDef) return [];
-
-                // ----- 对兵的特殊处理 -----
-                if (piece.type === 'pawn') {
-                    const targets = abilityDef.getTargets(this, r, c);
-                    // 兵的目标是空格，不需要检查敌方颜色，直接返回
-                    return targets.map(t => ({
-                        type: 'ability',
-                        fromR: r,
-                        fromC: c,
-                        r: t.r,
-                        c: t.c,
-                        ability: abilityDef
-                    }));
-                }
-
-                if (piece.type === 'rook') {
-                    const targets = [];
-                    for (let i = 0; i < 8; i++) {
-                        for (let j = 0; j < 8; j++) {
-                            if (i === r && j === c) continue;
-                            const targetPiece = this.board[i][j];
-                            if (targetPiece) {
-                                targets.push({ type: 'ability', fromR: r, fromC: c, r: i, c: j, ability: abilityDef });
-                            }
-                        }
-                    }
-                    return targets;
-                }
-
-                // 其他棋子的默认处理（需要敌方棋子）
-                const targets = abilityDef.getTargets(this, r, c);
-                const validTargets = [];
-                targets.forEach(t => {
-                    const targetPiece = this.board[t.r][t.c];
-                    if (targetPiece && targetPiece.color !== piece.color) {
-                        validTargets.push({ type: 'ability', fromR: r, fromC: c, r: t.r, c: t.c, ability: abilityDef });
-                    }
-                });
-                return validTargets;
-            }
-            getAllLegalMoves(color) {
-                const all = [];
-                for (let r = 0; r < 8; r++)
-                    for (let c = 0; c < 8; c++) {
-                        const p = this.board[r][c];
-                        if (p && p.color === color) {
-                            const moves = this.getLegalMoves(r, c);
-                            moves.forEach(m => all.push({ fromR: r, fromC: c, toR: m.r, toC: m.c, move: m, type: 'move' }));
-                        }
-                    }
-                return all;
             }
             useAbility(fromR, fromC, targetR, targetC, ability) {
                 const targetPiece = this.board[targetR][targetC];
@@ -1149,16 +1310,469 @@
                 if (!whiteKing) return { over: true, winner: 'black', reason: '國王陣亡' };
                 if (!blackKing) return { over: true, winner: 'white', reason: '國王陣亡' };
 
-                if (this.isInCheck('white') && this.getAllLegalMoves('white').length === 0) return { over: true, winner: 'black', reason: '將死' };
-                if (this.isInCheck('black') && this.getAllLegalMoves('black').length === 0) return { over: true, winner: 'white', reason: '將死' };
-                if (!this.isInCheck('white') && this.getAllLegalMoves('white').length === 0) return { over: true, winner: 'draw', reason: '和棋（無子可動）' };
-                if (!this.isInCheck('black') && this.getAllLegalMoves('black').length === 0) return { over: true, winner: 'draw', reason: '和棋（無子可動）' };
+                if (this.isInCheck('white') && this.getAllLegalMoves('white').length === 0) return {
+                    over: true, winner: 'black',
+                    reason: '將死'
+                };
+                if (this.isInCheck('black') && this.getAllLegalMoves('black').length === 0) return {
+                    over: true, winner: 'white',
+                    reason: '將死'
+                };
+                if (!this.isInCheck('white') && this.getAllLegalMoves('white').length === 0) return {
+                    over: true, winner: 'draw',
+                    reason: '和棋（無子可動）'
+                };
+                if (!this.isInCheck('black') && this.getAllLegalMoves('black').length === 0) return {
+                    over: true, winner: 'draw',
+                    reason: '和棋（無子可動）'
+                };
                 if (this.halfMoveClock >= 100) return { over: true, winner: 'draw', reason: '五十回合規則' };
 
                 return { over: false, winner: null, reason: null };
             }
+            getAllLegalMoves(color) {
+                const all = [];
+                for (let r = 0; r < 8; r++)
+                    for (let c = 0; c < 8; c++) {
+                        const p = this.board[r][c];
+                        if (p && p.color === color) {
+                            const moves = this.getLegalMoves(r, c);
+                            moves.forEach(m => all.push({ fromR: r, fromC: c, toR: m.r, toC: m.c, move: m, type: 'move' }));
+                        }
+                    }
+                return all;
+            }
         }
 
+        // ============================================================
+        //  ABILITIES
+        // ============================================================
+        const ABILITIES = {
+            pawn: {
+                name: '冲锋爆炸',
+                damage: 50,
+                selfDamage: 50,
+                getTargets: (game, r, c) => {
+                    const piece = game.getPiece(r, c);
+                    if (!piece) return [];
+                    const dir = piece.color === 'white' ? 1 : -1;
+                    const startRow = piece.color === 'white' ? 1 : 6;
+                    let maxSteps = 0;
+                    if (game.isInBounds(r + dir, c) && !game.getPiece(r + dir, c)) {
+                        maxSteps = 1;
+                        if (r === startRow && game.isInBounds(r + 2 * dir, c) && !game.getPiece(r + 2 * dir, c)) {
+                            maxSteps = 2;
+                        }
+                    }
+                    if (maxSteps > 0) {
+                        const targetR = r + dir * (maxSteps + 1);
+                        if (game.isInBounds(targetR, c) && !game.getPiece(targetR, c)) {
+                            return [{ r: targetR, c: c }];
+                        }
+                        const fallbackR = r + dir * maxSteps;
+                        if (game.isInBounds(fallbackR, c) && !game.getPiece(fallbackR, c)) {
+                            return [{ r: fallbackR, c: c }];
+                        }
+                    }
+                    return [{ r: r, c: c }];
+                }
+            },
+            rook: {
+                name: '加農炮 (Cannon)',
+                damage: 50,
+                getTargets: (game, r, c) => {
+                    let targets = [];
+                    for (let i = 0; i < 8; i++) {
+                        for (let j = 0; j < 8; j++) {
+                            if (i === r && j === c) continue;
+                            const tp = game.getPiece(i, j);
+                            if (tp) {
+                                targets.push({ r: i, c: j });
+                            }
+                        }
+                    }
+                    return targets;
+                }
+            },
+            default: {
+                name: '普通攻擊 (Strike)',
+                damage: 40,
+                getTargets: (game, r, c) => {
+                    let targets = [];
+                    for (const dr of [-1, 0, 1]) {
+                        for (const dc of [-1, 0, 1]) {
+                            if (dr === 0 && dc === 0) continue;
+                            if (game.isInBounds(r + dr, c + dc)) targets.push({ r: r + dr, c: c + dc });
+                        }
+                    }
+                    return targets;
+                }
+            }
+        };
+
+        // ============================================================
+        //  ROOM SETTINGS
+        // ============================================================
+        let roomSettings = {
+            gameMode: 'totally',
+            abilityPermissions: { white: true, black: true },
+            timePerPlayer: 300,
+        };
+
+        function isAbilityEnabledForColor(color) {
+            if (roomSettings.gameMode === 'normal') return false;
+            return roomSettings.abilityPermissions[color] === true;
+        }
+
+        function pieceHasAbility(piece) {
+            if (!piece) return false;
+            if (!isAbilityEnabledForColor(piece.color)) return false;
+            return ABILITIES[piece.type] !== undefined;
+        }
+
+        ChessGame.prototype.getLegalAbilities = function (r, c) {
+            const piece = this.getPiece(r, c);
+            if (!piece) return [];
+            if (!isAbilityEnabledForColor(piece.color)) return [];
+
+            const abilityDef = ABILITIES[piece.type];
+            if (!abilityDef) return [];
+
+            if (piece.type === 'pawn') {
+                const targets = abilityDef.getTargets(this, r, c);
+                return targets.map(t => ({
+                    type: 'ability',
+                    fromR: r,
+                    fromC: c,
+                    r: t.r,
+                    c: t.c,
+                    ability: abilityDef
+                }));
+            }
+
+            if (piece.type === 'rook') {
+                const targets = [];
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        if (i === r && j === c) continue;
+                        const targetPiece = this.board[i][j];
+                        if (targetPiece) {
+                            targets.push({ type: 'ability', fromR: r, fromC: c, r: i, c: j, ability: abilityDef });
+                        }
+                    }
+                }
+                return targets;
+            }
+
+            const targets = abilityDef.getTargets(this, r, c);
+            const validTargets = [];
+            targets.forEach(t => {
+                const targetPiece = this.board[t.r][t.c];
+                if (targetPiece && targetPiece.color !== piece.color) {
+                    validTargets.push({ type: 'ability', fromR: r, fromC: c, r: t.r, c: t.c, ability: abilityDef });
+                }
+            });
+            return validTargets;
+        };
+
+        // ============================================================
+        //  TIMER
+        // ============================================================
+        let timerState = {
+            white: 300,
+            black: 300,
+            active: false,
+            interval: null,
+            currentPlayer: null,
+            paused: false,
+            isInfinite: false,
+        };
+
+        function formatTime(seconds) {
+            if (seconds === Infinity || seconds === -1) return '∞';
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function updateTimerDisplay() {
+            const wEl = document.getElementById('timerWhiteText');
+            const bEl = document.getElementById('timerBlackText');
+            const wItem = document.getElementById('timerWhite');
+            const bItem = document.getElementById('timerBlack');
+
+            if (wEl) {
+                const val = timerState.isInfinite ? -1 : Math.max(0, timerState.white);
+                wEl.textContent = formatTime(val);
+                wEl.classList.toggle('infinity', timerState.isInfinite || val === -1);
+            }
+            if (bEl) {
+                const val = timerState.isInfinite ? -1 : Math.max(0, timerState.black);
+                bEl.textContent = formatTime(val);
+                bEl.classList.toggle('infinity', timerState.isInfinite || val === -1);
+            }
+
+            if (wItem && bItem) {
+                wItem.classList.toggle('active', timerState.currentPlayer === 'white' && timerState.active);
+                bItem.classList.toggle('active', timerState.currentPlayer === 'black' && timerState.active);
+            }
+
+            if (wEl && !timerState.isInfinite) {
+                wEl.classList.toggle('warning', timerState.white < 30);
+            }
+            if (bEl && !timerState.isInfinite) {
+                bEl.classList.toggle('warning', timerState.black < 30);
+            }
+        }
+
+        function startTimer() {
+            // 无限模式或非多人模式不启动计时器
+            if (timerState.isInfinite || roomSettings.timePerPlayer <= 0 || currentMode !== 'multiplayer') {
+                stopTimer();
+                return;
+            }
+
+            if (timerState.interval) {
+                clearInterval(timerState.interval);
+                timerState.interval = null;
+            }
+            if (!timerState.currentPlayer) {
+                timerState.currentPlayer = 'white';
+            }
+            timerState.active = true;
+            timerState.paused = false;
+            updateTimerDisplay();
+
+            timerState.interval = setInterval(() => {
+                if (timerState.paused || gameOverFlag || isAnimating || aiThinking) return;
+                const player = timerState.currentPlayer;
+                if (!timerState.isInfinite && timerState[player] > 0) {
+                    timerState[player] -= 1;
+                    updateTimerDisplay();
+                    if (timerState[player] <= 0) {
+                        timerState[player] = 0;
+                        updateTimerDisplay();
+                        timerOutGameOver(player);
+                    }
+                }
+            }, 1000);
+        }
+
+        function pauseTimer() { timerState.paused = true; }
+
+        function resumeTimer() { timerState.paused = false; }
+
+        function switchTimer(nextPlayer) {
+            timerState.currentPlayer = nextPlayer;
+            timerState.active = true;
+            timerState.paused = false;
+            updateTimerDisplay();
+            // 如果非无限模式且定时器未运行，则启动
+            if (!timerState.isInfinite && !timerState.interval) {
+                startTimer();
+            }
+        }
+
+        function stopTimer() {
+            if (timerState.interval) {
+                clearInterval(timerState.interval);
+                timerState.interval = null;
+            }
+            timerState.active = false;
+            timerState.paused = false;
+        }
+
+        function resetTimers(timePerPlayer) {
+            stopTimer();
+            timerState.isInfinite = (timePerPlayer <= 0);
+            timerState.white = timerState.isInfinite ? Infinity : timePerPlayer;
+            timerState.black = timerState.isInfinite ? Infinity : timePerPlayer;
+            timerState.currentPlayer = 'white';
+            timerState.active = false;
+            timerState.paused = false;
+            updateTimerDisplay();
+        }
+
+        function timerOutGameOver(player) {
+            if (gameOverFlag) return;
+            gameOverFlag = true;
+            stopTimer();
+            const winner = player === 'white' ? 'black' : 'white';
+            document.getElementById('gameOverOverlay').classList.remove('hidden');
+            document.getElementById('gameOverReason').textContent = `${player === 'white' ? '白方' : '黑方'} 時間用盡`;
+            const text = document.getElementById('gameOverText');
+            if (currentMode === 'ai' || currentMode === 'multiplayer') {
+                if (winner === playerColor) {
+                    text.textContent = '你贏了! (時間勝)';
+                    text.className = 'game-over-text win';
+                } else {
+                    text.textContent = '你輸了... (時間用盡)';
+                    text.className = 'game-over-text lose';
+                }
+            } else {
+                text.textContent = (winner === 'white' ? '白方' : '黑方') + ' 獲勝! (時間)';
+                text.className = 'game-over-text win';
+            }
+            if (currentMode === 'multiplayer' && peerConnection?.open) {
+                peerConnection.send({ type: 'gameover' });
+            }
+        }
+
+        // ============================================================
+        //  PIECE PARAMS
+        // ============================================================
+        const PIECE_PARAMS = {
+            "pawn": {
+                "baseRadius": 0.12,
+                "baseHeight": 0.28,
+                "topRadius": 0.185,
+                "topHeight": 0.04,
+                "sphereRadius": 0.18,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
+                "position": {
+                    "x": -4.2,
+                    "y": 0,
+                    "z": 0
+                }
+            },
+            "rook": {
+                "bodyRadius": 0.2,
+                "bodyHeight": 0.44,
+                "crownRadius": 0.285,
+                "crownHeight": 0.13,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
+                "position": {
+                    "x": -2.52,
+                    "y": 0.02,
+                    "z": 0
+                }
+            },
+            "knight": {
+                "bodyRadius": 0.26,
+                "bodyHeight": 0.38,
+                "neckWidth": 0.22,
+                "neckHeight": 0.3,
+                "neckDepth": 0.22,
+                "headWidth": 0.16,
+                "headHeight": 0.22,
+                "headDepth": 0.3,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.84,
+                    "y": 0.02,
+                    "z": 0
+                },
+                "parts": {
+                    "body": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.19,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.6,
+                            "y": 0.8,
+                            "z": 0.92
+                        }
+                    },
+                    "neck": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.54,
+                            "z": 0.13
+                        },
+                        "rotation": {
+                            "x": 0.42,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.92,
+                            "y": 2.44,
+                            "z": 1.36
+                        }
+                    },
+                    "head": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.74,
+                            "z": 0.26
+                        },
+                        "rotation": {
+                            "x": 0.14,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1.56,
+                            "y": 1.22,
+                            "z": 1.66
+                        }
+                    }
+                }
+            },
+            "bishop": {
+                "bodyRadius": 0.22,
+                "bodyHeight": 0.42,
+                "sphereRadius": 0.1,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.84,
+                    "y": 0.02,
+                    "z": 0
+                },
+                "parts": {}
+            },
+            "queen": {
+                "bodyRadius": 0.22,
+                "bodyHeight": 0.52,
+                "crownRadius": 0.27,
+                "crownHeight": 0.2,
+                "spikeRadius": 0.13,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
+                "position": {
+                    "x": 2.52,
+                    "y": 0.03,
+                    "z": 0
+                }
+            },
+            "king": {
+                "bodyRadius": 0.235,
+                "bodyHeight": 0.5,
+                "crownRadius": 0.25,
+                "crownHeight": 0.12,
+                "crossWidth": 0.07,
+                "crossHeight": 0.28,
+                "crossDepth": 0.105,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
+                "position": {
+                    "x": 4.2,
+                    "y": 0.04,
+                    "z": 0
+                }
+            }
+        };
+
+        // ============================================================
+        //  THREE.JS INIT
+        // ============================================================
         function initThree() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x1a1a2e);
@@ -1217,7 +1831,6 @@
             animate();
         }
 
-        // ===== 获取范围内所有敌方棋子 =====
         function getPiecesInRadius(worldPos, radius) {
             const results = [];
             for (let r = 0; r < 8; r++) {
@@ -1238,11 +1851,11 @@
         function updateFreeCamButton() {
             const btn = document.getElementById('freeCamBtn');
             if (isFreeCameraActive) {
-                btn.textContent = '📷 自由視角: 開';
+                btn.textContent = '📷 自由';
                 btn.classList.add('btn-danger');
                 btn.classList.remove('btn-secondary');
             } else {
-                btn.textContent = '📷 自由視角: 關';
+                btn.textContent = '📷 鎖定';
                 btn.classList.add('btn-secondary');
                 btn.classList.remove('btn-danger');
             }
@@ -1254,6 +1867,9 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
+        // ============================================================
+        //  BOARD & PIECES 3D
+        // ============================================================
         function createBoard3D() {
             if (boardGroup) scene.remove(boardGroup);
             boardGroup = new THREE.Group();
@@ -1344,9 +1960,7 @@
         }
 
         function addHealthBarToModel(model, hp = 100, maxHp = 100) {
-            // ★ 如果血量已满，不添加血条
             if (hp >= maxHp) return;
-
             const texture = createHealthBarTexture(hp, maxHp);
             const mat = new THREE.SpriteMaterial({
                 map: texture,
@@ -1362,86 +1976,149 @@
             model.userData.hpSprite = sprite;
         }
 
-        function createPieceModel(type, color, hp = 100, maxHp = 100) {
+        function createGeometryFromPart(type, params) {
+            switch (type) {
+                case 'box':
+                    return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
+                case 'sphere':
+                    return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
+                case 'cylinder':
+                    return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
+                case 'cone':
+                    return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
+                case 'torus':
+                    return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
+                default:
+                    return new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            }
+        }
+
+        function createPieceModel(type, color, hp, maxHp, params) {
             const group = new THREE.Group();
+            // 根据队伍颜色设置材质颜色
             const baseColor = color === 'white' ? 0xf5f0e1 : 0x2a2a2a;
             const accentColor = color === 'white' ? 0xe8dcc8 : 0x3a3a3a;
 
-            // 材质（保持原有风格，未使用编辑器中的 roughness/metalness，以确保黑白棋子一致）
             const mat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.25, metalness: 0.2 });
             const matDark = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.3, metalness: 0.15 });
 
-            const addMesh = (geo, matUsed, x, y, z) => {
+            const p = params || PIECE_PARAMS[type] || {};
+
+            // 辅助函数：创建网格并应用部件变换
+            const addMesh = (geo, matUsed, x, y, z, partKey, rot) => {
                 const materialClone = matUsed.clone();
                 const mesh = new THREE.Mesh(geo, materialClone);
+                // 设置初始位置
                 mesh.position.set(x, y, z);
+                // 设置初始旋转（如果有）
+                if (rot) mesh.rotation.copy(rot);
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
                 mesh.userData.origColor = materialClone.color.getHex();
+
+                // 应用部件变换（如果存在）
+                if (p.parts && p.parts[partKey]) {
+                    const trans = p.parts[partKey];
+                    if (trans.position) {
+                        mesh.position.set(trans.position.x || 0, trans.position.y || 0, trans.position.z || 0);
+                    }
+                    if (trans.rotation) {
+                        mesh.rotation.set(trans.rotation.x || 0, trans.rotation.y || 0, trans.rotation.z || 0);
+                    }
+                    if (trans.scale) {
+                        mesh.scale.set(trans.scale.x || 1, trans.scale.y || 1, trans.scale.z || 1);
+                    }
+                }
                 group.add(mesh);
                 return mesh;
             };
 
-            // 获取该棋子的参数
-            const params = PIECE_PARAMS[type];
-            if (!params) return group; // 容错
-
-            // 基座（沿用原硬编码尺寸，因为编辑器未导出基座参数）
+            // 基座
             const baseRadius = type === 'king' || type === 'queen' ? 0.35 : 0.3;
-            addMesh(new THREE.CylinderGeometry(baseRadius, baseRadius * 1.15, 0.12, 16), mat, 0, 0.06, 0);
+            addMesh(new THREE.CylinderGeometry(baseRadius, baseRadius * 1.15, 0.12, 16), mat, 0, 0.06, 0, 'base');
 
-            // 根据棋子类型，使用 params 中的尺寸构建几何体
             switch (type) {
                 case 'pawn': {
-                    const { baseRadius: br, baseHeight: bh, topRadius: tr, topHeight: th, sphereRadius: sr } = params;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.2, bh, 12), mat, 0, 0.06 + bh / 2, 0);
-                    addMesh(new THREE.CylinderGeometry(tr * 1.1, tr, th, 12), matDark, 0, 0.06 + bh + th / 2, 0);
-                    addMesh(new THREE.SphereGeometry(sr, 12, 12), mat, 0, 0.06 + bh + th + sr * 0.7, 0);
+                    const { baseRadius: br, baseHeight: bh, topRadius: tr, topHeight: th, sphereRadius: sr } = p;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.2, bh, 12), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(new THREE.CylinderGeometry(tr * 1.1, tr, th, 12), matDark, 0, 0.06 + bh + th / 2, 0, 'top');
+                    addMesh(new THREE.SphereGeometry(sr, 12, 12), mat, 0, 0.06 + bh + th + sr * 0.7, 0, 'sphere');
                     break;
                 }
                 case 'rook': {
-                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch } = params;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0);
-                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0);
+                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch } = p;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
                     break;
                 }
                 case 'knight': {
                     const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd,
-                        headWidth: hw, headHeight: hh, headDepth: hd } = params;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0);
-                    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02);
-                    neck.rotation.x = -0.3;
-                    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08);
-                    head.rotation.x = -0.15;
+                        headWidth: hw, headHeight: hh, headDepth: hd } = p;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    // 颈部（默认倾斜 -0.3 rad）
+                    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02, 'neck', new THREE.Euler(-0.3, 0, 0));
+                    // 头部（默认倾斜 -0.15 rad）
+                    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08, 'head', new THREE.Euler(-0.15, 0, 0));
                     break;
                 }
                 case 'bishop': {
-                    const { bodyRadius: br, bodyHeight: bh, sphereRadius: sr } = params;
-                    addMesh(new THREE.ConeGeometry(br, bh, 16), mat, 0, 0.06 + bh / 2, 0);
-                    addMesh(new THREE.SphereGeometry(sr, 10, 10), matDark, 0, 0.06 + bh + sr * 0.7, 0);
+                    const { bodyRadius: br, bodyHeight: bh, sphereRadius: sr } = p;
+                    addMesh(new THREE.ConeGeometry(br, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(new THREE.SphereGeometry(sr, 10, 10), matDark, 0, 0.06 + bh + sr * 0.7, 0, 'sphere');
                     break;
                 }
                 case 'queen': {
-                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch, spikeRadius: spr } = params;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0);
-                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.15, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0);
-                    addMesh(new THREE.SphereGeometry(spr, 8, 8), matDark, 0, 0.06 + bh + ch + spr * 1.2, 0);
+                    const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch, spikeRadius: spr } = p;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.15, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
+                    addMesh(new THREE.SphereGeometry(spr, 8, 8), matDark, 0, 0.06 + bh + ch + spr * 1.2, 0, 'spike');
                     break;
                 }
                 case 'king': {
                     const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch,
-                        crossWidth: cw, crossHeight: ch2, crossDepth: cd } = params;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0);
-                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0);
-                    addMesh(new THREE.BoxGeometry(cw, ch2, cd), matDark, 0, 0.06 + bh + ch + ch2 / 2, 0);
-                    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), matDark, 0, 0.06 + bh + ch + ch2 * 0.75, 0);
+                        crossWidth: cw, crossHeight: ch2, crossDepth: cd } = p;
+                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
+                    addMesh(new THREE.BoxGeometry(cw, ch2, cd), matDark, 0, 0.06 + bh + ch + ch2 / 2, 0, 'crossV');
+                    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), matDark, 0, 0.06 + bh + ch + ch2 * 0.75, 0, 'crossH');
                     break;
                 }
                 default: break;
             }
 
-            // 添加血量条（原逻辑保持不变）
+            // 添加自定义部件（从 p.parts 中读取，排除内建键）
+            if (p.parts) {
+                for (const [id, partData] of Object.entries(p.parts)) {
+                    // 跳过内建键（已经处理过）
+                    if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id)) continue;
+                    const geo = createGeometryFromPart(partData.type, partData.geometryParams || {});
+                    const partMat = new THREE.MeshStandardMaterial({
+                        color: partData.color || '#ffaa00',
+                        roughness: partData.roughness ?? 0.5,
+                        metalness: partData.metalness ?? 0.2,
+                    });
+                    const mesh = new THREE.Mesh(geo, partMat);
+                    mesh.position.set(partData.position?.x || 0, partData.position?.y || 0, partData.position?.z || 0);
+                    mesh.rotation.set(partData.rotation?.x || 0, partData.rotation?.y || 0, partData.rotation?.z || 0);
+                    mesh.scale.set(partData.scale?.x || 1, partData.scale?.y || 1, partData.scale?.z || 1);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    mesh.userData.isCustom = true;
+                    group.add(mesh);
+                }
+            }
+
             addHealthBarToModel(group, hp, maxHp);
+
+            // ---- 新增：骑士方向修正 ----
+            if (type === 'knight') {
+                if (color === 'white') {
+                    if (color === 'white') group.rotation.y = Math.PI; // 白方旋转180度
+                    if (color === 'black') group.rotation.y = 0; // 默认
+                }
+                // 黑方保持原样（0度）
+            }
+
             return group;
         }
 
@@ -1453,8 +2130,11 @@
                 for (let c = 0; c < 8; c++) {
                     const piece = gameState.getPiece(r, c);
                     if (piece) {
-                        const obj = createPieceModel(piece.type, piece.color, piece.hp, piece.maxHp);
+                        // 获取完整的参数（包含 parts）
+                        const params = PIECE_PARAMS[piece.type] || {};
+                        const obj = createPieceModel(piece.type, piece.color, piece.hp, piece.maxHp, params);
                         obj.position.set(c - 3.5, 0, 3.5 - r);
+                        // 忽略 params.position，保持棋盘对齐
                         obj.userData = {
                             row: r,
                             col: c,
@@ -1480,10 +2160,8 @@
             if (pieceObj && pieceObj.userData.hpSprite) {
                 const sprite = pieceObj.userData.hpSprite;
                 if (hp >= maxHp) {
-                    // ★ 满血时隐藏血条
                     sprite.visible = false;
                 } else {
-                    // ★ 不满血时显示并更新
                     sprite.visible = true;
                     updateHealthBarTexture(sprite, hp, maxHp);
                 }
@@ -1520,21 +2198,34 @@
             return new THREE.Vector3(c - 3.5, yOffset, 3.5 - r);
         }
 
+        // ============================================================
+        //  HIGHLIGHTS
+        // ============================================================
         function showValidMoveHighlights(moves, selectedR, selectedC) {
             clearHighlights();
-            const dotMat = new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.6, depthWrite: false });
-            const capMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.5, depthWrite: false });
+            const dotMat = new THREE.MeshBasicMaterial({
+                color: 0x2ecc71, transparent: true, opacity: 0.6,
+                depthWrite: false
+            });
+            const capMat = new THREE.MeshBasicMaterial({
+                color: 0xe74c3c, transparent: true, opacity: 0.5,
+                depthWrite: false
+            });
             moves.forEach(m => {
                 const isCapture = m.capture;
                 const mat = isCapture ? capMat : dotMat;
-                const geo = isCapture ? new THREE.TorusGeometry(0.4, 0.05, 8, 24) : new THREE.CylinderGeometry(0.15, 0.15, 0.04, 16);
+                const geo = isCapture ? new THREE.TorusGeometry(0.4, 0.05, 8, 24) : new THREE.CylinderGeometry(0.15,
+                    0.15, 0.04, 16);
                 const highlight = new THREE.Mesh(geo, mat);
                 highlight.position.set(m.c - 3.5, 0.04, 3.5 - m.r);
                 if (isCapture) highlight.rotation.x = Math.PI / 2;
                 highlight.userData = { row: m.r, col: m.c, type: 'highlight' };
                 highlightsGroup.add(highlight);
             });
-            const selMat = new THREE.MeshBasicMaterial({ color: 0xe8c547, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+            const selMat = new THREE.MeshBasicMaterial({
+                color: 0xe8c547, transparent: true, opacity: 0.8,
+                side: THREE.DoubleSide
+            });
             const selRing = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 32, 1, true), selMat);
             selRing.position.set(selectedC - 3.5, 0.03, 3.5 - selectedR);
             highlightsGroup.add(selRing);
@@ -1542,14 +2233,20 @@
 
         function showAbilityHighlights(targets, selectedR, selectedC) {
             clearHighlights();
-            const redMat = new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.7, depthWrite: false });
+            const redMat = new THREE.MeshStandardMaterial({
+                color: 0xff0000, transparent: true, opacity: 0.7,
+                depthWrite: false
+            });
             targets.forEach(target => {
                 const highlight = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.03, 16), redMat);
                 highlight.position.set(target.c - 3.5, 0.03, 3.5 - target.r);
                 highlight.userData = { row: target.r, col: target.c, type: 'ability-target' };
                 highlightsGroup.add(highlight);
             });
-            const selMat = new THREE.MeshBasicMaterial({ color: 0xe8c547, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+            const selMat = new THREE.MeshBasicMaterial({
+                color: 0xe8c547, transparent: true, opacity: 0.8,
+                side: THREE.DoubleSide
+            });
             const selRing = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 32, 1, true), selMat);
             selRing.position.set(selectedC - 3.5, 0.03, 3.5 - selectedR);
             highlightsGroup.add(selRing);
@@ -1565,7 +2262,9 @@
             }
         }
 
-        // ==================== 自由瞄準與受擊特效系統 ====================
+        // ============================================================
+        //  AIMING SYSTEM
+        // ============================================================
         function getFreeAimPosition(clientX, clientY) {
             mouse.x = (clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(clientY / window.innerHeight) * 2 + 1;
@@ -1574,7 +2273,6 @@
             const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
             const intersectPoint = new THREE.Vector3();
             const hit = raycaster.ray.intersectPlane(plane, intersectPoint);
-
             if (!hit) return null;
 
             const x = intersectPoint.x;
@@ -1582,15 +2280,14 @@
             if (x < -4.5 || x > 4.5 || z < -4.5 || z > 4.5) return null;
 
             let targetPiece = null;
-            let targetRow = -1, targetCol = -1;
-
+            let targetRow = -1,
+                targetCol = -1;
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const p = gameState.getPiece(r, c);
                     if (!p) continue;
                     const pos = get3DPosition(r, c, 0);
                     const dist = new THREE.Vector3(x, 0, z).distanceTo(new THREE.Vector3(pos.x, 0, pos.z));
-                    // ★ 命中範圍嚴格對齊 TARGET_RADIUS (0.75)，與圓圈一致
                     if (dist < TARGET_RADIUS) {
                         targetPiece = p;
                         targetRow = r;
@@ -1631,7 +2328,6 @@
             ghostLine.frustumCulled = false;
             ghostLineGroup.add(ghostLine);
 
-            // ★ 圓圈半徑外圈對應 0.75，與 TARGET_RADIUS 一致
             const ringGeo = new THREE.RingGeometry(0.5, TARGET_RADIUS, 32);
             const ringMat = new THREE.MeshBasicMaterial({
                 color: 0x00ff88,
@@ -1690,14 +2386,12 @@
                         child.userData.origColor = child.material.color.getHex();
                     }
                     if (active) {
-                        // 進入瞄準受擊預警色 (強烈紅光與自發光)
                         child.material.color.setHex(0xff3333);
                         if (child.material.emissive) {
                             child.material.emissive.setHex(0xff0000);
                             child.material.emissiveIntensity = 0.6;
                         }
                     } else {
-                        // 恢復原色
                         child.material.color.setHex(child.userData.origColor);
                         if (child.material.emissive) {
                             child.material.emissive.setHex(0x000000);
@@ -1715,19 +2409,15 @@
             endPos.y = 0.05;
 
             const inBoard = worldPos.x >= -4.5 && worldPos.x <= 4.5 && worldPos.z >= -4.5 && worldPos.z <= 4.5;
-
-            // 获取范围内所有敌方棋子
             const newTargets = inBoard ? getPiecesInRadius(worldPos, TARGET_RADIUS) : [];
             const newTargetKeys = new Set(newTargets.map(t => `${t.r},${t.c}`));
 
-            // 移除不再在范围内的棋子的高亮
             for (const key of lastAimedPieceKeys) {
                 if (!newTargetKeys.has(key)) {
                     const [r, c] = key.split(',').map(Number);
                     setPieceHitEffect(r, c, false);
                 }
             }
-            // 添加新进入范围的棋子的高亮
             for (const key of newTargetKeys) {
                 if (!lastAimedPieceKeys.has(key)) {
                     const [r, c] = key.split(',').map(Number);
@@ -1740,7 +2430,6 @@
             aimValid = inBoard && newTargets.length > 0;
             aimWorldPos = worldPos.clone();
 
-            // 更新瞄准线颜色：有目标为绿色，无目标为红色
             updateGhostLine(startPos, endPos, inBoard && newTargets.length > 0);
         }
 
@@ -1791,7 +2480,6 @@
         }
 
         function hideGhostLine() {
-            // 清除所有棋子的高亮
             for (const key of lastAimedPieceKeys) {
                 const [r, c] = key.split(',').map(Number);
                 setPieceHitEffect(r, c, false);
@@ -1806,7 +2494,6 @@
         }
 
         function clearGhostLine() {
-            // 清除所有棋子的高亮
             for (const key of lastAimedPieceKeys) {
                 const [r, c] = key.split(',').map(Number);
                 setPieceHitEffect(r, c, false);
@@ -1826,16 +2513,16 @@
             }
         }
 
+        // ============================================================
+        //  CANNON / ABILITY EXECUTION
+        // ============================================================
         function fireAimedCannon() {
             if (!isAiming) return;
 
             const worldPos = aimWorldPos.clone();
             worldPos.y = 0.05;
-
-            // 获取范围内所有棋子（不分敌我）
             const targets = getPiecesInRadius(worldPos, TARGET_RADIUS);
 
-            // 清除所有高亮
             for (const key of lastAimedPieceKeys) {
                 const [r, c] = key.split(',').map(Number);
                 setPieceHitEffect(r, c, false);
@@ -1845,6 +2532,22 @@
             const fromR = selectedPiece.row;
             const fromC = selectedPiece.col;
             const abilityDef = ABILITIES.rook;
+            const targetData = targets.map(t => ({ r: t.r, c: t.c }));
+            const targetWorldX = worldPos.x;
+            const targetWorldZ = worldPos.z;
+
+            if (currentMode === 'multiplayer' && peerConnection?.open) {
+                peerConnection.send({
+                    type: 'aim_fire',
+                    fromR: fromR,
+                    fromC: fromC,
+                    targetX: targetWorldX,
+                    targetZ: targetWorldZ,
+                    targets: targetData,
+                    abilityName: abilityDef.name,
+                    damage: abilityDef.damage
+                });
+            }
 
             cancelAiming();
 
@@ -1852,7 +2555,6 @@
             const endPos = worldPos.clone();
             endPos.y = 0.05;
 
-            // —— 空爆：没有命中任何棋子 ——
             if (targets.length === 0) {
                 isAnimating = true;
                 flyCannonball(startPos, endPos, () => {
@@ -1864,11 +2566,9 @@
                 return;
             }
 
-            // —— 有命中目标（包括己方棋子） ——
             isAnimating = true;
             flyCannonball(startPos, endPos, () => {
                 fireAreaCannonVisual(worldPos, targets, abilityDef.damage, () => {
-                    // 1. 对所有目标直接扣血（不分敌我）
                     for (const target of targets) {
                         const targetPiece = gameState.getPiece(target.r, target.c);
                         if (targetPiece) {
@@ -1879,11 +2579,7 @@
                             showDamageEffect(target.r, target.c, abilityDef.damage);
                         }
                     }
-
-                    // 2. 切换回合（只切换一次）
                     gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
-
-                    // 3. 记录历史
                     gameState.moveHistory.push({
                         type: 'areaAbility',
                         abilityName: abilityDef.name,
@@ -1891,21 +2587,16 @@
                         targets: targets.map(t => ({ r: t.r, c: t.c })),
                         damageDealt: abilityDef.damage
                     });
-
-                    // 4. 重建棋盘并更新状态
                     deselectPiece();
                     isAnimating = false;
                     syncPiecesAfterMove();
+                    switchTimer(gameState.turn);
                     checkGameStatus();
-
                     if (!gameOverFlag) {
                         updateCameraTargets();
                         if (currentMode === 'ai' && gameState.turn !== playerColor) {
                             aiThinking = true;
                             setTimeout(makeAIMove, 500);
-                        }
-                        if (currentMode === 'multiplayer') {
-                            sendAbilityToPeer(fromR, fromC, targets.map(t => ({ r: t.r, c: t.c })), abilityDef.name);
                         }
                     }
                     updateTurnIndicator();
@@ -1919,7 +2610,6 @@
             boomGroup.position.y += 0.3;
             scene.add(boomGroup);
 
-            // 主爆炸球
             const mainBoomGeo = new THREE.SphereGeometry(1.2, 20, 20);
             const mainBoomMat = new THREE.MeshBasicMaterial({
                 color: 0xff4400,
@@ -1931,7 +2621,6 @@
             mainBoom.scale.set(0.1, 0.1, 0.1);
             boomGroup.add(mainBoom);
 
-            // 外圈冲击波
             const outerBoomGeo = new THREE.SphereGeometry(2.0, 20, 20);
             const outerBoomMat = new THREE.MeshBasicMaterial({
                 color: 0xff8800,
@@ -1943,7 +2632,6 @@
             outerBoom.scale.set(0.1, 0.1, 0.1);
             boomGroup.add(outerBoom);
 
-            // 闪光
             const flashGeo = new THREE.SphereGeometry(0.4, 8, 8);
             const flashMat = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
@@ -1954,7 +2642,6 @@
             const flash = new THREE.Mesh(flashGeo, flashMat);
             boomGroup.add(flash);
 
-            // 粒子
             const particleCount = 80;
             const particles = [];
             for (let i = 0; i < particleCount; i++) {
@@ -1984,7 +2671,6 @@
                 particles.push(p);
             }
 
-            // 目标位置标记（小闪光）
             const markerGroup = new THREE.Group();
             scene.add(markerGroup);
             for (const target of targets) {
@@ -2008,7 +2694,6 @@
                 if (bt >= 1) {
                     scene.remove(boomGroup);
                     scene.remove(markerGroup);
-                    // 动画结束，执行回调
                     setTimeout(callback, 300);
                     return;
                 }
@@ -2044,19 +2729,28 @@
             scene.add(boomGroup);
 
             const mainBoomGeo = new THREE.SphereGeometry(0.6, 16, 16);
-            const mainBoomMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.8, depthWrite: false });
+            const mainBoomMat = new THREE.MeshBasicMaterial({
+                color: 0x44aaff, transparent: true, opacity: 0.8,
+                depthWrite: false
+            });
             const mainBoom = new THREE.Mesh(mainBoomGeo, mainBoomMat);
             mainBoom.scale.set(0.1, 0.1, 0.1);
             boomGroup.add(mainBoom);
 
             const outerBoomGeo = new THREE.SphereGeometry(1.0, 16, 16);
-            const outerBoomMat = new THREE.MeshBasicMaterial({ color: 0x88ddff, transparent: true, opacity: 0.3, depthWrite: false });
+            const outerBoomMat = new THREE.MeshBasicMaterial({
+                color: 0x88ddff, transparent: true, opacity: 0.3,
+                depthWrite: false
+            });
             const outerBoom = new THREE.Mesh(outerBoomGeo, outerBoomMat);
             outerBoom.scale.set(0.1, 0.1, 0.1);
             boomGroup.add(outerBoom);
 
             const flashGeo = new THREE.SphereGeometry(0.25, 8, 8);
-            const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false });
+            const flashMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff, transparent: true, opacity: 1,
+                depthWrite: false
+            });
             const flash = new THREE.Mesh(flashGeo, flashMat);
             boomGroup.add(flash);
 
@@ -2072,8 +2766,10 @@
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.random() * Math.PI;
                 const r = 0.3 + Math.random() * 0.4;
-                p.position.set(Math.sin(phi) * Math.cos(theta) * r, Math.cos(phi) * r * 0.5 + 0.3, Math.sin(phi) * Math.sin(theta) * r);
-                p.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 5, Math.random() * 4 + 1.5, (Math.random() - 0.5) * 5);
+                p.position.set(Math.sin(phi) * Math.cos(theta) * r, Math.cos(phi) * r * 0.5 + 0.3, Math.sin(phi) * Math.sin(
+                    theta) * r);
+                p.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 5, Math.random() * 4 + 1.5, (Math.random() - 0.5) *
+                    5);
                 p.userData.life = 1;
                 boomGroup.add(p);
                 particles.push(p);
@@ -2105,13 +2801,252 @@
             animateBoom();
         }
 
-        function isPlayerTurn() {
-            return currentMode !== 'ai' || gameState.turn === playerColor;
+        function flyCannonball(startPos, endPos, callback) {
+            const projGeo = new THREE.SphereGeometry(0.22, 16, 16);
+            const projMat = new THREE.MeshStandardMaterial({
+                color: 0xff5500,
+                emissive: 0xff3300,
+                emissiveIntensity: 0.8,
+                roughness: 0.2,
+            });
+            const proj = new THREE.Mesh(projGeo, projMat);
+            proj.position.copy(startPos);
+            proj.castShadow = true;
+            scene.add(proj);
+
+            const glowGeo = new THREE.SphereGeometry(0.35, 12, 12);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xff6600,
+                transparent: true,
+                opacity: 0.25,
+                depthWrite: false,
+            });
+            const glow = new THREE.Mesh(glowGeo, glowMat);
+            glow.position.copy(startPos);
+            scene.add(glow);
+
+            const trailCount = 25;
+            const trailParticles = [];
+            for (let i = 0; i < trailCount; i++) {
+                const pGeo = new THREE.SphereGeometry(0.04, 4, 4);
+                const pMat = new THREE.MeshBasicMaterial({
+                    color: 0xff8800,
+                    transparent: true,
+                    opacity: 0.6,
+                    depthWrite: false,
+                });
+                const p = new THREE.Mesh(pGeo, pMat);
+                p.position.copy(startPos);
+                p.userData.life = 0;
+                scene.add(p);
+                trailParticles.push(p);
+            }
+
+            const duration = 0.5;
+            const startTime = clock.getElapsedTime();
+            let trailIndex = 0;
+
+            const animateProj = () => {
+                const now = clock.getElapsedTime();
+                const t = Math.min((now - startTime) / duration, 1);
+                const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+                const height = Math.sin(t * Math.PI) * 2.5;
+
+                const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, easeT);
+                currentPos.y += height;
+                proj.position.copy(currentPos);
+                glow.position.copy(currentPos);
+                glow.scale.setScalar(1 + t * 0.6);
+
+                proj.rotation.x += 0.2;
+                proj.rotation.z += 0.15;
+
+                if (t < 0.95 && Math.floor(t * 30) > trailIndex) {
+                    trailIndex = Math.floor(t * 30);
+                    const idx = trailIndex % trailCount;
+                    const p = trailParticles[idx];
+                    p.position.copy(currentPos);
+                    p.userData.life = 1.0;
+                    p.scale.setScalar(1);
+                    p.material.opacity = 0.7;
+                }
+
+                for (const p of trailParticles) {
+                    if (p.userData.life > 0) {
+                        p.userData.life -= 0.025;
+                        p.position.y += 0.01;
+                        p.scale.setScalar(Math.max(0.1, p.userData.life));
+                        p.material.opacity = Math.max(0, p.userData.life * 0.7);
+                    } else {
+                        p.visible = false;
+                    }
+                }
+
+                if (t < 1) {
+                    requestAnimationFrame(animateProj);
+                } else {
+                    for (const p of trailParticles) scene.remove(p);
+                    scene.remove(proj);
+                    scene.remove(glow);
+                    callback();
+                }
+            };
+            animateProj();
         }
 
-        function pieceHasAbility(piece) {
-            if (!piece) return false;
-            return ABILITIES[piece.type] !== undefined;
+        // ============================================================
+        //  REMOTE AIM SYNCHRONIZATION
+        // ============================================================
+        function showRemoteAim(fromR, fromC, targetX, targetZ) {
+            const fromPos = get3DPosition(fromR, fromC, 0.6);
+            const targetPos = new THREE.Vector3(targetX, 0.05, targetZ);
+
+            const fromScreen = fromPos.clone();
+            fromScreen.project(camera);
+            const targetScreen = targetPos.clone();
+            targetScreen.project(camera);
+
+            const fromX = (fromScreen.x * 0.5 + 0.5) * window.innerWidth;
+            const fromY = (-fromScreen.y * 0.5 + 0.5) * window.innerHeight;
+            const toX = (targetScreen.x * 0.5 + 0.5) * window.innerWidth;
+            const toY = (-targetScreen.y * 0.5 + 0.5) * window.innerHeight;
+
+            const indicator = document.getElementById('remoteAimIndicator');
+            indicator.style.display = 'block';
+            indicator.style.left = (toX - 20) + 'px';
+            indicator.style.top = (toY - 20) + 'px';
+            indicator.style.width = '40px';
+            indicator.style.height = '40px';
+
+            const line = document.getElementById('remoteAimLine');
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            line.style.display = 'block';
+            line.style.left = fromX + 'px';
+            line.style.top = fromY + 'px';
+            line.style.width = len + 'px';
+            line.style.transform = `rotate(${angle}rad)`;
+
+            remoteAimActive = true;
+            remoteAimFromR = fromR;
+            remoteAimFromC = fromC;
+            remoteAimTargetX = targetX;
+            remoteAimTargetZ = targetZ;
+        }
+
+        function hideRemoteAim() {
+            document.getElementById('remoteAimIndicator').style.display = 'none';
+            document.getElementById('remoteAimLine').style.display = 'none';
+            remoteAimActive = false;
+            if (remoteAimTimer) {
+                clearTimeout(remoteAimTimer);
+                remoteAimTimer = null;
+            }
+        }
+
+        function updateRemoteAimPosition(targetX, targetZ) {
+            if (!remoteAimActive) return;
+            const fromPos = get3DPosition(remoteAimFromR, remoteAimFromC, 0.6);
+            const targetPos = new THREE.Vector3(targetX, 0.05, targetZ);
+
+            const fromScreen = fromPos.clone();
+            fromScreen.project(camera);
+            const targetScreen = targetPos.clone();
+            targetScreen.project(camera);
+
+            const fromX = (fromScreen.x * 0.5 + 0.5) * window.innerWidth;
+            const fromY = (-fromScreen.y * 0.5 + 0.5) * window.innerHeight;
+            const toX = (targetScreen.x * 0.5 + 0.5) * window.innerWidth;
+            const toY = (-targetScreen.y * 0.5 + 0.5) * window.innerHeight;
+
+            const indicator = document.getElementById('remoteAimIndicator');
+            indicator.style.left = (toX - 20) + 'px';
+            indicator.style.top = (toY - 20) + 'px';
+
+            const line = document.getElementById('remoteAimLine');
+            const dx = toX - fromX;
+            const dy = toY - fromY;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            line.style.width = len + 'px';
+            line.style.transform = `rotate(${angle}rad)`;
+
+            remoteAimTargetX = targetX;
+            remoteAimTargetZ = targetZ;
+        }
+
+        function playRemoteCannonFire(fromR, fromC, targetX, targetZ, targets, damage) {
+            const startPos = get3DPosition(fromR, fromC, 0.6);
+            const endPos = new THREE.Vector3(targetX, 0.05, targetZ);
+
+            if (targets && targets.length > 0) {
+                for (const t of targets) {
+                    const targetPiece = gameState.getPiece(t.r, t.c);
+                    if (targetPiece) {
+                        targetPiece.hp -= damage;
+                        if (targetPiece.hp <= 0) {
+                            gameState.board[t.r][t.c] = null;
+                        }
+                        showDamageEffect(t.r, t.c, damage);
+                    }
+                }
+                gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
+                gameState.moveHistory.push({
+                    type: 'areaAbility',
+                    abilityName: '加農炮 (Cannon)',
+                    fromR, fromC,
+                    targets: targets,
+                    damageDealt: damage
+                });
+                syncPiecesAfterMove();
+                switchTimer(gameState.turn);
+                checkGameStatus();
+                updateTurnIndicator();
+                if (!gameOverFlag) {
+                    updateCameraTargets();
+                    if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                        aiThinking = true;
+                        setTimeout(makeAIMove, 500);
+                    }
+                }
+            }
+
+            isAnimating = true;
+            const actualTargets = targets ? targets.map(t => ({ r: t.r, c: t.c })) : [];
+
+            flyCannonball(startPos, endPos, () => {
+                if (actualTargets.length > 0) {
+                    const worldPos = new THREE.Vector3(targetX, 0.05, targetZ);
+                    const targetData = actualTargets.map(t => {
+                        const p = gameState.getPiece(t.r, t.c);
+                        return { r: t.r, c: t.c, piece: p };
+                    });
+                    fireAreaCannonVisual(worldPos, actualTargets, damage, () => {
+                        isAnimating = false;
+                        if (!gameOverFlag) {
+                            updateCameraTargets();
+                        }
+                    });
+                } else {
+                    const worldPos = new THREE.Vector3(targetX, 0.05, targetZ);
+                    createEmptyExplosion(worldPos);
+                    isAnimating = false;
+                }
+                hideRemoteAim();
+            });
+        }
+
+        // ============================================================
+        //  ACTION BAR & UI
+        // ============================================================
+        function isPlayerTurn() {
+            if (gameOverFlag || isAnimating || aiThinking) return false;
+            if (currentMode === 'ai' || currentMode === 'multiplayer') {
+                return gameState.turn === playerColor;
+            }
+            return true;
         }
 
         function updateActionBar(show, hasTargets) {
@@ -2159,14 +3094,10 @@
                 hideGhostLine();
                 if (selectedPiece) showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
             } else {
-                // 攻击模式
                 if (abilityTargets.length === 0) {
-                    // 没有可攻击目标，回到移动模式
                     setActionMode('move');
                     return;
                 }
-
-                // 非兵的攻击模式（原有逻辑）
                 attackBtn.style.background = 'var(--gold)';
                 attackBtn.style.color = '#1a1a2e';
                 moveBtn.style.background = '#3a3a5c';
@@ -2190,6 +3121,14 @@
             document.getElementById('actionBar').classList.remove('visible');
             document.getElementById('actionBar').style.display = 'none';
 
+            if (currentMode === 'multiplayer' && peerConnection?.open && selectedPiece) {
+                peerConnection.send({
+                    type: 'aim_start',
+                    fromR: selectedPiece.row,
+                    fromC: selectedPiece.col
+                });
+            }
+
             if (!aimWorldPos) {
                 aimWorldPos = new THREE.Vector3(0, 0.05, 0);
             }
@@ -2197,6 +3136,11 @@
         }
 
         function cancelAiming() {
+            if (isAiming) {
+                if (currentMode === 'multiplayer' && peerConnection?.open) {
+                    peerConnection.send({ type: 'aim_cancel' });
+                }
+            }
             isAiming = false;
             document.getElementById('aimHint').classList.remove('visible');
             clearGhostLine();
@@ -2210,11 +3154,13 @@
                     setActionMode('move');
                 }
             }
+            hideRemoteAim();
         }
 
         function selectPiece(row, col) {
             const piece = gameState.getPiece(row, col);
             if (!piece || piece.color !== gameState.turn) return;
+            if (!isPlayerTurn()) return;
             if (isAiming) cancelAiming();
 
             selectedPiece = { row, col, piece };
@@ -2247,6 +3193,9 @@
             updateCameraTargets();
         }
 
+        // ============================================================
+        //  MOVE / ABILITY EXECUTION
+        // ============================================================
         function attemptMove(fromR, fromC, toR, toC) {
             const move = validMoves.find(m => m.r === toR && m.c === toC);
             if (!move) return;
@@ -2271,21 +3220,17 @@
                         if (child.userData.origColor === undefined) {
                             child.userData.origColor = child.material.color.getHex();
                         }
-                        // Flash red for damage
                         child.material.color.setHex(0xff0000);
-
                         setTimeout(() => {
                             if (child.material) {
                                 const key = `${r},${c}`;
-                                // If the piece is still actively targeted by the cannon, keep it red/tracked
-                                if (isAiming && lastAimedPieceKey === key) {
+                                if (isAiming && lastAimedPieceKeys.has(key)) {
                                     child.material.color.setHex(0xff3333);
                                     if (child.material.emissive) {
                                         child.material.emissive.setHex(0xff0000);
                                         child.material.emissiveIntensity = 0.6;
                                     }
                                 } else {
-                                    // Otherwise revert safely to its original color
                                     child.material.color.setHex(child.userData.origColor);
                                     if (child.material.emissive) {
                                         child.material.emissive.setHex(0x000000);
@@ -2403,19 +3348,28 @@
                     scene.add(boomGroup);
 
                     const mainBoomGeo = new THREE.SphereGeometry(0.8, 16, 16);
-                    const mainBoomMat = new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.9, depthWrite: false });
+                    const mainBoomMat = new THREE.MeshBasicMaterial({
+                        color: 0xff4400, transparent: true, opacity: 0.9,
+                        depthWrite: false
+                    });
                     const mainBoom = new THREE.Mesh(mainBoomGeo, mainBoomMat);
                     mainBoom.scale.set(0.1, 0.1, 0.1);
                     boomGroup.add(mainBoom);
 
                     const outerBoomGeo = new THREE.SphereGeometry(1.2, 16, 16);
-                    const outerBoomMat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.4, depthWrite: false });
+                    const outerBoomMat = new THREE.MeshBasicMaterial({
+                        color: 0xff8800, transparent: true, opacity: 0.4,
+                        depthWrite: false
+                    });
                     const outerBoom = new THREE.Mesh(outerBoomGeo, outerBoomMat);
                     outerBoom.scale.set(0.1, 0.1, 0.1);
                     boomGroup.add(outerBoom);
 
                     const flashGeo = new THREE.SphereGeometry(0.3, 8, 8);
-                    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false });
+                    const flashMat = new THREE.MeshBasicMaterial({
+                        color: 0xffffff, transparent: true, opacity: 1,
+                        depthWrite: false
+                    });
                     const flash = new THREE.Mesh(flashGeo, flashMat);
                     boomGroup.add(flash);
 
@@ -2431,8 +3385,10 @@
                         const theta = Math.random() * Math.PI * 2;
                         const phi = Math.random() * Math.PI;
                         const r = 0.5 + Math.random() * 0.5;
-                        p.position.set(Math.sin(phi) * Math.cos(theta) * r, Math.cos(phi) * r * 0.5 + 0.3, Math.sin(phi) * Math.sin(theta) * r);
-                        p.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 7, Math.random() * 5 + 2, (Math.random() - 0.5) * 7);
+                        p.position.set(Math.sin(phi) * Math.cos(theta) * r, Math.cos(phi) * r * 0.5 + 0.3, Math.sin(phi) *
+                            Math.sin(theta) * r);
+                        p.userData.vel = new THREE.Vector3((Math.random() - 0.5) * 7, Math.random() * 5 + 2, (Math.random() -
+                            0.5) * 7);
                         p.userData.life = 1;
                         boomGroup.add(p);
                         particles.push(p);
@@ -2476,11 +3432,79 @@
             if (isAnimating) return;
             isAnimating = true;
 
-            // 如果是原地爆炸（目标就是自身）
+            const pieceObj = pieceObjects[`${fromR},${fromC}`];
+
+            // ----- 远程分支：无3D对象时直接应用伤害 -----
+            if (!pieceObj && isRemote) {
+                // 1. 处理敌方伤害（十字方向上的敌方棋子）
+                const enemyColor = ability.damage > 0 ? (gameState.getPiece(fromR, fromC)?.color === 'white' ? 'black' : 'white') : null;
+                const directions = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                const targets = [];
+                for (const [dr, dc] of directions) {
+                    const tr = fromR + dr, tc = fromC + dc;
+                    if (gameState.isInBounds(tr, tc)) {
+                        const target = gameState.getPiece(tr, tc);
+                        if (target && target.color === enemyColor) {
+                            targets.push({ r: tr, c: tc });
+                        }
+                    }
+                }
+                for (const t of targets) {
+                    const p = gameState.getPiece(t.r, t.c);
+                    if (p) {
+                        p.hp -= ability.damage;
+                        if (p.hp <= 0) gameState.board[t.r][t.c] = null;
+                        showFloatingDamage(t.r, t.c, ability.damage);
+                    }
+                }
+
+                // 2. 处理自身伤害（兵所在位置，可能移动了）
+                const pawnPos = (fromR === toR && fromC === toC) ? { r: fromR, c: fromC } : { r: toR, c: toC };
+                const pawn = gameState.getPiece(pawnPos.r, pawnPos.c);
+                if (pawn) {
+                    pawn.hp -= ability.selfDamage;
+                    if (pawn.hp <= 0) {
+                        gameState.board[pawnPos.r][pawnPos.c] = null;
+                        showFloatingDamage(pawnPos.r, pawnPos.c, ability.selfDamage);
+                    } else {
+                        showFloatingDamage(pawnPos.r, pawnPos.c, ability.selfDamage);
+                    }
+                }
+
+                // 3. 更新回合、历史、状态
+                gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
+                gameState.moveHistory.push({
+                    type: 'ability',
+                    abilityName: ability.name,
+                    fromR, fromC, targetR: toR, targetC: toC,
+                    damageDealt: ability.damage,
+                    selfDamage: ability.selfDamage
+                });
+                deselectPiece();
+                isAnimating = false;
+                syncPiecesAfterMove();
+                switchTimer(gameState.turn);
+                checkGameStatus();
+                updateTurnIndicator();
+                if (!gameOverFlag) {
+                    updateCameraTargets();
+                    if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                        aiThinking = true;
+                        setTimeout(makeAIMove, 500);
+                    }
+                }
+                return;
+            }
+
+            // ----- 原有逻辑（本地执行，pieceObj 必须存在） -----
+            if (!pieceObj) {
+                isAnimating = false;
+                return;
+            }
+
+            // 原地爆炸（兵不移动）
             if (fromR === toR && fromC === toC) {
-                // 直接执行爆炸
                 createCrossExplosion(toR, toC, ability.damage, ability.selfDamage, () => {
-                    // 自伤
                     const pawn = gameState.getPiece(toR, toC);
                     if (pawn) {
                         pawn.hp -= ability.selfDamage;
@@ -2496,7 +3520,6 @@
                             showFloatingDamage(toR, toC, ability.selfDamage);
                         }
                     }
-                    // 切换回合、记录历史等
                     gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
                     gameState.moveHistory.push({
                         type: 'ability',
@@ -2508,6 +3531,7 @@
                     deselectPiece();
                     isAnimating = false;
                     syncPiecesAfterMove();
+                    switchTimer(gameState.turn);
                     checkGameStatus();
                     updateTurnIndicator();
                     if (!gameOverFlag) {
@@ -2517,56 +3541,44 @@
                             setTimeout(makeAIMove, 500);
                         }
                         if (currentMode === 'multiplayer' && !isRemote) {
-                            sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name);
+                            sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, ability.damage, ability.selfDamage);
                         }
                     }
                 });
                 return;
             }
 
-            const pieceObj = pieceObjects[`${fromR},${fromC}`];
-            if (!pieceObj) { isAnimating = false; return; }
-
+            // 兵移动后爆炸
             const startPos = pieceObj.position.clone();
             const targetPos = get3DPosition(toR, toC, 0);
             const duration = 0.3;
             const startTime = clock.getElapsedTime();
 
-            // 1. 移动动画
             const animateMove = () => {
                 const now = clock.getElapsedTime();
                 const progress = Math.min((now - startTime) / duration, 1);
-                const ease = t => t * (2 - t); // easeOutQuad
+                const ease = t => t * (2 - t);
                 const t = ease(progress);
-
                 pieceObj.position.lerpVectors(startPos, targetPos, t);
                 if (progress < 1) {
                     requestAnimationFrame(animateMove);
                 } else {
-                    // 移动完成 -> 更新数据
                     pieceObj.position.copy(targetPos);
-
-                    // 更新棋盘数据：兵移动到目标格
                     const piece = gameState.getPiece(fromR, fromC);
                     gameState.board[fromR][fromC] = null;
                     gameState.board[toR][toC] = piece;
                     piece.hasMoved = true;
-
-                    // 删除原位置的引用，添加新位置的引用
                     delete pieceObjects[`${fromR},${fromC}`];
                     pieceObjects[`${toR},${toC}`] = pieceObj;
                     pieceObj.userData.row = toR;
                     pieceObj.userData.col = toC;
 
-                    // 2. 执行爆炸
                     createCrossExplosion(toR, toC, ability.damage, ability.selfDamage, () => {
-                        // 3. 自伤
                         const pawn = gameState.getPiece(toR, toC);
                         if (pawn) {
                             pawn.hp -= ability.selfDamage;
                             if (pawn.hp <= 0) {
                                 gameState.board[toR][toC] = null;
-                                // 移除棋子对象
                                 if (pieceObjects[`${toR},${toC}`]) {
                                     piecesGroup.remove(pieceObjects[`${toR},${toC}`]);
                                     delete pieceObjects[`${toR},${toC}`];
@@ -2577,11 +3589,7 @@
                                 showFloatingDamage(toR, toC, ability.selfDamage);
                             }
                         }
-
-                        // 4. 切换回合
                         gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
-
-                        // 5. 记录历史
                         gameState.moveHistory.push({
                             type: 'ability',
                             abilityName: ability.name,
@@ -2589,14 +3597,12 @@
                             damageDealt: ability.damage,
                             selfDamage: ability.selfDamage
                         });
-
-                        // 6. 清理状态
                         deselectPiece();
                         isAnimating = false;
-                        syncPiecesAfterMove();  // 确保所有棋子位置同步
+                        syncPiecesAfterMove();
+                        switchTimer(gameState.turn);
                         checkGameStatus();
                         updateTurnIndicator();
-
                         if (!gameOverFlag) {
                             updateCameraTargets();
                             if (currentMode === 'ai' && gameState.turn !== playerColor) {
@@ -2604,8 +3610,7 @@
                                 setTimeout(makeAIMove, 500);
                             }
                             if (currentMode === 'multiplayer' && !isRemote) {
-                                // 将能力发送给对手（如果需要对战）
-                                sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name);
+                                sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, ability.damage, ability.selfDamage);
                             }
                         }
                     });
@@ -2620,68 +3625,69 @@
             boomGroup.position.copy(centerPos);
             scene.add(boomGroup);
 
-            // 十字爆炸粒子 – 四个方向喷射（上下左右）
             const directions = [
-                [0, 1], [0, -1], [1, 0], [-1, 0]
+                [0, 1],
+                [0, -1],
+                [1, 0],
+                [-1, 0]
             ];
-            // ★ 减少粒子数量，让十字更干净
-            const particleCount = 24;  // 原来是 40
             const particles = [];
-
-            for (let i = 0; i < particleCount; i++) {
-                const dir = directions[i % directions.length];
-                const pGeo = new THREE.SphereGeometry(0.08, 6, 6);
-                const pMat = new THREE.MeshBasicMaterial({
-                    color: new THREE.Color().setHSL(0.05 + Math.random() * 0.1, 1, 0.5),
-                    transparent: true,
-                    opacity: 1,
-                    depthWrite: false
-                });
-                const p = new THREE.Mesh(pGeo, pMat);
-                const angle = Math.random() * Math.PI * 2;
-                const speed = 4 + Math.random() * 3;  // 速度稍微加快
-                const spread = 0.2 + Math.random() * 0.2;  // ★ 缩小扩散范围，让粒子更贴轴线
-                p.position.set(
-                    dir[0] * spread * 0.3 + (Math.random() - 0.5) * 0.1,
-                    (Math.random() - 0.5) * 0.1,
-                    dir[1] * spread * 0.3 + (Math.random() - 0.5) * 0.1
-                );
-                p.userData.vel = new THREE.Vector3(
-                    dir[0] * speed * (0.7 + Math.random() * 0.3),
-                    Math.random() * 2 + 1,
-                    dir[1] * speed * (0.7 + Math.random() * 0.3)
-                );
-                p.userData.life = 1;
-                boomGroup.add(p);
-                particles.push(p);
+            for (const [dr, dc] of directions) {
+                for (let i = 0; i < 6; i++) {
+                    const pGeo = new THREE.SphereGeometry(0.09, 6, 6);
+                    const pMat = new THREE.MeshBasicMaterial({
+                        color: 0xff8800,
+                        transparent: true,
+                        opacity: 0.9,
+                        depthWrite: false
+                    });
+                    const p = new THREE.Mesh(pGeo, pMat);
+                    p.position.set(dr * 0.08, (Math.random() - 0.5) * 0.08, dc * 0.08);
+                    const speed = 8 + Math.random() * 4;
+                    const angle = (Math.random() - 0.5) * 0.15;
+                    const dirX = dr * Math.cos(angle) - dc * Math.sin(angle);
+                    const dirZ = dr * Math.sin(angle) + dc * Math.cos(angle);
+                    p.userData.vel = new THREE.Vector3(dirX * speed, Math.random() * 2 + 1, dirZ * speed);
+                    p.userData.life = 1;
+                    boomGroup.add(p);
+                    particles.push(p);
+                }
             }
 
-            // 主闪光（保持大小适中）
-            const flashGeo = new THREE.SphereGeometry(0.4, 12, 12);  // 缩小闪光
-            const flashMat = new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 1, depthWrite: false });
+            const flashGeo = new THREE.SphereGeometry(0.7, 12, 12);
+            const flashMat = new THREE.MeshBasicMaterial({
+                color: 0xffff88,
+                transparent: true,
+                opacity: 1,
+                depthWrite: false
+            });
             const flash = new THREE.Mesh(flashGeo, flashMat);
             flash.scale.set(0.1, 0.1, 0.1);
             boomGroup.add(flash);
 
-            // ★ 十字线（光束）—— 更细、更长、更亮
-            const lineMat = new THREE.MeshBasicMaterial({
-                color: 0xff8800,
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: 0xff6600,
                 transparent: true,
-                opacity: 0.8,
-                emissive: 0xff4400,
-                emissiveIntensity: 0.5
+                opacity: 0.9,
+                depthWrite: false
             });
+            const beamLen = 0.5;
+            const beamThick = 0.1;
             for (const [dr, dc] of directions) {
-                const length = 1.8;  // ★ 从 1.2 增加到 1.8，更长
-                // ★ 宽度从 0.12 减小到 0.06，更细
-                const beam = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, length * 2), lineMat);
-                beam.position.set(dr * length, 0.1, dc * length);
-                beam.rotation.y = Math.atan2(dc, dr);
+                const beam = new THREE.Mesh(
+                    new THREE.BoxGeometry(
+                        dr !== 0 ? beamLen * 2 : beamThick,
+                        0.06,
+                        dc !== 0 ? beamLen * 2 : beamThick
+                    ),
+                    beamMat
+                );
+                beam.position.set(dr * beamLen * 0.5, 0.08, dc * beamLen * 0.5);
                 boomGroup.add(beam);
             }
 
-            // 对敌方造成伤害（保持不变）
-            const color = gameState.getPiece(row, col)?.color;
+            const piece = gameState.getPiece(row, col);
+            const color = piece?.color;
             const enemyColor = color === 'white' ? 'black' : 'white';
             const targets = [];
             for (const [dr, dc] of directions) {
@@ -2695,22 +3701,19 @@
                 }
             }
 
-            // 先扣血（在动画过程中同步显示）
             for (const t of targets) {
-                const piece = gameState.getPiece(t.r, t.c);
-                if (piece) {
-                    piece.hp -= damage;
-                    if (piece.hp <= 0) {
-                        gameState.board[t.r][t.c] = null;
-                    }
+                const p = gameState.getPiece(t.r, t.c);
+                if (p) {
+                    p.hp -= damage;
+                    if (p.hp <= 0) gameState.board[t.r][t.c] = null;
                     showFloatingDamage(t.r, t.c, damage);
                 }
             }
 
-            // 动画循环（保持不变）
             const startTime = clock.getElapsedTime();
+            const duration = 0.6;
             const animateBoom = () => {
-                const bt = (clock.getElapsedTime() - startTime) / 0.6;
+                const bt = (clock.getElapsedTime() - startTime) / duration;
                 if (bt >= 1) {
                     scene.remove(boomGroup);
                     for (const t of targets) {
@@ -2724,23 +3727,21 @@
                     return;
                 }
 
-                const s = 1 + bt * 8;
-                flash.scale.setScalar(s);
+                flash.scale.setScalar(1 + bt * 8);
                 flash.material.opacity = 1 - bt * 1.5;
 
-                // 光束伸缩
                 boomGroup.children.forEach(child => {
-                    if (child.isMesh && child !== flash) {
+                    if (child.isMesh && child !== flash && child.material) {
+                        child.material.opacity = 0.9 * (1 - bt * 0.9);
                         child.scale.setScalar(1 + bt * 2);
-                        child.material.opacity = 0.8 * (1 - bt);
                     }
                 });
 
                 for (const p of particles) {
                     p.position.add(p.userData.vel.clone().multiplyScalar(0.025));
-                    p.userData.vel.y -= 0.06;
-                    p.material.opacity = 1 - bt * 1.2;
-                    p.scale.setScalar(1 - bt * 0.3);
+                    p.userData.vel.y -= 0.07;
+                    p.material.opacity = 1 - bt * 1.3;
+                    p.scale.setScalar(1 - bt * 0.2);
                 }
 
                 requestAnimationFrame(animateBoom);
@@ -2758,15 +3759,14 @@
             }
 
             isAnimating = true;
-
             gameState.useAbility(fromR, fromC, targetR, targetC, ability);
 
             const finishVisuals = () => {
                 deselectPiece();
                 isAnimating = false;
                 syncPiecesAfterMove();
+                switchTimer(gameState.turn);
                 checkGameStatus();
-
                 if (!gameOverFlag) {
                     updateCameraTargets();
                     if (currentMode === 'ai' && gameState.turn !== playerColor) {
@@ -2774,7 +3774,7 @@
                         setTimeout(makeAIMove, 500);
                     }
                     if (currentMode === 'multiplayer' && !isRemote) {
-                        sendAbilityToPeer(fromR, fromC, targetR, targetC, ability.name);
+                        sendAbilityToPeer(fromR, fromC, [{ r: targetR, c: targetC }], ability.name, ability.damage, 0);
                     }
                 }
                 updateTurnIndicator();
@@ -2788,7 +3788,7 @@
             }
         }
 
-        function executeMove(fromR, fromC, toR, toC, promotionType, moveData) {
+        function executeMove(fromR, fromC, toR, toC, promotionType, moveData, isRemote = false) {
             if (isAnimating) return;
             isAnimating = true;
 
@@ -2825,15 +3825,15 @@
                     syncPiecesAfterMove();
                     isAnimating = false;
                     deselectPiece();
+                    switchTimer(gameState.turn);
                     checkGameStatus();
-
                     if (!gameOverFlag) {
                         updateCameraTargets();
                         if (currentMode === 'ai' && gameState.turn !== playerColor) {
                             aiThinking = true;
                             setTimeout(makeAIMove, 500);
                         }
-                        if (currentMode === 'multiplayer' && isPlayerTurn()) {
+                        if (currentMode === 'multiplayer' && !isRemote) {
                             sendMoveToPeer(fromR, fromC, toR, toC, promotionType);
                         }
                     }
@@ -2848,13 +3848,11 @@
             if (pendingPromotion) {
                 const { fromR, fromC, toR, toC } = pendingPromotion;
                 pendingPromotion = null;
-                const m = gameState.getLegalMoves(fromR, fromC).find(mv => mv.r === toR && mv.c === toC);
-                executeMove(fromR, fromC, toR, toC, type, m);
+                executeMove(fromR, fromC, toR, toC, type, null);
             }
         }
 
         function syncPiecesAfterMove() {
-            // 清除所有棋子的高亮
             for (const key of lastAimedPieceKeys) {
                 const [r, c] = key.split(',').map(Number);
                 setPieceHitEffect(r, c, false);
@@ -2867,6 +3865,7 @@
             const status = gameState.getGameStatus();
             if (status.over) {
                 gameOverFlag = true;
+                stopTimer();
                 document.getElementById('gameOverOverlay').classList.remove('hidden');
                 document.getElementById('gameOverReason').textContent = status.reason;
                 const text = document.getElementById('gameOverText');
@@ -2909,6 +3908,9 @@
             }
         }
 
+        // ============================================================
+        //  AI
+        // ============================================================
         function evaluateBoard(game, color) {
             let score = 0;
             const enemy = color === 'white' ? 'black' : 'white';
@@ -2950,7 +3952,9 @@
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const p = game.getPiece(r, c);
-                    if (p && p.color === game.turn) abilities.push(...game.getLegalAbilities(r, c));
+                    if (p && p.color === game.turn && isAbilityEnabledForColor(p.color)) {
+                        abilities.push(...game.getLegalAbilities(r, c));
+                    }
                 }
             }
             const allActions = [...moves, ...abilities];
@@ -2959,7 +3963,8 @@
                 let maxEval = -Infinity;
                 for (const action of allActions) {
                     const clone = game.clone();
-                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action.ability);
+                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action
+                        .ability);
                     else clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
                     const ev = minimax(clone, depth - 1, alpha, beta, false);
                     maxEval = Math.max(maxEval, ev);
@@ -2971,7 +3976,8 @@
                 let minEval = Infinity;
                 for (const action of allActions) {
                     const clone = game.clone();
-                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action.ability);
+                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action
+                        .ability);
                     else clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
                     const ev = minimax(clone, depth - 1, alpha, beta, true);
                     minEval = Math.min(minEval, ev);
@@ -2990,7 +3996,9 @@
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const p = gameState.getPiece(r, c);
-                    if (p && p.color === gameState.turn) abilities.push(...gameState.getLegalAbilities(r, c));
+                    if (p && p.color === gameState.turn && isAbilityEnabledForColor(p.color)) {
+                        abilities.push(...gameState.getLegalAbilities(r, c));
+                    }
                 }
             }
             const allActions = [...moves, ...abilities];
@@ -3010,7 +4018,8 @@
                 allActions.sort(() => Math.random() - 0.5);
                 for (const action of allActions.slice(0, 20)) {
                     const clone = gameState.clone();
-                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action.ability);
+                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action
+                        .ability);
                     else clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
                     const score = minimax(clone, depth - 1, -Infinity, Infinity, false);
                     if (score > bestScore) {
@@ -3041,15 +4050,30 @@
             }
         }
 
+        // ============================================================
+        //  CAMERA
+        // ============================================================
         function updateCameraTargets() {
             if (isFreeCameraActive) return;
-            let tz = 0, tx = 0, ty = 8;
+            let tz = 0,
+                tx = 0,
+                ty = 8;
             if (currentMode === 'ai' || currentMode === 'multiplayer') {
-                if (playerColor === 'black') { tz = -7; ty = 9; }
-                else { tz = 7; ty = 9; }
+                if (playerColor === 'black') {
+                    tz = -7;
+                    ty = 9;
+                } else {
+                    tz = 7;
+                    ty = 9;
+                }
             } else {
-                if (gameState.turn === 'black') { tz = -7; ty = 9; }
-                else { tz = 7; ty = 9; }
+                if (gameState.turn === 'black') {
+                    tz = -7;
+                    ty = 9;
+                } else {
+                    tz = 7;
+                    ty = 9;
+                }
             }
             cameraTarget.pos.set(tx, ty, tz);
         }
@@ -3062,6 +4086,9 @@
             }
         }
 
+        // ============================================================
+        //  INPUT HANDLING
+        // ============================================================
         function processInput(clientX, clientY) {
             if (isAnimating || aiThinking || gameOverFlag || !!pendingPromotion || suppressClick) return;
             if (currentMode === 'multiplayer' && !isPlayerTurn()) return;
@@ -3070,6 +4097,23 @@
                 const aimData = getFreeAimPosition(clientX, clientY);
                 if (aimData) {
                     updateAimTarget(aimData.position);
+                    if (currentMode === 'multiplayer' && peerConnection?.open) {
+                        const now = Date.now();
+                        if (!aimMoveThrottleTimer || now - aimMoveThrottleTimer > AIM_SEND_THROTTLE) {
+                            const dx = aimData.position.x - lastAimSendX;
+                            const dz = aimData.position.z - lastAimSendZ;
+                            if (Math.abs(dx) > 0.05 || Math.abs(dz) > 0.05) {
+                                peerConnection.send({
+                                    type: 'aim_move',
+                                    targetX: aimData.position.x,
+                                    targetZ: aimData.position.z
+                                });
+                                lastAimSendX = aimData.position.x;
+                                lastAimSendZ = aimData.position.z;
+                                aimMoveThrottleTimer = now;
+                            }
+                        }
+                    }
                 } else {
                     hideGhostLine();
                 }
@@ -3093,7 +4137,6 @@
                     if (target) attemptAbility(selectedPiece.row, selectedPiece.col, target.r, target.c, target.ability);
                 } else if (data.type === 'piece') {
                     const piece = gameState.getPiece(data.row, data.col);
-                    // 如果当前是攻击模式，且点击的棋子是能力目标（包括自身），则直接执行能力
                     if (actionMode === 'attack' && selectedPiece) {
                         const target = abilityTargets.find(t => t.r === data.row && t.c === data.col);
                         if (target) {
@@ -3101,7 +4144,6 @@
                             return;
                         }
                     }
-                    // 否则正常选择/取消
                     if (piece.color === gameState.turn && isPlayerTurn()) {
                         selectPiece(data.row, data.col);
                     } else if (selectedPiece && piece.color !== gameState.turn) {
@@ -3131,7 +4173,6 @@
                 }
                 return;
             }
-
             processInput(e.clientX, e.clientY);
         }
 
@@ -3157,6 +4198,23 @@
                 const aimData = getFreeAimPosition(e.clientX, e.clientY);
                 if (aimData) {
                     updateAimTarget(aimData.position);
+                    if (currentMode === 'multiplayer' && peerConnection?.open) {
+                        const now = Date.now();
+                        if (!aimMoveThrottleTimer || now - aimMoveThrottleTimer > AIM_SEND_THROTTLE) {
+                            const dx = aimData.position.x - lastAimSendX;
+                            const dz = aimData.position.z - lastAimSendZ;
+                            if (Math.abs(dx) > 0.05 || Math.abs(dz) > 0.05) {
+                                peerConnection.send({
+                                    type: 'aim_move',
+                                    targetX: aimData.position.x,
+                                    targetZ: aimData.position.z
+                                });
+                                lastAimSendX = aimData.position.x;
+                                lastAimSendZ = aimData.position.z;
+                                aimMoveThrottleTimer = now;
+                            }
+                        }
+                    }
                 } else {
                     hideGhostLine();
                 }
@@ -3202,7 +4260,26 @@
                 } else if (isAiming) {
                     e.preventDefault();
                     const aimData = getFreeAimPosition(e.touches[0].clientX, e.touches[0].clientY);
-                    if (aimData) updateAimTarget(aimData.position);
+                    if (aimData) {
+                        updateAimTarget(aimData.position);
+                        if (currentMode === 'multiplayer' && peerConnection?.open) {
+                            const now = Date.now();
+                            if (!aimMoveThrottleTimer || now - aimMoveThrottleTimer > AIM_SEND_THROTTLE) {
+                                const dx2 = aimData.position.x - lastAimSendX;
+                                const dz2 = aimData.position.z - lastAimSendZ;
+                                if (Math.abs(dx2) > 0.05 || Math.abs(dz2) > 0.05) {
+                                    peerConnection.send({
+                                        type: 'aim_move',
+                                        targetX: aimData.position.x,
+                                        targetZ: aimData.position.z
+                                    });
+                                    lastAimSendX = aimData.position.x;
+                                    lastAimSendZ = aimData.position.z;
+                                    aimMoveThrottleTimer = now;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -3219,6 +4296,9 @@
             }
         }
 
+        // ============================================================
+        //  RENDER LOOP
+        // ============================================================
         function animate() {
             requestAnimationFrame(animate);
 
@@ -3238,7 +4318,9 @@
             renderer.render(scene, camera);
         }
 
-        // 遊戲選單控制函數
+        // ============================================================
+        //  MENU / UI FUNCTIONS
+        // ============================================================
         function showAIDifficulty() {
             document.getElementById('mainMenu').classList.add('hidden');
             document.getElementById('aiDifficultyMenu').classList.remove('hidden');
@@ -3250,9 +4332,19 @@
         }
 
         function backToMenu() {
+            stopTimer();
+            if (peer) peer.destroy();
+            hideRemoteAim();
+            // 重置 settings 状态，避免残留
+            settingsReceived = false;
+            if (settingsTimeout) {
+                clearTimeout(settingsTimeout);
+                settingsTimeout = null;
+            }
             document.getElementById('mainMenu').classList.remove('hidden');
             document.getElementById('aiDifficultyMenu').classList.add('hidden');
             document.getElementById('multiplayerMenu').classList.add('hidden');
+            document.getElementById('roomSettings').classList.add('hidden');
             document.getElementById('waitingOverlay').classList.add('hidden');
             document.getElementById('gameOverOverlay').classList.add('hidden');
             document.getElementById('topBar').classList.add('hidden');
@@ -3263,26 +4355,70 @@
             clearHighlights();
             clearGhostLine();
             currentMode = null;
+            gameOverFlag = false;
         }
 
-        function startAIGame(diff) {
-            aiDifficulty = diff;
-            currentMode = 'ai';
-            playerColor = 'white'; // 原来是 Math.random() < 0.5 ? 'white' : 'black'
-            document.getElementById('aiDifficultyMenu').classList.add('hidden');
-            document.getElementById('topBar').classList.remove('hidden');
-            initNewGame();
+        function backToMultiplayerMenu() {
+            document.getElementById('roomSettings').classList.add('hidden');
+            document.getElementById('multiplayerMenu').classList.remove('hidden');
         }
 
-        function createRoom() {
+        // ============================================================
+        //  ROOM SETTINGS UI
+        // ============================================================
+        function showRoomSettings() {
+            roomSettings.gameMode = 'totally';
+            roomSettings.abilityPermissions = { white: true, black: true };
+            roomSettings.timePerPlayer = 300;
+
+            document.getElementById('multiplayerMenu').classList.add('hidden');
+            document.getElementById('roomSettings').classList.remove('hidden');
+
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.mode-btn[data-mode="totally"]').classList.add('active');
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.time-btn[data-time="300"]').classList.add('active');
+            document.getElementById('abilityWhite').checked = true;
+            document.getElementById('abilityBlack').checked = true;
+            updateAbilitySettingsVisibility();
+        }
+
+        function setRoomGameMode(mode) {
+            roomSettings.gameMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+            updateAbilitySettingsVisibility();
+        }
+
+        function updateAbilitySettingsVisibility() {
+            const group = document.getElementById('abilitySettingsGroup');
+            if (roomSettings.gameMode === 'totally') {
+                group.style.display = 'block';
+            } else {
+                group.style.display = 'none';
+            }
+        }
+
+        function setRoomTimeLimit(seconds) {
+            roomSettings.timePerPlayer = seconds;
+            document.querySelectorAll('.time-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.getAttribute('data-time')) === seconds);
+            });
+        }
+
+        function createRoomWithSettings() {
+            roomSettings.abilityPermissions.white = document.getElementById('abilityWhite').checked;
+            roomSettings.abilityPermissions.black = document.getElementById('abilityBlack').checked;
+
             roomCode = Math.floor(1000 + Math.random() * 9000).toString();
             isHost = true;
             playerColor = 'white';
+
+            settingsReceived = true;
+
+            document.getElementById('roomSettings').classList.add('hidden');
             document.getElementById('waitingCodeDisplay').textContent = roomCode;
-            document.getElementById('multiplayerMenu').classList.add('hidden');
             document.getElementById('waitingOverlay').classList.remove('hidden');
 
-            // ★ 关键修复：使用固定ID格式 'chess-房号'
             initPeer(roomCode, true);
         }
 
@@ -3306,29 +4442,46 @@
             document.getElementById('multiplayerMenu').classList.remove('hidden');
         }
 
+        // ============================================================
+        //  PEERJS - 修复客户端无法进入游戏的核心逻辑
+        // ============================================================
         function initPeer(code, hosting) {
-            // 如果是房主，使用固定ID 'chess-房号'
-            // 如果是加入者，使用随机ID（不指定参数）
             const peerId = hosting ? 'chess-' + code : undefined;
-            peer = new Peer(peerId, {
-                debug: 2  // 开启调试日志方便排查
-            });
+            peer = new Peer(peerId, { debug: 2 });
 
             peer.on('open', (id) => {
                 console.log('Peer 已開啟，ID:', id);
                 if (hosting) {
-                    // ★ 房主：监听连接事件（必须在 open 之后注册，但可以确保连接到来时已绑定）
                     peer.on('connection', (conn) => {
                         console.log('收到連線請求');
                         peerConnection = conn;
-                        setupPeerConnection();
-                        document.getElementById('waitingOverlay').classList.add('hidden');
+                        // 【修复】主机收到连接后，立即设置多人模式并初始化游戏
                         currentMode = 'multiplayer';
+                        setupPeerConnection();
+                        // 延迟发送设置，确保连接稳定
+                        setTimeout(() => {
+                            if (peerConnection?.open) {
+                                peerConnection.send({
+                                    type: 'settings',
+                                    settings: {
+                                        gameMode: roomSettings.gameMode,
+                                        abilityPermissions: roomSettings.abilityPermissions,
+                                        timePerPlayer: roomSettings.timePerPlayer
+                                    }
+                                });
+                            }
+                        }, 300);
+                        document.getElementById('waitingOverlay').classList.add('hidden');
                         document.getElementById('topBar').classList.remove('hidden');
-                        initNewGame();
+                        // 如果游戏还未初始化，或已经结束，则初始化
+                        if (!gameState || gameOverFlag) {
+                            initNewGame();
+                        } else {
+                            // 如果已经存在游戏，重新开始以应用设置
+                            restartGame();
+                        }
                     });
                 } else {
-                    // ★ 加入者：主动连接房主
                     const targetId = 'chess-' + code;
                     console.log('嘗試連接到:', targetId);
                     const conn = peer.connect(targetId);
@@ -3339,12 +4492,15 @@
                     peerConnection = conn;
                     setupPeerConnection();
                     document.getElementById('multiplayerStatus').textContent = '連線成功！等待遊戲開始...';
-                    setTimeout(() => {
-                        document.getElementById('multiplayerMenu').classList.add('hidden');
-                        currentMode = 'multiplayer';
-                        document.getElementById('topBar').classList.remove('hidden');
-                        initNewGame();
-                    }, 1000);
+
+                    // 设置超时，若 5 秒内未收到 settings，则报错返回
+                    settingsTimeout = setTimeout(() => {
+                        if (!settingsReceived) {
+                            document.getElementById('multiplayerStatus').textContent = '⚠️ 等待房間設定超時，請重新加入';
+                            if (peer) peer.destroy();
+                            backToMenu();
+                        }
+                    }, 5000);
                 }
             });
 
@@ -3355,7 +4511,6 @@
                     msg = '⚠️ 找不到該房號，請確認對方已創建房間';
                 }
                 document.getElementById('multiplayerStatus').textContent = msg;
-                // 如果是加入者失败，允许重新尝试
                 if (!hosting) {
                     setTimeout(() => {
                         document.getElementById('multiplayerStatus').textContent = '請重新輸入房號加入';
@@ -3364,143 +4519,147 @@
             });
         }
 
-        function flyCannonball(startPos, endPos, callback) {
-            // 创建炮弹
-            const projGeo = new THREE.SphereGeometry(0.22, 16, 16);
-            const projMat = new THREE.MeshStandardMaterial({
-                color: 0xff5500,
-                emissive: 0xff3300,
-                emissiveIntensity: 0.8,
-                roughness: 0.2,
-            });
-            const proj = new THREE.Mesh(projGeo, projMat);
-            proj.position.copy(startPos);
-            proj.castShadow = true;
-            scene.add(proj);
-
-            // 发光球
-            const glowGeo = new THREE.SphereGeometry(0.35, 12, 12);
-            const glowMat = new THREE.MeshBasicMaterial({
-                color: 0xff6600,
-                transparent: true,
-                opacity: 0.25,
-                depthWrite: false,
-            });
-            const glow = new THREE.Mesh(glowGeo, glowMat);
-            glow.position.copy(startPos);
-            scene.add(glow);
-
-            // 尾迹粒子
-            const trailCount = 25;
-            const trailParticles = [];
-            for (let i = 0; i < trailCount; i++) {
-                const pGeo = new THREE.SphereGeometry(0.04, 4, 4);
-                const pMat = new THREE.MeshBasicMaterial({
-                    color: 0xff8800,
-                    transparent: true,
-                    opacity: 0.6,
-                    depthWrite: false,
-                });
-                const p = new THREE.Mesh(pGeo, pMat);
-                p.position.copy(startPos);
-                p.userData.life = 0;
-                scene.add(p);
-                trailParticles.push(p);
-            }
-
-            const duration = 0.5;
-            const startTime = clock.getElapsedTime();
-            let trailIndex = 0;
-
-            const animateProj = () => {
-                const now = clock.getElapsedTime();
-                const t = Math.min((now - startTime) / duration, 1);
-                const easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-                const height = Math.sin(t * Math.PI) * 2.5;
-
-                const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, easeT);
-                currentPos.y += height;
-                proj.position.copy(currentPos);
-                glow.position.copy(currentPos);
-                glow.scale.setScalar(1 + t * 0.6);
-
-                proj.rotation.x += 0.2;
-                proj.rotation.z += 0.15;
-
-                if (t < 0.95 && Math.floor(t * 30) > trailIndex) {
-                    trailIndex = Math.floor(t * 30);
-                    const idx = trailIndex % trailCount;
-                    const p = trailParticles[idx];
-                    p.position.copy(currentPos);
-                    p.userData.life = 1.0;
-                    p.scale.setScalar(1);
-                    p.material.opacity = 0.7;
-                }
-
-                for (const p of trailParticles) {
-                    if (p.userData.life > 0) {
-                        p.userData.life -= 0.025;
-                        p.position.y += 0.01;
-                        p.scale.setScalar(Math.max(0.1, p.userData.life));
-                        p.material.opacity = Math.max(0, p.userData.life * 0.7);
-                    } else {
-                        p.visible = false;
-                    }
-                }
-
-                if (t < 1) {
-                    requestAnimationFrame(animateProj);
-                } else {
-                    // 清理
-                    for (const p of trailParticles) scene.remove(p);
-                    scene.remove(proj);
-                    scene.remove(glow);
-                    callback();
-                }
-            };
-            animateProj();
-        }
-
         function setupPeerConnection() {
             peerConnection.on('data', (data) => {
-                if (data.type === 'move') {
-                    executeMove(data.fromR, data.fromC, data.toR, data.toC, data.promotion, null);
-                } else if (data.type === 'ability') {
-                    const abilityDef = ABILITIES.rook;
-                    const targets = data.targets || [{ r: data.targetR, c: data.targetC }];
+                if (data.type === 'settings') {
+                    // 收到设置，清除超时
+                    if (settingsTimeout) {
+                        clearTimeout(settingsTimeout);
+                        settingsTimeout = null;
+                    }
+                    roomSettings = data.settings;
+                    settingsReceived = true;
+                    resetTimers(roomSettings.timePerPlayer);
+                    if (roomSettings.timePerPlayer <= 0) {
+                        timerState.isInfinite = true;
+                        document.getElementById('timerWhiteText').textContent = '∞';
+                        document.getElementById('timerBlackText').textContent = '∞';
+                        document.getElementById('timerWhiteText').classList.add('infinity');
+                        document.getElementById('timerBlackText').classList.add('infinity');
+                        stopTimer();
+                    } else {
+                        timerState.isInfinite = false;
+                        document.getElementById('timerWhiteText').classList.remove('infinity');
+                        document.getElementById('timerBlackText').classList.remove('infinity');
+                    }
+                    updateTimerDisplay();
 
-                    // 对所有目标直接扣血（不分敌我）
-                    for (const t of targets) {
-                        const targetPiece = gameState.getPiece(t.r, t.c);
-                        if (targetPiece) {
-                            targetPiece.hp -= abilityDef.damage;
-                            if (targetPiece.hp <= 0) {
-                                gameState.board[t.r][t.c] = null;
-                            }
-                            showDamageEffect(t.r, t.c, abilityDef.damage);
+                    // 【修复】客户端收到设置后，进入多人模式
+                    if (!isHost) {
+                        currentMode = 'multiplayer';
+                        // 隐藏所有菜单，显示游戏界面
+                        document.getElementById('multiplayerMenu').classList.add('hidden');
+                        document.getElementById('waitingOverlay').classList.add('hidden');
+                        document.getElementById('roomSettings').classList.add('hidden');
+                        document.getElementById('mainMenu').classList.add('hidden');
+                        document.getElementById('topBar').classList.remove('hidden');
+                        // 清空状态提示
+                        document.getElementById('multiplayerStatus').textContent = '';
+                        // 初始化游戏
+                        if (!gameState || gameOverFlag) {
+                            initNewGame();
+                        } else {
+                            restartGame();
                         }
                     }
+                    console.log('收到房間設定，已進入多人模式:', roomSettings);
+                    return;
+                }
 
-                    // 切换回合（只切换一次）
-                    gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
-                    gameState.moveHistory.push({
-                        type: 'areaAbility',
-                        abilityName: abilityDef.name,
-                        fromR: data.fromR,
-                        fromC: data.fromC,
-                        targets: targets,
-                        damageDealt: abilityDef.damage
-                    });
+                if (data.type === 'move') {
+                    executeMove(data.fromR, data.fromC, data.toR, data.toC, data.promotion, null, true);
+                    return;
+                }
 
-                    syncPiecesAfterMove();
-                    checkGameStatus();
-                    updateTurnIndicator();
-                } else if (data.type === 'gameover') {
+                if (data.type === 'ability') {
+                    const abilityName = data.abilityName || '普通攻擊 (Strike)';
+                    const damage = data.damage || 40;
+                    const selfDamage = data.selfDamage || 0;
+                    const targets = data.targets || [{ r: data.targetR, c: data.targetC }];
+                    const fromR = data.fromR;
+                    const fromC = data.fromC;
+
+                    if (abilityName === '冲锋爆炸' && targets.length > 0) {
+                        const ability = {
+                            name: abilityName,
+                            damage: damage,
+                            selfDamage: selfDamage
+                        };
+                        const firstTarget = targets[0];
+                        if (firstTarget) {
+                            executePawnAbility(fromR, fromC, firstTarget.r, firstTarget.c, ability, true);
+                        }
+                        return;
+                    }
+
+                    const ability = {
+                        name: abilityName,
+                        damage: damage,
+                        selfDamage: selfDamage || 0
+                    };
+
+                    for (const t of targets) {
+                        attemptAbility(fromR, fromC, t.r, t.c, ability, true);
+                    }
+                    return;
+                }
+
+                if (data.type === 'gameover') {
                     gameOverFlag = true;
+                    stopTimer();
                     document.getElementById('gameOverOverlay').classList.remove('hidden');
                     document.getElementById('gameOverReason').textContent = '對手認輸或投降';
                     document.getElementById('gameOverText').textContent = '你贏了!';
                     document.getElementById('gameOverText').className = 'game-over-text win';
+                    return;
+                }
+
+                if (data.type === 'aim_start') {
+                    remoteAimFromR = data.fromR;
+                    remoteAimFromC = data.fromC;
+                    const pos = get3DPosition(data.fromR, data.fromC, 0.6);
+                    pos.project(camera);
+                    const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+                    const indicator = document.getElementById('remoteAimIndicator');
+                    indicator.style.display = 'block';
+                    indicator.style.left = (x - 25) + 'px';
+                    indicator.style.top = (y - 25) + 'px';
+                    indicator.style.width = '50px';
+                    indicator.style.height = '50px';
+                    if (data.targetX !== undefined && data.targetZ !== undefined) {
+                        updateRemoteAimPosition(data.targetX, data.targetZ);
+                    } else {
+                        document.getElementById('remoteAimLine').style.display = 'none';
+                        remoteAimActive = true;
+                    }
+                    if (remoteAimTimer) clearTimeout(remoteAimTimer);
+                    remoteAimTimer = setTimeout(() => {
+                        hideRemoteAim();
+                    }, 10000);
+                    return;
+                }
+
+                if (data.type === 'aim_move') {
+                    updateRemoteAimPosition(data.targetX, data.targetZ);
+                    if (remoteAimTimer) {
+                        clearTimeout(remoteAimTimer);
+                        remoteAimTimer = setTimeout(() => {
+                            hideRemoteAim();
+                        }, 10000);
+                    }
+                    return;
+                }
+
+                if (data.type === 'aim_cancel') {
+                    hideRemoteAim();
+                    return;
+                }
+
+                if (data.type === 'aim_fire') {
+                    const targets = data.targets || [];
+                    playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || 50);
+                    return;
                 }
             });
         }
@@ -3511,18 +4670,45 @@
             }
         }
 
-        function sendAbilityToPeer(fromR, fromC, targets, abilityName) {
+        function sendAbilityToPeer(fromR, fromC, targets, abilityName, damage, selfDamage) {
             if (peerConnection?.open) {
-                // targets 可以是单个对象 {r, c} 或数组 [{r, c}, ...]
                 const targetList = Array.isArray(targets) ? targets : [targets];
                 peerConnection.send({
                     type: 'ability',
-                    fromR,
-                    fromC,
+                    fromR: fromR,
+                    fromC: fromC,
                     targets: targetList,
-                    abilityName
+                    abilityName: abilityName || '普通攻擊 (Strike)',
+                    damage: damage || 40,
+                    selfDamage: selfDamage || 0
                 });
             }
+        }
+
+        // ============================================================
+        //  GAME INIT / RESTART
+        // ============================================================
+        function startAIGame(difficulty) {
+            aiDifficulty = difficulty;
+            currentMode = 'ai';
+            playerColor = 'white';
+            roomSettings.timePerPlayer = 0;
+
+            gameState = new ChessGame();
+            gameOverFlag = false;
+            aiThinking = false;
+
+            createBoard3D();
+            createPieces3D();
+
+            document.getElementById('aiDifficultyMenu').classList.add('hidden');
+            document.getElementById('mainMenu').classList.add('hidden');
+            document.getElementById('topBar').classList.remove('hidden');
+
+            document.getElementById('timerDisplay').style.display = 'none';
+
+            stopTimer();
+            updateTurnIndicator();
         }
 
         function confirmRestart() {
@@ -3533,6 +4719,7 @@
 
         function restartGame() {
             document.getElementById('gameOverOverlay').classList.add('hidden');
+            resetTimers(roomSettings.timePerPlayer);
             initNewGame();
         }
 
@@ -3546,11 +4733,45 @@
             aiThinking = false;
             pendingPromotion = null;
             if (isAiming) cancelAiming();
+            hideRemoteAim();
+
+            if (currentMode === 'multiplayer') {
+                document.getElementById('timerDisplay').style.display = 'flex';
+                if (settingsReceived) {
+                    resetTimers(roomSettings.timePerPlayer);
+                    if (roomSettings.timePerPlayer > 0) {
+                        // 计时器会在 switchTimer 时启动
+                    } else {
+                        timerState.isInfinite = true;
+                        document.getElementById('timerWhiteText').textContent = '∞';
+                        document.getElementById('timerBlackText').textContent = '∞';
+                        document.getElementById('timerWhiteText').classList.add('infinity');
+                        document.getElementById('timerBlackText').classList.add('infinity');
+                        stopTimer();
+                    }
+                } else {
+                    stopTimer();
+                    timerState.isInfinite = false;
+                    document.getElementById('timerWhiteText').textContent = '--:--';
+                    document.getElementById('timerBlackText').textContent = '--:--';
+                    document.getElementById('timerWhiteText').classList.remove('infinity');
+                    document.getElementById('timerBlackText').classList.remove('infinity');
+                }
+                updateTimerDisplay();
+            } else {
+                document.getElementById('timerDisplay').style.display = 'none';
+                stopTimer();
+            }
 
             createBoard3D();
             createPieces3D();
             updateTurnIndicator();
             updateCameraTargets();
+
+            if (currentMode === 'multiplayer' && settingsReceived && roomSettings.timePerPlayer > 0) {
+                timerState.currentPlayer = 'white';
+                startTimer();
+            }
 
             if (currentMode === 'ai' && gameState.turn !== playerColor) {
                 aiThinking = true;
@@ -3558,8 +4779,12 @@
             }
         }
 
+        // ============================================================
+        //  BOOT
+        // ============================================================
         window.onload = () => {
             initThree();
+            hideRemoteAim();
         };
     </script>
 </body>
