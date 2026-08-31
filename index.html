@@ -791,6 +791,8 @@
             <span id="checkWarning" class="check-warning hidden">⚠ 將軍!</span>
         </div>
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="toggleFullscreen()">⛶
+                全屏</button>
             <button class="btn btn-danger" id="freeCamBtn" style="padding:6px 12px;font-size:0.8rem;"
                 onclick="toggleFreeCamera()">📷 自由</button>
             <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="confirmRestart()">🔄
@@ -4138,6 +4140,33 @@
             cameraTarget.pos.set(tx, ty, tz);
         }
 
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                // 进入全屏
+                const el = document.documentElement;
+                if (el.requestFullscreen) {
+                    el.requestFullscreen();
+                } else if (el.webkitRequestFullscreen) { /* Safari */
+                    el.webkitRequestFullscreen();
+                } else if (el.msRequestFullscreen) { /* IE/Edge */
+                    el.msRequestFullscreen();
+                }
+                // 可选：锁定屏幕方向（横屏或竖屏）
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(() => { });
+                }
+            } else {
+                // 退出全屏
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        }
+
         function toggleFreeCamera() {
             isFreeCameraActive = !isFreeCameraActive;
             updateFreeCamButton();
@@ -4303,9 +4332,32 @@
                 dragStartY = e.touches[0].clientY;
                 dragMoved = false;
             }
+            // ---- 新增：双指缩放初始化 ----
+            if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                window._pinchStartDist = Math.sqrt(dx * dx + dy * dy);
+                window._pinchStartRadius = cameraRadius;
+                dragMoved = false; // 防止误触点击
+            }
         }
 
         function onTouchMove(e) {
+            // ---- 新增：双指缩放 ----
+            if (e.touches.length === 2) {
+                e.preventDefault(); // 阻止页面滚动
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const currentDist = Math.sqrt(dx * dx + dy * dy);
+                if (window._pinchStartDist && window._pinchStartDist > 0) {
+                    const scale = currentDist / window._pinchStartDist;
+                    cameraRadius = Math.min(20, Math.max(4, window._pinchStartRadius * scale));
+                    // 更新相机位置（由 animate 循环自动应用）
+                }
+                return; // 双指操作不执行单指逻辑
+            }
+
+            // 原有的单指拖拽逻辑（保持不变）
             if (e.touches.length === 1) {
                 const dx = e.touches[0].clientX - dragStartX;
                 const dy = e.touches[0].clientY - dragStartY;
@@ -4346,6 +4398,10 @@
 
         function onTouchEnd(e) {
             setTimeout(() => { touchActive = false; }, 200);
+            // 重置双指缩放状态
+            window._pinchStartDist = null;
+            window._pinchStartRadius = null;
+
             if (!dragMoved && e.changedTouches.length > 0) {
                 const touch = e.changedTouches[0];
                 if (isAiming) {
