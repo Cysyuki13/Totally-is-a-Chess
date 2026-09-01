@@ -7,7 +7,7 @@
     <title>TotallyIsAChess</title>
     <link rel="icon" type="image/png" href="Chess_icon.png" />
     <style>
-        /* ===== 样式保持不变（原样） ===== */
+        /* 样式保持不变（原样） */
         :root {
             --bg: #1a1a2e;
             --panel: #16213e;
@@ -20,11 +20,13 @@
             --wood-light: #d4b896;
             --wood-dark: #8b5e3c;
         }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
             font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
             background: var(--bg);
@@ -36,6 +38,7 @@
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
+
         #gameCanvas {
             position: fixed;
             top: 0;
@@ -45,6 +48,7 @@
             z-index: 1;
             cursor: pointer;
         }
+
         .overlay {
             position: fixed;
             z-index: 10;
@@ -57,10 +61,12 @@
             -webkit-backdrop-filter: blur(8px);
             transition: opacity 0.3s ease;
         }
+
         .overlay.hidden {
             opacity: 0;
             pointer-events: none;
         }
+
         .panel {
             background: var(--panel);
             border: 2px solid var(--gold);
@@ -73,6 +79,7 @@
             max-height: 90vh;
             overflow-y: auto;
         }
+
         .panel h1 {
             font-size: 2.4rem;
             color: var(--gold);
@@ -80,18 +87,21 @@
             letter-spacing: 4px;
             text-shadow: 0 0 20px rgba(232, 197, 71, 0.4);
         }
+
         .panel h2 {
             font-size: 1.5rem;
             color: var(--gold);
             margin-bottom: 16px;
             letter-spacing: 2px;
         }
+
         .panel p {
             font-size: 1rem;
             opacity: 0.85;
             margin-bottom: 12px;
             line-height: 1.6;
         }
+
         .btn {
             display: inline-block;
             padding: 14px 32px;
@@ -110,58 +120,70 @@
             position: relative;
             overflow: hidden;
         }
+
         .btn:hover:not(:disabled) {
             background: var(--btn-hover);
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(232, 197, 71, 0.45);
         }
+
         .btn:active:not(:disabled) {
             transform: translateY(0);
         }
+
         .btn:disabled {
             opacity: 0.4;
             cursor: not-allowed;
             transform: none !important;
             box-shadow: none !important;
         }
+
         .btn-secondary {
             background: #3a3a5c;
             color: var(--text);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
+
         .btn-secondary:hover:not(:disabled) {
             background: #4a4a6c;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
         }
+
         .btn-danger {
             background: var(--danger);
             color: white;
             box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
         }
+
         .btn-danger:hover:not(:disabled) {
             background: #ff6b5e;
             box-shadow: 0 8px 25px rgba(231, 76, 60, 0.45);
         }
+
         .btn-success {
             background: var(--success);
             color: #1a1a2e;
             box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
         }
+
         .btn-success:hover:not(:disabled) {
             background: #55ef9a;
             box-shadow: 0 8px 25px rgba(46, 204, 113, 0.45);
         }
+
         .btn-row {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
             gap: 4px;
         }
+
         .difficulty-btn {
             padding: 12px 24px;
             font-size: 1rem;
             min-width: 100px;
         }
+
         .code-input {
             font-size: 2rem;
             padding: 12px;
@@ -177,10 +199,12 @@
             outline: none;
             margin: 12px auto;
         }
+
         .code-input:focus {
             border-color: #fff;
             box-shadow: 0 0 25px rgba(232, 197, 71, 0.5);
         }
+
         .code-display {
             font-size: 3.5rem;
             font-weight: 900;
@@ -194,6 +218,7 @@
             border-radius: 12px;
             border: 2px dashed var(--gold);
         }
+
         .status-text {
             font-size: 1rem;
             padding: 8px 16px;
@@ -202,6 +227,7 @@
             margin: 8px 0;
             display: inline-block;
         }
+
         .game-top-bar {
             position: fixed;
             top: 0;
@@ -219,9 +245,11 @@
             flex-wrap: wrap;
             gap: 4px;
         }
+
         .game-top-bar>* {
             pointer-events: auto;
         }
+
         .turn-indicator {
             display: flex;
             align-items: center;
@@ -229,6 +257,7 @@
             font-size: 1rem;
             font-weight: 700;
         }
+
         .turn-dot {
             width: 14px;
             height: 14px;
@@ -236,30 +265,37 @@
             display: inline-block;
             box-shadow: 0 0 12px currentColor;
         }
+
         .turn-dot.white {
             background: #f0e6d3;
             color: #f0e6d3;
         }
+
         .turn-dot.black {
             background: #2a2a2a;
             color: #888;
             border: 2px solid #888;
         }
+
         .check-warning {
             color: #ff6b5e;
             font-weight: 900;
             font-size: 1.1rem;
             animation: pulse 0.8s infinite;
         }
+
         @keyframes pulse {
+
             0%,
             100% {
                 opacity: 1;
             }
+
             50% {
                 opacity: 0.4;
             }
         }
+
         .timer-display {
             display: flex;
             align-items: center;
@@ -272,6 +308,7 @@
             border-radius: 20px;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
+
         .timer-item {
             display: flex;
             align-items: center;
@@ -280,39 +317,48 @@
             border-radius: 12px;
             transition: all 0.3s;
         }
+
         .timer-item.active {
             background: rgba(232, 197, 71, 0.25);
             box-shadow: 0 0 20px rgba(232, 197, 71, 0.15);
         }
+
         .timer-item .dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             display: inline-block;
         }
+
         .timer-item .dot.white {
             background: #f0e6d3;
         }
+
         .timer-item .dot.black {
             background: #2a2a2a;
             border: 1px solid #888;
         }
+
         .timer-item .time {
             min-width: 42px;
             text-align: center;
         }
+
         .timer-item .time.warning {
             color: #ff6b5e;
             animation: pulse 0.5s infinite;
         }
+
         .timer-item .time.infinity {
             min-width: 28px;
             font-size: 1.2rem;
         }
+
         .timer-sep {
             opacity: 0.3;
             padding: 0 2px;
         }
+
         .promotion-choices {
             display: flex;
             gap: 16px;
@@ -320,6 +366,7 @@
             margin: 20px 0;
             flex-wrap: wrap;
         }
+
         .promotion-btn {
             width: 80px;
             height: 80px;
@@ -335,27 +382,33 @@
             transition: all 0.2s;
             font-family: inherit;
         }
+
         .promotion-btn:hover {
             background: var(--gold);
             color: #1a1a2e;
             transform: scale(1.1);
             box-shadow: 0 0 30px rgba(232, 197, 71, 0.6);
         }
+
         .game-over-text {
             font-size: 2rem;
             font-weight: 900;
             margin: 16px 0;
             letter-spacing: 2px;
         }
+
         .game-over-text.win {
             color: #2ecc71;
         }
+
         .game-over-text.lose {
             color: #e74c3c;
         }
+
         .game-over-text.draw {
             color: #f39c12;
         }
+
         #actionBar {
             position: fixed;
             bottom: 30px;
@@ -377,29 +430,36 @@
             -webkit-backdrop-filter: blur(8px);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
         }
+
         #actionBar.visible {
             display: flex;
         }
+
         #actionBar .btn {
             padding: 10px 24px;
             font-size: 0.95rem;
             margin: 2px 4px;
             min-width: 100px;
         }
+
         #actionBar .btn-action-move {
             background: var(--gold);
             color: #1a1a2e;
         }
+
         #actionBar .btn-action-move:hover:not(:disabled) {
             background: var(--btn-hover);
         }
+
         #actionBar .btn-action-attack {
             background: var(--danger);
             color: white;
         }
+
         #actionBar .btn-action-attack:hover:not(:disabled) {
             background: #ff6b5e;
         }
+
         #actionBar .btn-action-attack:disabled {
             background: #555;
             color: #999;
@@ -408,6 +468,7 @@
             transform: none !important;
             box-shadow: none !important;
         }
+
         .action-label {
             color: var(--text);
             font-size: 0.75rem;
@@ -415,6 +476,7 @@
             padding: 0 4px;
             letter-spacing: 1px;
         }
+
         #aimHint {
             position: fixed;
             bottom: 100px;
@@ -433,15 +495,18 @@
             -webkit-backdrop-filter: blur(4px);
             display: none;
         }
+
         #aimHint.visible {
             display: block;
         }
+
         .no-target-tip {
             font-size: 0.75rem;
             color: #ff6b5e;
             opacity: 0.8;
             margin-left: 6px;
         }
+
         .settings-group {
             text-align: left;
             margin: 16px 0;
@@ -450,6 +515,7 @@
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
+
         .settings-group label {
             display: block;
             font-weight: 700;
@@ -457,11 +523,13 @@
             font-size: 0.95rem;
             color: var(--gold);
         }
+
         .settings-group .desc {
             font-size: 0.8rem;
             opacity: 0.6;
             margin-bottom: 8px;
         }
+
         .mode-btn,
         .time-btn {
             padding: 10px 20px;
@@ -476,26 +544,31 @@
             font-family: inherit;
             font-weight: 600;
         }
+
         .mode-btn:hover,
         .time-btn:hover {
             background: #3a3a5c;
         }
+
         .mode-btn.active,
         .time-btn.active {
             border-color: var(--gold);
             background: var(--gold);
             color: #1a1a2e;
         }
+
         .mode-btn .icon {
             font-size: 1.2rem;
             margin-right: 4px;
         }
+
         .checkbox-group {
             display: flex;
             flex-direction: column;
             gap: 6px;
             margin-top: 4px;
         }
+
         .checkbox-group label {
             display: flex;
             align-items: center;
@@ -506,6 +579,7 @@
             cursor: pointer;
             padding: 4px 0;
         }
+
         .checkbox-group input[type="checkbox"] {
             width: 18px;
             height: 18px;
@@ -513,6 +587,7 @@
             cursor: pointer;
             flex-shrink: 0;
         }
+
         .checkbox-group .color-tag {
             display: inline-block;
             width: 14px;
@@ -521,19 +596,23 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
             flex-shrink: 0;
         }
+
         .checkbox-group .color-tag.white-tag {
             background: #f0e6d3;
         }
+
         .checkbox-group .color-tag.black-tag {
             background: #2a2a2a;
             border-color: #888;
         }
+
         .ability-disabled-hint {
             font-size: 0.8rem;
             opacity: 0.5;
             padding: 4px 0;
             font-style: italic;
         }
+
         .remote-aim-indicator {
             position: fixed;
             z-index: 50;
@@ -544,16 +623,19 @@
             animation: aimPulse 0.8s infinite alternate;
             display: none;
         }
+
         @keyframes aimPulse {
             0% {
                 transform: scale(0.9);
                 opacity: 0.6;
             }
+
             100% {
                 transform: scale(1.2);
                 opacity: 1;
             }
         }
+
         .remote-aim-line {
             position: fixed;
             z-index: 49;
@@ -564,6 +646,7 @@
             transform-origin: left center;
             display: none;
         }
+
         .ready-status-row {
             display: flex;
             justify-content: center;
@@ -571,6 +654,7 @@
             margin: 12px 0;
             flex-wrap: wrap;
         }
+
         .ready-status-item {
             display: flex;
             align-items: center;
@@ -580,6 +664,7 @@
             border-radius: 20px;
             background: rgba(255, 255, 255, 0.06);
         }
+
         .ready-status-item .ready-dot {
             width: 12px;
             height: 12px;
@@ -587,38 +672,47 @@
             display: inline-block;
             transition: all 0.3s;
         }
+
         .ready-status-item .ready-dot.waiting {
             background: #888;
         }
+
         .ready-status-item .ready-dot.ready {
             background: #2ecc71;
             box-shadow: 0 0 12px rgba(46, 204, 113, 0.5);
         }
+
         .ready-status-item .ready-dot.not-ready {
             background: #e74c3c;
         }
+
         @media (max-width: 768px) {
             .game-top-bar {
                 padding: 6px 10px;
                 gap: 4px;
             }
+
             .game-top-bar>div:last-child {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 4px;
             }
+
             .turn-indicator {
                 font-size: 0.8rem;
                 gap: 4px;
             }
+
             .timer-display {
                 font-size: 0.75rem;
                 padding: 2px 8px;
                 gap: 4px;
             }
+
             .timer-item .time {
                 min-width: 32px;
             }
+
             #actionBar {
                 padding: 8px 12px;
                 bottom: 16px;
@@ -626,35 +720,43 @@
                 width: 95%;
                 border-radius: 14px;
             }
+
             #actionBar .btn {
                 padding: 8px 14px;
                 font-size: 0.8rem;
                 min-width: 70px;
             }
+
             .panel {
                 padding: 20px 16px;
             }
+
             .panel h1 {
                 font-size: 1.6rem;
             }
+
             .code-display {
                 font-size: 2.2rem;
                 letter-spacing: 8px;
                 padding: 12px 16px;
             }
+
             .settings-group {
                 padding: 10px 12px;
                 margin: 12px 0;
             }
+
             .mode-btn,
             .time-btn {
                 padding: 8px 14px;
                 font-size: 0.8rem;
                 min-width: 70px;
             }
+
             .ready-status-row {
                 gap: 12px;
             }
+
             .ready-status-item {
                 font-size: 0.8rem;
                 padding: 4px 10px;
@@ -743,6 +845,7 @@
         <div class="panel">
             <h2>雙人連線對戰</h2>
             <p>透過 PeerJS 連線，輸入4位數房號進行配對</p>
+            <p style="font-size:0.85rem;opacity:0.6;margin-bottom:12px;">⚠️ 請確保雙方都在同一網路環境，或使用公共信令服務</p>
             <div class="btn-row">
                 <button class="btn" onclick="showRoomSettings()">🏠 創建房間</button>
             </div>
@@ -850,9 +953,10 @@
         </div>
     </div>
 
+    <!-- 關鍵修復：降級 PeerJS 到 1.3.2，無需 API Key -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js">
     </script>
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js">
+    <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js">
     </script>
     <script>
         // ============================================================
@@ -923,24 +1027,6 @@
         const DRAG_THRESHOLD = 6;
         const TARGET_RADIUS = 0.7;
         const PIECE_VALUES = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 20000 };
-
-        // ============================================================
-        //  PEERJS 配置 — 使用文档建议的 STUN 服务器
-        // ============================================================
-        const peerConfig = {
-            debug: 2,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' }
-                ]
-            }
-        };
-
-        // 全局房间前缀，防止与其他开发者冲突
-        const APP_PREFIX = 'totally-chess-game-2026-';
 
         // ============================================================
         //  CHESS GAME CLASS
@@ -1070,11 +1156,11 @@
                     }
                     case 'bishop': {
                         for (const [dr, dc] of [
-                                [-1, -1],
-                                [-1, 1],
-                                [1, -1],
-                                [1, 1]
-                            ]) {
+                            [-1, -1],
+                            [-1, 1],
+                            [1, -1],
+                            [1, 1]
+                        ]) {
                             for (let i = 1; i < 8; i++) {
                                 const tr = r + dr * i,
                                     tc = c + dc * i;
@@ -1088,11 +1174,11 @@
                     }
                     case 'rook': {
                         for (const [dr, dc] of [
-                                [-1, 0],
-                                [1, 0],
-                                [0, -1],
-                                [0, 1]
-                            ]) {
+                            [-1, 0],
+                            [1, 0],
+                            [0, -1],
+                            [0, 1]
+                        ]) {
                             for (let i = 1; i < 8; i++) {
                                 const tr = r + dr * i,
                                     tc = c + dc * i;
@@ -1106,15 +1192,15 @@
                     }
                     case 'queen': {
                         for (const [dr, dc] of [
-                                [-1, -1],
-                                [-1, 0],
-                                [-1, 1],
-                                [0, -1],
-                                [0, 1],
-                                [1, -1],
-                                [1, 0],
-                                [1, 1]
-                            ]) {
+                            [-1, -1],
+                            [-1, 0],
+                            [-1, 1],
+                            [0, -1],
+                            [0, 1],
+                            [1, -1],
+                            [1, 0],
+                            [1, 1]
+                        ]) {
                             for (let i = 1; i < 8; i++) {
                                 const tr = r + dr * i,
                                     tc = c + dc * i;
@@ -1128,15 +1214,15 @@
                     }
                     case 'king': {
                         for (const [dr, dc] of [
-                                [-1, -1],
-                                [-1, 0],
-                                [-1, 1],
-                                [0, -1],
-                                [0, 1],
-                                [1, -1],
-                                [1, 0],
-                                [1, 1]
-                            ]) {
+                            [-1, -1],
+                            [-1, 0],
+                            [-1, 1],
+                            [0, -1],
+                            [0, 1],
+                            [1, -1],
+                            [1, 0],
+                            [1, 1]
+                        ]) {
                             addMove(r + dr, c + dc);
                         }
                         const ks = color === 'white' ? this.castlingRights.whiteKingside : this.castlingRights.blackKingside;
@@ -1427,7 +1513,7 @@
             return ABILITIES[piece.type] !== undefined;
         }
 
-        ChessGame.prototype.getLegalAbilities = function(r, c) {
+        ChessGame.prototype.getLegalAbilities = function (r, c) {
             const piece = this.getPiece(r, c);
             if (!piece) return [];
             if (!isAbilityEnabledForColor(piece.color)) return [];
@@ -1614,7 +1700,7 @@
         }
 
         // ============================================================
-        //  PIECE PARAMS (保持不变)
+        //  PIECE PARAMS
         // ============================================================
         const PIECE_PARAMS = {
             "pawn": {
@@ -1626,7 +1712,11 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": -4.2, "y": 0, "z": 0 }
+                "position": {
+                    "x": -4.2,
+                    "y": 0,
+                    "z": 0
+                }
             },
             "rook": {
                 "bodyRadius": 0.2,
@@ -1636,7 +1726,11 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": -2.52, "y": 0.02, "z": 0 }
+                "position": {
+                    "x": -2.52,
+                    "y": 0.02,
+                    "z": 0
+                }
             },
             "knight": {
                 "bodyRadius": 0.26,
@@ -1650,14 +1744,63 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": -0.84, "y": 0.02, "z": 0 },
+                "position": {
+                    "x": -0.84,
+                    "y": 0.02,
+                    "z": 0
+                },
                 "parts": {
-                    "body": { "position": { "x": 0, "y": 0.19, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.6, "y": 0.8, "z": 0.92 } },
-                    "neck": { "position": { "x": 0, "y": 0.54, "z": 0.13 }, "rotation": { "x": 0.42, "y": 0, "z": 0 },
-                        "scale": { "x": 0.92, "y": 2.44, "z": 1.36 } },
-                    "head": { "position": { "x": 0, "y": 0.74, "z": 0.26 }, "rotation": { "x": 0.14, "y": 0, "z": 0 },
-                        "scale": { "x": 1.56, "y": 1.22, "z": 1.66 } }
+                    "body": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.19,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.6,
+                            "y": 0.8,
+                            "z": 0.92
+                        }
+                    },
+                    "neck": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.54,
+                            "z": 0.13
+                        },
+                        "rotation": {
+                            "x": 0.42,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.92,
+                            "y": 2.44,
+                            "z": 1.36
+                        }
+                    },
+                    "head": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.74,
+                            "z": 0.26
+                        },
+                        "rotation": {
+                            "x": 0.14,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1.56,
+                            "y": 1.22,
+                            "z": 1.66
+                        }
+                    }
                 }
             },
             "bishop": {
@@ -1667,7 +1810,11 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": 0.84, "y": 0.02, "z": 0 },
+                "position": {
+                    "x": 0.84,
+                    "y": 0.02,
+                    "z": 0
+                },
                 "parts": {}
             },
             "queen": {
@@ -1679,7 +1826,11 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": 2.52, "y": 0.03, "z": 0 }
+                "position": {
+                    "x": 2.52,
+                    "y": 0.03,
+                    "z": 0
+                }
             },
             "king": {
                 "bodyRadius": 0.235,
@@ -1692,12 +1843,16 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": 4.2, "y": 0.04, "z": 0 }
+                "position": {
+                    "x": 4.2,
+                    "y": 0.04,
+                    "z": 0
+                }
             }
         };
 
         // ============================================================
-        //  THREE.JS INIT (保持不变)
+        //  THREE.JS INIT
         // ============================================================
         function initThree() {
             scene = new THREE.Scene();
@@ -1794,7 +1949,7 @@
         }
 
         // ============================================================
-        //  BOARD & PIECES 3D (保持不变)
+        //  BOARD & PIECES 3D
         // ============================================================
         function createBoard3D() {
             if (boardGroup) scene.remove(boardGroup);
@@ -1909,8 +2064,7 @@
                 case 'sphere':
                     return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
                 case 'cylinder':
-                    return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3,
-                        16);
+                    return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
                 case 'cone':
                     return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
                 case 'torus':
@@ -1976,10 +2130,8 @@
                     const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd,
                         headWidth: hw, headHeight: hh, headDepth: hd } = p;
                     addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02, 'neck',
-                        new THREE.Euler(-0.3, 0, 0));
-                    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02,
-                        0.08, 'head', new THREE.Euler(-0.15, 0, 0));
+                    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02, 'neck', new THREE.Euler(-0.3, 0, 0));
+                    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08, 'head', new THREE.Euler(-0.15, 0, 0));
                     break;
                 }
                 case 'bishop': {
@@ -2001,8 +2153,7 @@
                     addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
                     addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
                     addMesh(new THREE.BoxGeometry(cw, ch2, cd), matDark, 0, 0.06 + bh + ch + ch2 / 2, 0, 'crossV');
-                    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), matDark, 0, 0.06 + bh + ch + ch2 * 0.75,
-                        0, 'crossH');
+                    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), matDark, 0, 0.06 + bh + ch + ch2 * 0.75, 0, 'crossH');
                     break;
                 }
                 default: break;
@@ -2010,8 +2161,7 @@
 
             if (p.parts) {
                 for (const [id, partData] of Object.entries(p.parts)) {
-                    if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id))
-                        continue;
+                    if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id)) continue;
                     const geo = createGeometryFromPart(partData.type, partData.geometryParams || {});
                     const partMat = new THREE.MeshStandardMaterial({
                         color: partData.color || '#ffaa00',
@@ -2178,7 +2328,7 @@
         }
 
         // ============================================================
-        //  AIMING SYSTEM (保持不变)
+        //  AIMING SYSTEM
         // ============================================================
         function getFreeAimPosition(clientX, clientY) {
             mouse.x = (clientX / window.innerWidth) * 2 - 1;
@@ -2429,7 +2579,7 @@
         }
 
         // ============================================================
-        //  CANNON / ABILITY EXECUTION (保持不变)
+        //  CANNON / ABILITY EXECUTION
         // ============================================================
         function fireAimedCannon() {
             if (!isAiming) return;
@@ -2810,7 +2960,7 @@
         }
 
         // ============================================================
-        //  REMOTE AIM SYNCHRONIZATION (保持不变)
+        //  REMOTE AIM SYNCHRONIZATION
         // ============================================================
         function showRemoteAim(fromR, fromC, targetX, targetZ) {
             const fromPos = get3DPosition(fromR, fromC, 0.6);
@@ -2954,7 +3104,7 @@
         }
 
         // ============================================================
-        //  ACTION BAR & UI (保持不变)
+        //  ACTION BAR & UI
         // ============================================================
         function isPlayerTurn() {
             if (gameOverFlag || isAnimating || aiThinking) return false;
@@ -3109,7 +3259,7 @@
         }
 
         // ============================================================
-        //  MOVE / ABILITY EXECUTION (保持不变)
+        //  MOVE / ABILITY EXECUTION
         // ============================================================
         function attemptMove(fromR, fromC, toR, toC) {
             const move = validMoves.find(m => m.r === toR && m.c === toC);
@@ -3350,8 +3500,7 @@
             const pieceObj = pieceObjects[`${fromR},${fromC}`];
 
             if (!pieceObj && isRemote) {
-                const enemyColor = ability.damage > 0 ? (gameState.getPiece(fromR, fromC)?.color === 'white' ? 'black' :
-                    'white') : null;
+                const enemyColor = ability.damage > 0 ? (gameState.getPiece(fromR, fromC)?.color === 'white' ? 'black' : 'white') : null;
                 const directions = [
                     [0, 1],
                     [0, -1],
@@ -3457,8 +3606,7 @@
                             setTimeout(makeAIMove, 500);
                         }
                         if (currentMode === 'multiplayer' && !isRemote) {
-                            sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, ability.damage, ability
-                                .selfDamage);
+                            sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, ability.damage, ability.selfDamage);
                         }
                     }
                 });
@@ -3526,8 +3674,7 @@
                                 setTimeout(makeAIMove, 500);
                             }
                             if (currentMode === 'multiplayer' && !isRemote) {
-                                sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, ability.damage, ability
-                                    .selfDamage);
+                                sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, ability.damage, ability.selfDamage);
                             }
                         }
                     });
@@ -3826,7 +3973,7 @@
         }
 
         // ============================================================
-        //  AI (保持不变)
+        //  AI
         // ============================================================
         function evaluateBoard(game, color) {
             let score = 0;
@@ -3968,7 +4115,7 @@
         }
 
         // ============================================================
-        //  CAMERA (保持不变)
+        //  CAMERA
         // ============================================================
         function updateCameraTargets() {
             if (isFreeCameraActive) return;
@@ -4028,7 +4175,7 @@
         }
 
         // ============================================================
-        //  INPUT HANDLING (保持不变)
+        //  INPUT HANDLING
         // ============================================================
         function processInput(clientX, clientY) {
             if (isAnimating || aiThinking || gameOverFlag || !!pendingPromotion || suppressClick) return;
@@ -4296,11 +4443,7 @@
 
         function backToMenu() {
             stopTimer();
-            if (peer) {
-                try { peer.destroy(); } catch (e) {}
-                peer = null;
-            }
-            peerConnection = null;
+            if (peer) peer.destroy();
             hideRemoteAim();
             settingsReceived = false;
             if (settingsTimeout) {
@@ -4375,19 +4518,19 @@
         }
 
         // ============================================================
-        //  PEERJS — 核心联机函数（使用 APP_PREFIX 和 peerConfig）
+        //  PEERJS CONNECTION (FIXED)
         // ============================================================
         function createRoomWithSettings() {
             roomSettings.abilityPermissions.white = document.getElementById('abilityWhite').checked;
             roomSettings.abilityPermissions.black = document.getElementById('abilityBlack').checked;
 
-            // 生成 4 位随机房号
             roomCode = Math.floor(1000 + Math.random() * 9000).toString();
             isHost = true;
             playerColor = 'white';
             myReady = false;
             opponentReady = false;
             gameStarted = false;
+
             settingsReceived = true;
 
             document.getElementById('roomSettings').classList.add('hidden');
@@ -4395,14 +4538,50 @@
             document.getElementById('waitingOverlay').classList.remove('hidden');
             updateReadyUI();
 
-            // 启动 Peer 服务端
-            initPeer(roomCode, true);
+            // 使用 0.peerjs.com 免费信令服务（1.3.2 版本无需 API Key）
+            peer = new Peer('chess-' + roomCode, {
+                debug: 2,
+                host: '0.peerjs.com',
+                port: 443,
+                secure: true
+            });
+
+            peer.on('open', (id) => {
+                console.log('🏠 房间已创建，Peer ID:', id);
+                document.getElementById('waitingStatus').textContent = '⏳ 等待对手加入...';
+                peer.on('connection', (conn) => {
+                    console.log('👥 对手已连接！');
+                    peerConnection = conn;
+                    currentMode = 'multiplayer';
+                    setupPeerConnection();
+                    setTimeout(() => {
+                        if (peerConnection?.open) {
+                            peerConnection.send({
+                                type: 'settings',
+                                settings: {
+                                    gameMode: roomSettings.gameMode,
+                                    abilityPermissions: roomSettings.abilityPermissions,
+                                    timePerPlayer: roomSettings.timePerPlayer
+                                }
+                            });
+                        }
+                    }, 300);
+                    updateReadyUI();
+                    setTimeout(updateReadyUI, 100);
+                    document.getElementById('topBar').classList.remove('hidden');
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error('❌ Peer 错误:', err);
+                document.getElementById('waitingStatus').textContent = '⚠️ 创建房间失败：' + err.type;
+            });
         }
 
         function joinRoom() {
             const code = document.getElementById('roomCodeInput').value;
             if (code.length !== 4) {
-                document.getElementById('multiplayerStatus').textContent = '請輸入完整的4位數房號';
+                document.getElementById('multiplayerStatus').textContent = '⚠️ 请输入完整的4位房号';
                 return;
             }
             roomCode = code;
@@ -4411,108 +4590,224 @@
             myReady = false;
             opponentReady = false;
             gameStarted = false;
-            document.getElementById('multiplayerStatus').textContent = '正在連線...';
+            document.getElementById('multiplayerStatus').textContent = '⏳ 正在连接...';
 
-            // 启动 Peer 客户端
-            initPeer(code, false);
-        }
-
-        /**
-         * 核心 PeerJS 初始化
-         * @param {string} code 4位房号
-         * @param {boolean} hosting 是否为房主
-         */
-        function initPeer(code, hosting) {
-            // 使用 APP_PREFIX 构造全局唯一 ID
-            const fullPeerId = hosting ? APP_PREFIX + code : undefined;
-
-            // 使用 peerConfig（包含 STUN 服务器）
-            peer = new Peer(fullPeerId, peerConfig);
+            // 使用 0.peerjs.com 免费信令服务（1.3.2 版本无需 API Key）
+            peer = new Peer(undefined, {
+                debug: 2,
+                host: '0.peerjs.com',
+                port: 443,
+                secure: true
+            });
 
             peer.on('open', (id) => {
-                console.log('Peer 已開啟，ID:', id);
-                if (hosting) {
-                    // 房主等待连接
-                    peer.on('connection', (conn) => {
-                        console.log('收到連線請求');
-                        peerConnection = conn;
-                        currentMode = 'multiplayer';
-                        setupPeerConnection();
-                        // 延迟发送设置，确保连接稳定
-                        setTimeout(() => {
-                            if (peerConnection?.open) {
-                                peerConnection.send({
-                                    type: 'settings',
-                                    settings: {
-                                        gameMode: roomSettings.gameMode,
-                                        abilityPermissions: roomSettings.abilityPermissions,
-                                        timePerPlayer: roomSettings.timePerPlayer
-                                    }
-                                });
-                            }
-                        }, 300);
-                        updateReadyUI();
-                        setTimeout(updateReadyUI, 100);
-                        document.getElementById('topBar').classList.remove('hidden');
-                    });
-                } else {
-                    // 客户端主动连接房主
-                    const targetId = APP_PREFIX + code;
-                    console.log('嘗試連接到:', targetId);
-                    const conn = peer.connect(targetId);
-                    if (!conn) {
-                        document.getElementById('multiplayerStatus').textContent = '無法連線，請確認房號正確';
-                        return;
-                    }
-                    peerConnection = conn;
-                    setupPeerConnection();
-                    document.getElementById('multiplayerStatus').textContent = '連線成功！';
-
-                    // 显示等待大厅
-                    document.getElementById('waitingCodeDisplay').textContent = code;
-                    document.getElementById('waitingOverlay').classList.remove('hidden');
-                    document.getElementById('topBar').classList.remove('hidden');
-                    updateReadyUI();
-
-                    // 设置超时（20秒），如果没收到设置则提示
-                    settingsTimeout = setTimeout(() => {
-                        if (!settingsReceived) {
-                            document.getElementById('multiplayerStatus').textContent = '⚠️ 等待房間設定超時，請手動取消後重試';
-                        }
-                    }, 20000);
+                console.log('🔗 客户端 Peer ID:', id);
+                const targetId = 'chess-' + code;
+                document.getElementById('multiplayerStatus').textContent = '🔄 正在连接到 ' + targetId + ' ...';
+                const conn = peer.connect(targetId);
+                if (!conn) {
+                    document.getElementById('multiplayerStatus').textContent = '⚠️ 无法连接，请确认房号是否正确';
+                    return;
                 }
+                peerConnection = conn;
+                setupPeerConnection();
+                document.getElementById('multiplayerStatus').textContent = '✅ 连接成功！';
+
+                document.getElementById('waitingCodeDisplay').textContent = code;
+                document.getElementById('waitingOverlay').classList.remove('hidden');
+                document.getElementById('topBar').classList.remove('hidden');
+                updateReadyUI();
+
+                // 设置超时：如果 15 秒内没有收到 settings，提示用户
+                settingsTimeout = setTimeout(() => {
+                    if (!settingsReceived) {
+                        document.getElementById('waitingStatus').textContent = '⚠️ 等待房间设定超时，请确认房主已创建房间';
+                    }
+                }, 15000);
             });
 
             peer.on('error', (err) => {
-                console.error('Peer 錯誤:', err);
-                let msg = '連線錯誤: ' + err.type;
+                console.error('❌ 连接错误:', err);
+                let msg = '⚠️ 连接失败: ' + err.type;
                 if (err.type === 'peer-unavailable') {
-                    msg = '⚠️ 找不到該房號，請確認對方已創建房間';
+                    msg = '⚠️ 找不到该房号，请确认对方已创建房间';
                 }
                 document.getElementById('multiplayerStatus').textContent = msg;
-                if (!hosting) {
-                    setTimeout(() => {
-                        document.getElementById('multiplayerStatus').textContent = '請重新輸入房號加入';
-                    }, 2000);
+                setTimeout(() => {
+                    document.getElementById('multiplayerStatus').textContent = '请输入房号重新加入';
+                }, 3000);
+            });
+        }
+
+        function setupPeerConnection() {
+            peerConnection.on('data', (data) => {
+                // --- 处理 settings ---
+                if (data.type === 'settings') {
+                    if (settingsTimeout) {
+                        clearTimeout(settingsTimeout);
+                        settingsTimeout = null;
+                    }
+                    roomSettings = data.settings;
+                    settingsReceived = true;
+                    resetTimers(roomSettings.timePerPlayer);
+                    if (roomSettings.timePerPlayer <= 0) {
+                        timerState.isInfinite = true;
+                        document.getElementById('timerWhiteText').textContent = '∞';
+                        document.getElementById('timerBlackText').textContent = '∞';
+                        document.getElementById('timerWhiteText').classList.add('infinity');
+                        document.getElementById('timerBlackText').classList.add('infinity');
+                        stopTimer();
+                    } else {
+                        timerState.isInfinite = false;
+                        document.getElementById('timerWhiteText').classList.remove('infinity');
+                        document.getElementById('timerBlackText').classList.remove('infinity');
+                    }
+                    updateTimerDisplay();
+
+                    if (!isHost) {
+                        currentMode = 'multiplayer';
+                        const overlays = ['mainMenu', 'aiDifficultyMenu', 'multiplayerMenu', 'roomSettings'];
+                        overlays.forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) el.classList.add('hidden');
+                        });
+                        document.getElementById('waitingCodeDisplay').textContent = roomCode;
+                        document.getElementById('waitingOverlay').classList.remove('hidden');
+                        document.getElementById('topBar').classList.remove('hidden');
+                        const statusEl = document.getElementById('multiplayerStatus');
+                        if (statusEl) statusEl.textContent = '';
+                        updateReadyUI();
+                    }
+                    console.log('📦 收到房间设定:', roomSettings);
+                    return;
+                }
+
+                // --- 处理 ready ---
+                if (data.type === 'ready') {
+                    opponentReady = true;
+                    updateReadyUI();
+                    checkBothReady();
+                    return;
+                }
+
+                // --- 处理 move ---
+                if (data.type === 'move') {
+                    executeMove(data.fromR, data.fromC, data.toR, data.toC, data.promotion, null, true);
+                    return;
+                }
+
+                // --- 处理 ability ---
+                if (data.type === 'ability') {
+                    const abilityName = data.abilityName || '普通攻擊 (Strike)';
+                    const damage = data.damage || 40;
+                    const selfDamage = data.selfDamage || 0;
+                    const targets = data.targets || [{ r: data.targetR, c: data.targetC }];
+                    const fromR = data.fromR;
+                    const fromC = data.fromC;
+
+                    if (abilityName === '冲锋爆炸' && targets.length > 0) {
+                        const ability = {
+                            name: abilityName,
+                            damage: damage,
+                            selfDamage: selfDamage
+                        };
+                        const firstTarget = targets[0];
+                        if (firstTarget) {
+                            executePawnAbility(fromR, fromC, firstTarget.r, firstTarget.c, ability, true);
+                        }
+                        return;
+                    }
+
+                    const ability = {
+                        name: abilityName,
+                        damage: damage,
+                        selfDamage: selfDamage || 0
+                    };
+
+                    for (const t of targets) {
+                        attemptAbility(fromR, fromC, t.r, t.c, ability, true);
+                    }
+                    return;
+                }
+
+                // --- 处理 gameover ---
+                if (data.type === 'gameover') {
+                    gameOverFlag = true;
+                    stopTimer();
+                    document.getElementById('gameOverOverlay').classList.remove('hidden');
+                    document.getElementById('gameOverReason').textContent = '对手认输或投降';
+                    document.getElementById('gameOverText').textContent = '你赢了!';
+                    document.getElementById('gameOverText').className = 'game-over-text win';
+                    return;
+                }
+
+                // --- 处理 aim_start ---
+                if (data.type === 'aim_start') {
+                    remoteAimFromR = data.fromR;
+                    remoteAimFromC = data.fromC;
+                    const pos = get3DPosition(data.fromR, data.fromC, 0.6);
+                    pos.project(camera);
+                    const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
+                    const indicator = document.getElementById('remoteAimIndicator');
+                    indicator.style.display = 'block';
+                    indicator.style.left = (x - 25) + 'px';
+                    indicator.style.top = (y - 25) + 'px';
+                    indicator.style.width = '50px';
+                    indicator.style.height = '50px';
+                    if (data.targetX !== undefined && data.targetZ !== undefined) {
+                        updateRemoteAimPosition(data.targetX, data.targetZ);
+                    } else {
+                        document.getElementById('remoteAimLine').style.display = 'none';
+                        remoteAimActive = true;
+                    }
+                    if (remoteAimTimer) clearTimeout(remoteAimTimer);
+                    remoteAimTimer = setTimeout(() => {
+                        hideRemoteAim();
+                    }, 10000);
+                    return;
+                }
+
+                // --- 处理 aim_move ---
+                if (data.type === 'aim_move') {
+                    updateRemoteAimPosition(data.targetX, data.targetZ);
+                    if (remoteAimTimer) {
+                        clearTimeout(remoteAimTimer);
+                        remoteAimTimer = setTimeout(() => {
+                            hideRemoteAim();
+                        }, 10000);
+                    }
+                    return;
+                }
+
+                // --- 处理 aim_cancel ---
+                if (data.type === 'aim_cancel') {
+                    hideRemoteAim();
+                    return;
+                }
+
+                // --- 处理 aim_fire ---
+                if (data.type === 'aim_fire') {
+                    const targets = data.targets || [];
+                    playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || 50);
+                    return;
+                }
+            });
+
+            peerConnection.on('close', () => {
+                console.log('🔌 连接已关闭');
+                if (!gameOverFlag) {
+                    document.getElementById('waitingStatus').textContent = '⚠️ 连接已断开';
                 }
             });
         }
 
         function cancelWaiting() {
-            if (peer) {
-                try { peer.destroy(); } catch (e) {}
-                peer = null;
-            }
-            peerConnection = null;
+            if (peer) peer.destroy();
             myReady = false;
             opponentReady = false;
             document.getElementById('waitingOverlay').classList.add('hidden');
             document.getElementById('multiplayerMenu').classList.remove('hidden');
-            settingsReceived = false;
-            if (settingsTimeout) {
-                clearTimeout(settingsTimeout);
-                settingsTimeout = null;
-            }
         }
 
         // ============================================================
@@ -4535,8 +4830,6 @@
             const oppText = document.getElementById('opponentReadyText');
             const status = document.getElementById('waitingStatus');
             const btn = document.getElementById('readyBtn');
-
-            if (!btn) return; // 防御
 
             if (myReady) {
                 myDot.className = 'ready-dot ready';
@@ -4595,149 +4888,6 @@
                     }
                 }, 300);
             }
-        }
-
-        // ============================================================
-        //  PEER DATA HANDLER
-        // ============================================================
-        function setupPeerConnection() {
-            peerConnection.on('data', (data) => {
-                // ---- 处理房间设置 ----
-                if (data.type === 'settings') {
-                    if (settingsTimeout) {
-                        clearTimeout(settingsTimeout);
-                        settingsTimeout = null;
-                    }
-                    roomSettings = data.settings;
-                    settingsReceived = true;
-                    resetTimers(roomSettings.timePerPlayer);
-                    if (roomSettings.timePerPlayer <= 0) {
-                        timerState.isInfinite = true;
-                        document.getElementById('timerWhiteText').textContent = '∞';
-                        document.getElementById('timerBlackText').textContent = '∞';
-                        document.getElementById('timerWhiteText').classList.add('infinity');
-                        document.getElementById('timerBlackText').classList.add('infinity');
-                        stopTimer();
-                    } else {
-                        timerState.isInfinite = false;
-                        document.getElementById('timerWhiteText').classList.remove('infinity');
-                        document.getElementById('timerBlackText').classList.remove('infinity');
-                    }
-                    updateTimerDisplay();
-
-                    if (!isHost) {
-                        currentMode = 'multiplayer';
-                        const overlays = ['mainMenu', 'aiDifficultyMenu', 'multiplayerMenu', 'roomSettings'];
-                        overlays.forEach(id => {
-                            const el = document.getElementById(id);
-                            if (el) el.classList.add('hidden');
-                        });
-                        document.getElementById('waitingCodeDisplay').textContent = roomCode;
-                        document.getElementById('waitingOverlay').classList.remove('hidden');
-                        document.getElementById('topBar').classList.remove('hidden');
-                        const statusEl = document.getElementById('multiplayerStatus');
-                        if (statusEl) statusEl.textContent = '';
-                        updateReadyUI();
-                    }
-                    console.log('收到房間設定，已進入多人模式:', roomSettings);
-                    return;
-                }
-
-                // ---- 处理准备 ----
-                if (data.type === 'ready') {
-                    opponentReady = true;
-                    updateReadyUI();
-                    checkBothReady();
-                    return;
-                }
-
-                // ---- 处理移动 ----
-                if (data.type === 'move') {
-                    executeMove(data.fromR, data.fromC, data.toR, data.toC, data.promotion, null, true);
-                    return;
-                }
-
-                // ---- 处理能力 ----
-                if (data.type === 'ability') {
-                    const abilityName = data.abilityName || '普通攻擊 (Strike)';
-                    const damage = data.damage || 40;
-                    const selfDamage = data.selfDamage || 0;
-                    const targets = data.targets || [{ r: data.targetR, c: data.targetC }];
-                    const fromR = data.fromR;
-                    const fromC = data.fromC;
-
-                    if (abilityName === '冲锋爆炸' && targets.length > 0) {
-                        const ability = { name: abilityName, damage: damage, selfDamage: selfDamage };
-                        const firstTarget = targets[0];
-                        if (firstTarget) {
-                            executePawnAbility(fromR, fromC, firstTarget.r, firstTarget.c, ability, true);
-                        }
-                        return;
-                    }
-
-                    const ability = { name: abilityName, damage: damage, selfDamage: selfDamage || 0 };
-                    for (const t of targets) {
-                        attemptAbility(fromR, fromC, t.r, t.c, ability, true);
-                    }
-                    return;
-                }
-
-                // ---- 处理游戏结束 ----
-                if (data.type === 'gameover') {
-                    gameOverFlag = true;
-                    stopTimer();
-                    document.getElementById('gameOverOverlay').classList.remove('hidden');
-                    document.getElementById('gameOverReason').textContent = '對手認輸或投降';
-                    document.getElementById('gameOverText').textContent = '你贏了!';
-                    document.getElementById('gameOverText').className = 'game-over-text win';
-                    return;
-                }
-
-                // ---- 远程瞄准 ----
-                if (data.type === 'aim_start') {
-                    remoteAimFromR = data.fromR;
-                    remoteAimFromC = data.fromC;
-                    const pos = get3DPosition(data.fromR, data.fromC, 0.6);
-                    pos.project(camera);
-                    const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
-                    const y = (-pos.y * 0.5 + 0.5) * window.innerHeight;
-                    const indicator = document.getElementById('remoteAimIndicator');
-                    indicator.style.display = 'block';
-                    indicator.style.left = (x - 25) + 'px';
-                    indicator.style.top = (y - 25) + 'px';
-                    indicator.style.width = '50px';
-                    indicator.style.height = '50px';
-                    if (data.targetX !== undefined && data.targetZ !== undefined) {
-                        updateRemoteAimPosition(data.targetX, data.targetZ);
-                    } else {
-                        document.getElementById('remoteAimLine').style.display = 'none';
-                        remoteAimActive = true;
-                    }
-                    if (remoteAimTimer) clearTimeout(remoteAimTimer);
-                    remoteAimTimer = setTimeout(() => { hideRemoteAim(); }, 10000);
-                    return;
-                }
-
-                if (data.type === 'aim_move') {
-                    updateRemoteAimPosition(data.targetX, data.targetZ);
-                    if (remoteAimTimer) {
-                        clearTimeout(remoteAimTimer);
-                        remoteAimTimer = setTimeout(() => { hideRemoteAim(); }, 10000);
-                    }
-                    return;
-                }
-
-                if (data.type === 'aim_cancel') {
-                    hideRemoteAim();
-                    return;
-                }
-
-                if (data.type === 'aim_fire') {
-                    const targets = data.targets || [];
-                    playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || 50);
-                    return;
-                }
-            });
         }
 
         function sendMoveToPeer(fromR, fromC, toR, toC, promotion) {
