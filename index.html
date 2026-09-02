@@ -821,7 +821,8 @@
             <p style="opacity:0.7;margin-bottom:20px;">特色：你猜</p>
             <div class="btn-row">
                 <button class="btn" onclick="showAIDifficulty()">🤖 單人遊戲</button>
-                <button class="btn" onclick="showMultiplayerSetup()">👥 雙人遊戲</button>
+                <!-- 修改：雙人遊戲按鈕 → 顯示「即將推出」提示 -->
+                <button class="btn" onclick="showComingSoon()">👥 雙人遊戲 (即將推出)</button>
             </div>
         </div>
     </div>
@@ -840,7 +841,17 @@
         </div>
     </div>
 
-    <!-- 雙人連線選單 -->
+    <!-- 新增：即將推出提示 -->
+    <div class="overlay hidden" id="comingSoonOverlay" style="inset:0;">
+        <div class="panel">
+            <h2>🚀 即將推出</h2>
+            <p style="font-size:1.2rem;margin:20px 0;">多人模式正在開發中，敬請期待！</p>
+            <button class="btn"
+                onclick="document.getElementById('comingSoonOverlay').classList.add('hidden')">知道了</button>
+        </div>
+    </div>
+
+    <!-- 雙人連線選單（保留但不開放入口） -->
     <div class="overlay hidden" id="multiplayerMenu" style="inset:0;">
         <div class="panel">
             <h2>雙人連線對戰</h2>
@@ -4006,7 +4017,11 @@
             return score;
         }
 
-        function minimax(game, depth, alpha, beta, isMaximizing) {
+        function minimax(game, depth, alpha, beta, isMaximizing, startTime, timeLimit) {
+            // 超时检查
+            if (performance.now() - startTime > timeLimit) {
+                return evaluateBoard(game, game.turn === 'white' ? 'black' : 'white');
+            }
             if (depth === 0 || game.getGameStatus().over) {
                 return evaluateBoard(game, game.turn === 'white' ? 'black' : 'white');
             }
@@ -4021,16 +4036,35 @@
                     }
                 }
             }
-            const allActions = [...moves, ...abilities];
+            let actions = [...moves, ...abilities];
+            // 简单排序（可选）
+            actions.sort((a, b) => {
+                let sa = 0, sb = 0;
+                if (a.type === 'ability') sa += 1000;
+                if (b.type === 'ability') sb += 1000;
+                if (a.type === 'move' && a.move.capture) {
+                    const captured = game.getPiece(a.toR, a.toC);
+                    sa += captured ? PIECE_VALUES[captured.type] : 0;
+                }
+                if (b.type === 'move' && b.move.capture) {
+                    const captured = game.getPiece(b.toR, b.toC);
+                    sb += captured ? PIECE_VALUES[captured.type] : 0;
+                }
+                return sb - sa;
+            });
+            if (actions.length > 30) actions = actions.slice(0, 30);
 
             if (isMaximizing) {
                 let maxEval = -Infinity;
-                for (const action of allActions) {
+                for (const action of actions) {
+                    if (performance.now() - startTime > timeLimit) break;
                     const clone = game.clone();
-                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action
-                        .ability);
-                    else clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
-                    const ev = minimax(clone, depth - 1, alpha, beta, false);
+                    if (action.type === 'ability') {
+                        clone.useAbility(action.fromR, action.fromC, action.r, action.c, action.ability);
+                    } else {
+                        clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
+                    }
+                    const ev = minimax(clone, depth - 1, alpha, beta, false, startTime, timeLimit);
                     maxEval = Math.max(maxEval, ev);
                     alpha = Math.max(alpha, ev);
                     if (beta <= alpha) break;
@@ -4038,12 +4072,15 @@
                 return maxEval;
             } else {
                 let minEval = Infinity;
-                for (const action of allActions) {
+                for (const action of actions) {
+                    if (performance.now() - startTime > timeLimit) break;
                     const clone = game.clone();
-                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action
-                        .ability);
-                    else clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
-                    const ev = minimax(clone, depth - 1, alpha, beta, true);
+                    if (action.type === 'ability') {
+                        clone.useAbility(action.fromR, action.fromC, action.r, action.c, action.ability);
+                    } else {
+                        clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
+                    }
+                    const ev = minimax(clone, depth - 1, alpha, beta, true, startTime, timeLimit);
                     minEval = Math.min(minEval, ev);
                     beta = Math.min(beta, ev);
                     if (beta <= alpha) break;
@@ -4053,65 +4090,133 @@
         }
 
         function makeAIMove() {
-            if (gameOverFlag || currentMode !== 'ai') { aiThinking = false; return; }
-
-            const moves = gameState.getAllLegalMoves(gameState.turn);
-            const abilities = [];
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const p = gameState.getPiece(r, c);
-                    if (p && p.color === gameState.turn && isAbilityEnabledForColor(p.color)) {
-                        abilities.push(...gameState.getLegalAbilities(r, c));
-                    }
-                }
-            }
-            const allActions = [...moves, ...abilities];
-
-            if (allActions.length === 0) {
+            if (gameOverFlag || currentMode !== 'ai') {
                 aiThinking = false;
-                checkGameStatus();
                 return;
             }
 
-            let bestAction = allActions[0];
-            if (aiDifficulty === 'noob') {
-                bestAction = allActions[Math.floor(Math.random() * allActions.length)];
-            } else {
-                let bestScore = -Infinity;
-                const depth = aiDifficulty === 'easy' ? 2 : 3;
-                allActions.sort(() => Math.random() - 0.5);
-                for (const action of allActions.slice(0, 20)) {
-                    const clone = gameState.clone();
-                    if (action.type === 'ability') clone.useAbility(action.fromR, action.fromC, action.r, action.c, action
-                        .ability);
-                    else clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
-                    const score = minimax(clone, depth - 1, -Infinity, Infinity, false);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestAction = action;
+            // 显示思考提示
+            const msgEl = document.getElementById('aiThinkingMsg');
+            if (msgEl) msgEl.style.display = 'inline';
+            // 标记正在思考，防止玩家操作
+            aiThinking = true;
+
+            // 使用 setTimeout 延迟执行，让 UI 先刷新
+            setTimeout(() => {
+                // ----- 以下为原计算逻辑（但加入了时间控制和迭代加深） -----
+                const moves = gameState.getAllLegalMoves(gameState.turn);
+                const abilities = [];
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const p = gameState.getPiece(r, c);
+                        if (p && p.color === gameState.turn && isAbilityEnabledForColor(p.color)) {
+                            abilities.push(...gameState.getLegalAbilities(r, c));
+                        }
                     }
                 }
-            }
+                let allActions = [...moves, ...abilities];
 
-            aiThinking = false;
+                if (allActions.length === 0) {
+                    aiThinking = false;
+                    if (msgEl) msgEl.style.display = 'none';
+                    checkGameStatus();
+                    return;
+                }
 
-            if (bestAction.type === 'ability') {
-                selectedPiece = {
-                    row: bestAction.fromR,
-                    col: bestAction.fromC,
-                    piece: gameState.getPiece(bestAction.fromR, bestAction.fromC)
-                };
-                abilityTargets = gameState.getLegalAbilities(bestAction.fromR, bestAction.fromC);
-                attemptAbility(bestAction.fromR, bestAction.fromC, bestAction.r, bestAction.c, bestAction.ability);
-            } else {
-                selectedPiece = {
-                    row: bestAction.fromR,
-                    col: bestAction.fromC,
-                    piece: gameState.getPiece(bestAction.fromR, bestAction.fromC)
-                };
-                validMoves = gameState.getLegalMoves(bestAction.fromR, bestAction.fromC);
-                attemptMove(bestAction.fromR, bestAction.fromC, bestAction.toR, bestAction.toC);
-            }
+                // ----- 走法排序（提升剪枝效率） -----
+                allActions.sort((a, b) => {
+                    let scoreA = 0, scoreB = 0;
+                    if (a.type === 'ability') scoreA += 1000;
+                    if (b.type === 'ability') scoreB += 1000;
+                    if (a.type === 'move' && a.move.capture) {
+                        const captured = gameState.getPiece(a.toR, a.toC);
+                        scoreA += captured ? PIECE_VALUES[captured.type] : 0;
+                    }
+                    if (b.type === 'move' && b.move.capture) {
+                        const captured = gameState.getPiece(b.toR, b.toC);
+                        scoreB += captured ? PIECE_VALUES[captured.type] : 0;
+                    }
+                    return scoreB - scoreA;
+                });
+
+                // 限制动作数量防止爆炸（最多30个）
+                if (allActions.length > 30) allActions = allActions.slice(0, 30);
+
+                let bestAction = allActions[0];
+                const startTime = performance.now();
+                const timeLimit = 3000; // 3秒超时
+
+                if (aiDifficulty === 'noob') {
+                    // 随机走
+                    bestAction = allActions[Math.floor(Math.random() * allActions.length)];
+                } else {
+                    // 迭代加深：从深度1开始，逐步加深
+                    const maxDepth = aiDifficulty === 'easy' ? 2 : 4; // hard 深度4
+                    let currentBestAction = bestAction;
+                    let currentBestScore = -Infinity;
+
+                    for (let depth = 1; depth <= maxDepth; depth++) {
+                        let foundAny = false;
+                        let depthBestAction = null;
+                        let depthBestScore = -Infinity;
+
+                        for (const action of allActions) {
+                            // 检查是否超时
+                            if (performance.now() - startTime > timeLimit) break;
+
+                            const clone = gameState.clone();
+                            if (action.type === 'ability') {
+                                clone.useAbility(action.fromR, action.fromC, action.r, action.c, action.ability);
+                            } else {
+                                clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
+                            }
+                            // 调用 minimax 时传入时间限制
+                            const score = minimax(clone, depth - 1, -Infinity, Infinity, false, startTime, timeLimit);
+                            if (score > depthBestScore) {
+                                depthBestScore = score;
+                                depthBestAction = action;
+                                foundAny = true;
+                            }
+                            if (performance.now() - startTime > timeLimit) break;
+                        }
+
+                        if (foundAny) {
+                            currentBestAction = depthBestAction;
+                            currentBestScore = depthBestScore;
+                        } else {
+                            // 如果该层没有完成（超时），使用上一层的 bestAction，并跳出循环
+                            break;
+                        }
+                        // 如果已经达到最大深度或超时，结束
+                        if (depth === maxDepth || performance.now() - startTime > timeLimit) break;
+                    }
+
+                    bestAction = currentBestAction;
+                }
+
+                // ----- 隐藏思考提示，重置标志 -----
+                aiThinking = false;
+                if (msgEl) msgEl.style.display = 'none';
+
+                // ----- 执行最佳走法（与原代码相同） -----
+                if (bestAction.type === 'ability') {
+                    selectedPiece = {
+                        row: bestAction.fromR,
+                        col: bestAction.fromC,
+                        piece: gameState.getPiece(bestAction.fromR, bestAction.fromC)
+                    };
+                    abilityTargets = gameState.getLegalAbilities(bestAction.fromR, bestAction.fromC);
+                    attemptAbility(bestAction.fromR, bestAction.fromC, bestAction.r, bestAction.c, bestAction.ability);
+                } else {
+                    selectedPiece = {
+                        row: bestAction.fromR,
+                        col: bestAction.fromC,
+                        piece: gameState.getPiece(bestAction.fromR, bestAction.fromC)
+                    };
+                    validMoves = gameState.getLegalMoves(bestAction.fromR, bestAction.fromC);
+                    attemptMove(bestAction.fromR, bestAction.fromC, bestAction.toR, bestAction.toC);
+                }
+            }, 10); // 10ms 延迟，让 UI 有机会刷新
         }
 
         // ============================================================
@@ -4153,7 +4258,7 @@
                     el.msRequestFullscreen();
                 }
                 if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape').catch(() => {});
+                    screen.orientation.lock('landscape').catch(() => { });
                 }
             } else {
                 if (document.exitFullscreen) {
@@ -4436,9 +4541,15 @@
             document.getElementById('aiDifficultyMenu').classList.remove('hidden');
         }
 
+        // 修改：双人游戏 → 显示"即将推出"提示
+        function showComingSoon() {
+            document.getElementById('comingSoonOverlay').classList.remove('hidden');
+        }
+
+        // 保留原函数以备未来恢复
         function showMultiplayerSetup() {
-            document.getElementById('mainMenu').classList.add('hidden');
-            document.getElementById('multiplayerMenu').classList.remove('hidden');
+            // 原逻辑已屏蔽，改用 showComingSoon
+            showComingSoon();
         }
 
         function backToMenu() {
@@ -4966,7 +5077,7 @@
                 document.getElementById('timerDisplay').style.display = 'flex';
                 if (settingsReceived) {
                     resetTimers(roomSettings.timePerPlayer);
-                    if (roomSettings.timePerPlayer > 0) {} else {
+                    if (roomSettings.timePerPlayer > 0) { } else {
                         timerState.isInfinite = true;
                         document.getElementById('timerWhiteText').textContent = '∞';
                         document.getElementById('timerBlackText').textContent = '∞';
