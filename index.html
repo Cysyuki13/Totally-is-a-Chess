@@ -7,7 +7,6 @@
     <title>TotallyIsAChess</title>
     <link rel="icon" type="image/png" href="Chess_icon.png" />
     <style>
-        /* 样式保持不变（原样） */
         :root {
             --bg: #1a1a2e;
             --panel: #16213e;
@@ -65,6 +64,12 @@
         .overlay.hidden {
             opacity: 0;
             pointer-events: none;
+        }
+
+        .check-warning.hidden,
+        .game-top-bar.hidden,
+        .no-target-tip.hidden {
+            display: none;
         }
 
         .panel {
@@ -278,7 +283,7 @@
         }
 
         .check-warning {
-            color: #ff6b5e;
+            color: #e8c547;
             font-weight: 900;
             font-size: 1.1rem;
             animation: pulse 0.8s infinite;
@@ -682,13 +687,11 @@
             box-shadow: 0 0 12px rgba(46, 204, 113, 0.5);
         }
 
-        /* ============ Always-visible fullscreen button ============ */
         #globalFullscreenBtn {
             position: fixed;
             top: 10px;
             right: 10px;
             z-index: 300;
-            /* above overlays (10), actionBar (100), mobileCannonControls (250) */
             width: 44px;
             height: 44px;
             border-radius: 10px;
@@ -724,7 +727,6 @@
             transform: scale(0.93);
         }
 
-        /* Small landscape phones — slightly smaller */
         @media (max-height: 500px) {
             #globalFullscreenBtn {
                 width: 38px;
@@ -735,7 +737,6 @@
             }
         }
 
-        /* ============ Mobile cannon controls ============ */
         #mobileCannonControls {
             position: fixed;
             inset: 0;
@@ -835,7 +836,6 @@
             transform: scale(0.92);
         }
 
-        /* Small landscape phones — shrink a bit */
         @media (max-height: 500px) {
             #joystickBase {
                 width: 120px;
@@ -957,7 +957,6 @@
     <div id="damageOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:100;">
     </div>
 
-    <!-- Always-visible fullscreen toggle (top-level, above all overlays) -->
     <button id="globalFullscreenBtn" onclick="toggleFullscreen()" title="全屏 / Fullscreen" aria-label="全屏">⛶</button>
 
     <div class="game-top-bar hidden" id="topBar">
@@ -977,7 +976,7 @@
                     <span class="time" id="timerBlackText">05:00</span>
                 </span>
             </div>
-            <span id="checkWarning" class="check-warning hidden">⚠ 將軍!</span>
+            <span id="checkWarning" class="check-warning hidden">🎯 輪到你了!</span>
         </div>
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
             <button class="btn btn-danger" id="freeCamBtn" style="padding:6px 12px;font-size:0.8rem;"
@@ -992,7 +991,7 @@
     <div id="actionBar">
         <button class="btn btn-action-move" id="btnActionMove" onclick="setActionMode('move')">🚶 移動</button>
         <span class="action-label">|</span>
-        <button class="btn btn-action-attack" id="btnActionAttack" onclick="setActionMode('attack')">⚔️ 攻擊</button>
+        <button class="btn btn-action-attack" id="btnActionAttack" onclick="setActionMode('attack')">⚔️ 特殊技能</button>
         <span id="noTargetTip" class="no-target-tip hidden">(無目標)</span>
     </div>
 
@@ -1001,7 +1000,6 @@
     <div class="remote-aim-indicator" id="remoteAimIndicator"></div>
     <div class="remote-aim-line" id="remoteAimLine"></div>
 
-    <!-- Mobile-only cannon controls -->
     <div id="mobileCannonControls">
         <div id="joystickBase">
             <div id="joystickKnob"></div>
@@ -1013,7 +1011,6 @@
         </button>
     </div>
 
-    <!-- 主選單 -->
     <div class="overlay" id="mainMenu" style="inset:0;">
         <div class="panel">
             <h1>♞ 西洋棋</h1>
@@ -1025,7 +1022,6 @@
         </div>
     </div>
 
-    <!-- AI 難度 -->
     <div class="overlay hidden" id="aiDifficultyMenu" style="inset:0;">
         <div class="panel">
             <h2>選擇難度</h2>
@@ -1039,7 +1035,6 @@
         </div>
     </div>
 
-    <!-- 雙人連線選單 -->
     <div class="overlay hidden" id="multiplayerMenu" style="inset:0;">
         <div class="panel">
             <h2>雙人連線對戰</h2>
@@ -1059,7 +1054,6 @@
         </div>
     </div>
 
-    <!-- 房間設定 -->
     <div class="overlay hidden" id="roomSettings" style="inset:0;">
         <div class="panel">
             <h2>🏠 房間設定</h2>
@@ -1099,7 +1093,6 @@
         </div>
     </div>
 
-    <!-- 等待大廳（含準備按鈕） -->
     <div class="overlay hidden" id="waitingOverlay" style="inset:0;">
         <div class="panel">
             <h2>🏠 遊戲大廳</h2>
@@ -1125,7 +1118,6 @@
         </div>
     </div>
 
-    <!-- 兵升變 -->
     <div class="overlay hidden" id="promotionOverlay" style="inset:0;">
         <div class="panel">
             <h2>兵升變</h2>
@@ -1139,7 +1131,6 @@
         </div>
     </div>
 
-    <!-- 遊戲結束 -->
     <div class="overlay hidden" id="gameOverOverlay" style="inset:0;">
         <div class="panel">
             <h2>遊戲結束</h2>
@@ -1152,7 +1143,6 @@
         </div>
     </div>
 
-    <!-- 關鍵修復：降級 PeerJS 到 1.3.2，無需 API Key -->
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js">
     </script>
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js">
@@ -1218,7 +1208,6 @@
         let settingsReceived = false;
         let settingsTimeout = null;
 
-        // ---- 准备状态 ----
         let myReady = false;
         let opponentReady = false;
         let gameStarted = false;
@@ -1227,9 +1216,6 @@
         const TARGET_RADIUS = 0.7;
         const PIECE_VALUES = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 20000 };
 
-        // ============================================================
-        //  MOBILE DETECTION + JOYSTICK STATE
-        // ============================================================
         const IS_MOBILE = ('ontouchstart' in window) &&
             window.matchMedia('(pointer: coarse)').matches;
 
@@ -1240,8 +1226,8 @@
             baseCenterY: 0,
             knobOffsetX: 0,
             knobOffsetY: 0,
-            baseRadius: 55,          // max knob travel radius in px
-            moveSpeed: 4.5,          // world units per second at full tilt
+            baseRadius: 55,
+            moveSpeed: 4.5,
         };
         let joystickSetup = false;
         let lastFrameTime = 0;
@@ -1302,7 +1288,7 @@
                     for (let c = 0; c < 8; c++) {
                         const p = b[r][c];
                         if (p && p.color === color) {
-                            const moves = this.getPseudoLegalMoves(r, c, b);
+                            const moves = this.getPseudoLegalMoves(r, c, b, true);
                             moves.forEach(m => attacked.add(m.r + ',' + m.c));
                         }
                     }
@@ -1320,7 +1306,7 @@
                 const enemyColor = color === 'white' ? 'black' : 'white';
                 return this.isSquareAttacked(king.r, king.c, enemyColor, b);
             }
-            getPseudoLegalMoves(r, c, board) {
+            getPseudoLegalMoves(r, c, board, skipCastling = false) {
                 const b = board || this.board;
                 const piece = b[r][c];
                 if (!piece) return [];
@@ -1432,31 +1418,29 @@
                     }
                     case 'king': {
                         for (const [dr, dc] of [
-                            [-1, -1],
-                            [-1, 0],
-                            [-1, 1],
-                            [0, -1],
-                            [0, 1],
-                            [1, -1],
-                            [1, 0],
-                            [1, 1]
+                            [-1, -1], [-1, 0], [-1, 1],
+                            [0, -1], [0, 1],
+                            [1, -1], [1, 0], [1, 1]
                         ]) {
                             addMove(r + dr, c + dc);
                         }
-                        const ks = color === 'white' ? this.castlingRights.whiteKingside : this.castlingRights.blackKingside;
-                        const qs = color === 'white' ? this.castlingRights.whiteQueenside : this.castlingRights.blackQueenside;
-                        const homeRow = color === 'white' ? 0 : 7;
-                        if (r === homeRow && c === 4 && ks && !b[homeRow][5] && !b[homeRow][6] &&
-                            !this.isSquareAttacked(homeRow, 4, enemy, b) &&
-                            !this.isSquareAttacked(homeRow, 5, enemy, b) &&
-                            !this.isSquareAttacked(homeRow, 6, enemy, b)) {
-                            moves.push({ r: homeRow, c: 6, capture: false, castling: 'kingside' });
-                        }
-                        if (r === homeRow && c === 4 && qs && !b[homeRow][1] && !b[homeRow][2] && !b[homeRow][3] &&
-                            !this.isSquareAttacked(homeRow, 4, enemy, b) &&
-                            !this.isSquareAttacked(homeRow, 3, enemy, b) &&
-                            !this.isSquareAttacked(homeRow, 2, enemy, b)) {
-                            moves.push({ r: homeRow, c: 2, capture: false, castling: 'queenside' });
+
+                        if (!skipCastling) {
+                            const ks = color === 'white' ? this.castlingRights.whiteKingside : this.castlingRights.blackKingside;
+                            const qs = color === 'white' ? this.castlingRights.whiteQueenside : this.castlingRights.blackQueenside;
+                            const homeRow = color === 'white' ? 0 : 7;
+                            if (r === homeRow && c === 4 && ks && !b[homeRow][5] && !b[homeRow][6] &&
+                                !this.isSquareAttacked(homeRow, 4, enemy, b) &&
+                                !this.isSquareAttacked(homeRow, 5, enemy, b) &&
+                                !this.isSquareAttacked(homeRow, 6, enemy, b)) {
+                                moves.push({ r: homeRow, c: 6, capture: false, castling: 'kingside' });
+                            }
+                            if (r === homeRow && c === 4 && qs && !b[homeRow][1] && !b[homeRow][2] && !b[homeRow][3] &&
+                                !this.isSquareAttacked(homeRow, 4, enemy, b) &&
+                                !this.isSquareAttacked(homeRow, 3, enemy, b) &&
+                                !this.isSquareAttacked(homeRow, 2, enemy, b)) {
+                                moves.push({ r: homeRow, c: 2, capture: false, castling: 'queenside' });
+                            }
                         }
                         break;
                     }
@@ -1930,11 +1914,7 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": {
-                    "x": -4.2,
-                    "y": 0,
-                    "z": 0
-                }
+                "position": { "x": -4.2, "y": 0, "z": 0 }
             },
             "rook": {
                 "bodyRadius": 0.2,
@@ -1944,11 +1924,7 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": {
-                    "x": -2.52,
-                    "y": 0.02,
-                    "z": 0
-                }
+                "position": { "x": -2.52, "y": 0.02, "z": 0 }
             },
             "knight": {
                 "bodyRadius": 0.26,
@@ -1962,62 +1938,22 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": {
-                    "x": -0.84,
-                    "y": 0.02,
-                    "z": 0
-                },
+                "position": { "x": -0.84, "y": 0.02, "z": 0 },
                 "parts": {
                     "body": {
-                        "position": {
-                            "x": 0,
-                            "y": 0.19,
-                            "z": 0
-                        },
-                        "rotation": {
-                            "x": 0,
-                            "y": 0,
-                            "z": 0
-                        },
-                        "scale": {
-                            "x": 0.6,
-                            "y": 0.8,
-                            "z": 0.92
-                        }
+                        "position": { "x": 0, "y": 0.21, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 0.5, "y": 1.02, "z": 0.84 }
                     },
                     "neck": {
-                        "position": {
-                            "x": 0,
-                            "y": 0.54,
-                            "z": 0.13
-                        },
-                        "rotation": {
-                            "x": 0.42,
-                            "y": 0,
-                            "z": 0
-                        },
-                        "scale": {
-                            "x": 0.92,
-                            "y": 2.44,
-                            "z": 1.36
-                        }
+                        "position": { "x": 0, "y": 0.54, "z": 0.13 },
+                        "rotation": { "x": 0.22, "y": 0, "z": 0 },
+                        "scale": { "x": 0.58, "y": 2.44, "z": 1.12 }
                     },
                     "head": {
-                        "position": {
-                            "x": 0,
-                            "y": 0.74,
-                            "z": 0.26
-                        },
-                        "rotation": {
-                            "x": 0.14,
-                            "y": 0,
-                            "z": 0
-                        },
-                        "scale": {
-                            "x": 1.56,
-                            "y": 1.22,
-                            "z": 1.66
-                        }
+                        "position": { "x": 0, "y": 0.76, "z": 0.25 },
+                        "rotation": { "x": -0.08, "y": 0, "z": 0 },
+                        "scale": { "x": 0.98, "y": 1.2, "z": 1.76 }
                     }
                 }
             },
@@ -2028,12 +1964,29 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": {
-                    "x": 0.84,
-                    "y": 0.02,
-                    "z": 0
-                },
-                "parts": {}
+                "position": { "x": 0.84, "y": 0.02, "z": 0 },
+                "parts": {
+                    "body": {
+                        "position": { "x": 0, "y": 0.31, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 0.5, "y": 1.2, "z": 0.5 }
+                    },
+                    "sphere": {
+                        "position": { "x": 0, "y": 0.93, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 1, "y": 1, "z": 1 }
+                    },
+                    "custom_1000": {
+                        "type": "torus",
+                        "geometryParams": { "radius": 0.15, "tube": 0.05 },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": { "x": 0, "y": 0.42, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 1.08, "y": 2, "z": 1.2 },
+                        "name": "Torus"
+                    }
+                }
             },
             "queen": {
                 "bodyRadius": 0.22,
@@ -2044,10 +1997,53 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": {
-                    "x": 2.52,
-                    "y": 0.03,
-                    "z": 0
+                "position": { "x": 2.52, "y": 0.03, "z": 0 },
+                "parts": {
+                    "custom_1000": {
+                        "type": "torus",
+                        "geometryParams": { "radius": 0.15, "tube": 0.05 },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": { "x": 0, "y": 0.57, "z": 0 },
+                        "rotation": { "x": -1.56, "y": 0, "z": 0 },
+                        "scale": { "x": 1.56, "y": 1.58, "z": 1.12 },
+                        "name": "Torus"
+                    },
+                    "custom_1001": {
+                        "type": "cone",
+                        "geometryParams": { "radius": 0.15, "height": 0.3 },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": { "x": 0, "y": 0.62, "z": 0 },
+                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
+                        "scale": { "x": 2.12, "y": 0.5, "z": 1 },
+                        "name": "Cone"
+                    },
+                    "custom_1002": {
+                        "type": "cone",
+                        "geometryParams": { "radius": 0.15, "height": 0.3 },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": { "x": 0, "y": 0.62, "z": 0 },
+                        "rotation": { "x": -3.14, "y": -1.58, "z": 0 },
+                        "scale": { "x": 2.16, "y": 0.5, "z": 1 },
+                        "name": "Cone"
+                    },
+                    "spike": {
+                        "position": { "x": 0, "y": 0.79, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 1, "y": 1, "z": 1 }
+                    },
+                    "crown": {
+                        "position": { "x": 0, "y": 0.52, "z": 0 },
+                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
+                        "scale": { "x": 1, "y": 0.48, "z": 1 }
+                    },
+                    "body": {
+                        "position": { "x": 0, "y": 0.32, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 0.7, "y": 1, "z": 0.7 }
+                    }
                 }
             },
             "king": {
@@ -2061,10 +2057,33 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": {
-                    "x": 4.2,
-                    "y": 0.04,
-                    "z": 0
+                "position": { "x": 4.2, "y": 0.04, "z": 0 },
+                "parts": {
+                    "custom_1000": {
+                        "type": "cone",
+                        "geometryParams": { "radius": 0.15, "height": 0.3 },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": { "x": 0, "y": 0.57, "z": 0 },
+                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
+                        "scale": { "x": 1.4, "y": 1, "z": 1.4 },
+                        "name": "Cone"
+                    },
+                    "body": {
+                        "position": { "x": 0, "y": 0.31, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 0.54, "y": 1, "z": 0.56 }
+                    },
+                    "crown": {
+                        "position": { "x": 0, "y": 0.51, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 0.8, "y": 0.6, "z": 0.8 }
+                    },
+                    "crossH": {
+                        "position": { "x": 0, "y": 0.85, "z": 0 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
+                        "scale": { "x": 1, "y": 1, "z": 1 }
+                    }
                 }
             }
         };
@@ -2194,6 +2213,31 @@
             border.position.set(0, -0.12, 0);
             border.receiveShadow = true;
             boardGroup.add(border);
+
+            const FILES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+            const labelY = -0.03;
+            const labelOffset = 4.25;
+
+            for (let c = 0; c < 8; c++) {
+                const x = c - 3.5;
+                const nearLabel = createTextLabel(FILES[c]);
+                nearLabel.position.set(x, labelY, labelOffset);
+                boardGroup.add(nearLabel);
+                const farLabel = createTextLabel(FILES[c]);
+                farLabel.position.set(x, labelY, -labelOffset);
+                boardGroup.add(farLabel);
+            }
+
+            for (let r = 0; r < 8; r++) {
+                const z = 3.5 - r;
+                const rankNum = String(r + 1);
+                const leftLabel = createTextLabel(rankNum);
+                leftLabel.position.set(-labelOffset, labelY, z);
+                boardGroup.add(leftLabel);
+                const rightLabel = createTextLabel(rankNum);
+                rightLabel.position.set(labelOffset, labelY, z);
+                boardGroup.add(rightLabel);
+            }
             scene.add(boardGroup);
         }
 
@@ -2202,19 +2246,16 @@
             canvas.width = 72;
             canvas.height = 14;
             const ctx = canvas.getContext('2d');
-
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#666';
             ctx.lineWidth = 0.5;
             ctx.strokeRect(0, 0, canvas.width, canvas.height);
-
             const ratio = Math.max(0, hp / maxHp);
             const barWidth = Math.max(0, (canvas.width - 4) * ratio);
             const color = ratio > 0.5 ? '#2ecc71' : (ratio > 0.2 ? '#f1c40f' : '#e74c3c');
             ctx.fillStyle = color;
             ctx.fillRect(2, 2, barWidth, canvas.height - 4);
-
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 8px Arial';
             ctx.textAlign = 'right';
@@ -2222,7 +2263,6 @@
             ctx.shadowColor = 'rgba(0,0,0,0.8)';
             ctx.shadowBlur = 2;
             ctx.fillText(hp, canvas.width - 4, canvas.height / 2);
-
             const texture = new THREE.CanvasTexture(canvas);
             texture.needsUpdate = true;
             return texture;
@@ -2234,19 +2274,16 @@
             const canvas = texture.image;
             if (!canvas || !canvas.getContext) return;
             const ctx = canvas.getContext('2d');
-
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#666';
             ctx.lineWidth = 0.5;
             ctx.strokeRect(0, 0, canvas.width, canvas.height);
-
             const ratio = Math.max(0, hp / maxHp);
             const barWidth = Math.max(0, (canvas.width - 4) * ratio);
             const color = ratio > 0.5 ? '#2ecc71' : (ratio > 0.2 ? '#f1c40f' : '#e74c3c');
             ctx.fillStyle = color;
             ctx.fillRect(2, 2, barWidth, canvas.height - 4);
-
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 8px Arial';
             ctx.textAlign = 'right';
@@ -2254,7 +2291,6 @@
             ctx.shadowColor = 'rgba(0,0,0,0.8)';
             ctx.shadowBlur = 2;
             ctx.fillText(hp, canvas.width - 4, canvas.height / 2);
-
             texture.needsUpdate = true;
         }
 
@@ -2290,6 +2326,32 @@
                 default:
                     return new THREE.BoxGeometry(0.2, 0.2, 0.2);
             }
+        }
+
+        function createTextLabel(text, color = '#e8c547', size = 0.40) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = color;
+            ctx.font = 'bold 92px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            texture.anisotropy = 4;
+            const mat = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+            });
+            const geo = new THREE.PlaneGeometry(size, size);
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.x = -Math.PI / 2;
+            return mesh;
         }
 
         function createPieceModel(type, color, hp, maxHp, params) {
@@ -2381,8 +2443,18 @@
                 for (const [id, partData] of Object.entries(p.parts)) {
                     if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id)) continue;
                     const geo = createGeometryFromPart(partData.type, partData.geometryParams || {});
+
+                    let partColor;
+                    if (!partData.color || partData.color === 'piece') {
+                        partColor = baseColor;
+                    } else if (partData.color === 'accent') {
+                        partColor = accentColor;
+                    } else {
+                        partColor = partData.color;
+                    }
+
                     const partMat = new THREE.MeshStandardMaterial({
-                        color: partData.color || '#ffaa00',
+                        color: partColor,
                         roughness: partData.roughness ?? 0.5,
                         metalness: partData.metalness ?? 0.2,
                     });
@@ -2393,6 +2465,7 @@
                     mesh.castShadow = true;
                     mesh.receiveShadow = true;
                     mesh.userData.isCustom = true;
+                    mesh.userData.origColor = partMat.color.getHex();
                     group.add(mesh);
                 }
             }
@@ -2514,34 +2587,134 @@
             highlightsGroup.add(selRing);
         }
 
+        // ------------------------------------------------------------
+        //  ABILITY TARGET PREVIEW
+        //  - Pawn  → shows the 十 cross: yellow landing marker + red
+        //             cross covering the four orthogonal neighbour squares
+        //  - Other → shows a simple pulsing yellow marker on the target
+        // ------------------------------------------------------------
         function showAbilityHighlights(targets, selectedR, selectedC) {
             clearHighlights();
-            const redMat = new THREE.MeshStandardMaterial({
-                color: 0xff0000, transparent: true, opacity: 0.7,
-                depthWrite: false
-            });
-            targets.forEach(target => {
-                const highlight = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.03, 16), redMat);
-                highlight.position.set(target.c - 3.5, 0.03, 3.5 - target.r);
-                highlight.userData = { row: target.r, col: target.c, type: 'ability-target' };
-                highlightsGroup.add(highlight);
-            });
-            const selMat = new THREE.MeshBasicMaterial({
-                color: 0xe8c547, transparent: true, opacity: 0.8,
-                side: THREE.DoubleSide
-            });
-            const selRing = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 32, 1, true), selMat);
+
+            const caster = gameState.getPiece(selectedR, selectedC);
+            const casterType = caster ? caster.type : null;
+
+            const pulseMeshes = [];
+
+            const makePulse = (geo, color, minOp, maxOp, y, x = 0, z = 0) => {
+                const mat = new THREE.MeshBasicMaterial({
+                    color,
+                    transparent: true,
+                    opacity: (minOp + maxOp) / 2,
+                    depthWrite: false,
+                    side: THREE.DoubleSide,
+                });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.set(x, y, z);
+                mesh.userData.minOpacity = minOp;
+                mesh.userData.maxOpacity = maxOp;
+                pulseMeshes.push(mesh);
+                return mesh;
+            };
+
+            const makeHitPlate = (x, z) => {
+                const plate = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.95, 0.95),
+                    new THREE.MeshBasicMaterial({
+                        transparent: true,
+                        opacity: 0,
+                        depthWrite: false,
+                        side: THREE.DoubleSide,
+                    })
+                );
+                plate.rotation.x = -Math.PI / 2;
+                plate.position.set(x, 0.05, z);
+                return plate;
+            };
+
+            for (const target of targets) {
+                const zone = new THREE.Group();
+                zone.position.set(target.c - 3.5, 0, 3.5 - target.r);
+                zone.userData = { row: target.r, col: target.c, type: 'ability-target' };
+
+                // --- Yellow landing / target marker on the target square ---
+                zone.add(makePulse(new THREE.CircleGeometry(0.44, 24), 0xe8c547, 0.25, 0.55, 0.032));
+                zone.add(makePulse(new THREE.RingGeometry(0.40, 0.46, 24), 0xe8c547, 0.65, 1.00, 0.040));
+
+                // --- Pawn: draw the 十 cross blast zone ---
+                if (casterType === 'pawn') {
+                    const dirs = [
+                        [1, 0],   // S
+                        [-1, 0],  // N
+                        [0, 1],   // E
+                        [0, -1],  // W
+                    ];
+
+                    for (const [dr, dc] of dirs) {
+                        const nr = target.r + dr;
+                        const nc = target.c + dc;
+                        if (nr < 0 || nr > 7 || nc < 0 || nc > 7) continue;
+
+                        // Local offsets inside zone group:
+                        //   +1 column  → +1 x
+                        //   +1 row     → −1 z (since z = 3.5 − r)
+                        const offX = dc;
+                        const offZ = -dr;
+
+                        // Red tint on the neighbour square
+                        zone.add(makePulse(new THREE.CircleGeometry(0.44, 24), 0xff2200, 0.30, 0.60, 0.033, offX, offZ));
+                        zone.add(makePulse(new THREE.RingGeometry(0.40, 0.46, 24), 0xff6600, 0.65, 1.00, 0.041, offX, offZ));
+
+                        // Beam joining target to that neighbour (makes the cross read clearly)
+                        const isAlongZ = (dc === 0);
+                        const beamGeo = isAlongZ
+                            ? new THREE.PlaneGeometry(0.30, 1.00)
+                            : new THREE.PlaneGeometry(1.00, 0.30);
+                        zone.add(makePulse(beamGeo, 0xff3300, 0.45, 0.85, 0.044, offX / 2, offZ / 2));
+
+                        // Hit plate so clicks on the neighbour still trigger the ability
+                        zone.add(makeHitPlate(offX, offZ));
+                    }
+
+                    // Orange hub at the centre of the cross
+                    zone.add(makePulse(new THREE.CircleGeometry(0.16, 20), 0xff8800, 0.70, 1.00, 0.046));
+                }
+
+                // Hit plate on the landing square itself
+                zone.add(makeHitPlate(0, 0));
+
+                highlightsGroup.add(zone);
+            }
+
+            // Selection ring on the caster
+            const selRing = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.45, 0.45, 0.06, 32, 1, true),
+                new THREE.MeshBasicMaterial({ color: 0xe8c547, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+            );
             selRing.position.set(selectedC - 3.5, 0.03, 3.5 - selectedR);
             highlightsGroup.add(selRing);
+
+            // Store the pulse list for the render loop
+            highlightsGroup.userData.pulseMeshes = pulseMeshes;
         }
 
         function clearHighlights() {
             if (!highlightsGroup) return;
+            highlightsGroup.userData.pulseMeshes = null;
             while (highlightsGroup.children.length > 0) {
                 const child = highlightsGroup.children[0];
                 highlightsGroup.remove(child);
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) child.material.dispose();
+                child.traverse(node => {
+                    if (node.geometry) node.geometry.dispose();
+                    if (node.material) {
+                        if (Array.isArray(node.material)) {
+                            node.material.forEach(m => m.dispose());
+                        } else {
+                            node.material.dispose();
+                        }
+                    }
+                });
             }
         }
 
@@ -2655,6 +2828,22 @@
             ghostLineGroup.add(vLine);
             ghostLine.userData.vLine = vLine;
 
+            // Translucent blast-radius disc — shows the actual AoE of the cannon
+            const blastGeo = new THREE.CircleGeometry(TARGET_RADIUS, 32);
+            const blastMat = new THREE.MeshBasicMaterial({
+                color: 0x00ff88,
+                transparent: true,
+                opacity: 0.15,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+            });
+            const blastDisc = new THREE.Mesh(blastGeo, blastMat);
+            blastDisc.rotation.x = -Math.PI / 2;
+            blastDisc.position.y = 0.016;
+            blastDisc.visible = false;
+            ghostLineGroup.add(blastDisc);
+            ghostLine.userData.blastDisc = blastDisc;
+
             return ghostLine;
         }
 
@@ -2741,6 +2930,7 @@
             const ring = ghostLine.userData.ring;
             const glowRing = ghostLine.userData.glowRing;
             const vLine = ghostLine.userData.vLine;
+            const blastDisc = ghostLine.userData.blastDisc;
 
             if (ring) {
                 ring.position.x = endPos.x;
@@ -2760,6 +2950,12 @@
                 vLine.material.color.setHex(color);
                 vLine.visible = valid;
             }
+            if (blastDisc) {
+                blastDisc.position.x = endPos.x;
+                blastDisc.position.z = endPos.z;
+                blastDisc.material.color.setHex(color);
+                blastDisc.visible = true;
+            }
         }
 
         function hideGhostLine() {
@@ -2773,6 +2969,7 @@
                 if (ghostLine.userData.ring) ghostLine.userData.ring.visible = false;
                 if (ghostLine.userData.glowRing) ghostLine.userData.glowRing.visible = false;
                 if (ghostLine.userData.vLine) ghostLine.userData.vLine.visible = false;
+                if (ghostLine.userData.blastDisc) ghostLine.userData.blastDisc.visible = false;
             }
         }
 
@@ -3409,7 +3606,6 @@
             const cancelBtn = document.getElementById('cancelCannonBtn');
             if (!base || !knob || !fireBtn || !cancelBtn) return;
 
-            // ---------- joystick ----------
             const onStart = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3458,7 +3654,6 @@
             base.addEventListener('touchend', onEnd, { passive: false });
             base.addEventListener('touchcancel', onEnd, { passive: false });
 
-            // ---------- fire button ----------
             const doFire = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3469,7 +3664,6 @@
             fireBtn.addEventListener('touchstart', doFire, { passive: false });
             fireBtn.addEventListener('click', doFire);
 
-            // ---------- cancel button ----------
             const doCancel = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3514,10 +3708,8 @@
             const nx = joystickState.knobOffsetX / maxR;
             const ny = joystickState.knobOffsetY / maxR;
 
-            // deadzone
             if (Math.abs(nx) < 0.06 && Math.abs(ny) < 0.06) return;
 
-            // Camera-relative movement so it feels correct at any camera angle.
             const camForward = new THREE.Vector3();
             camera.getWorldDirection(camForward);
             camForward.y = 0;
@@ -3527,7 +3719,6 @@
             const camRight = new THREE.Vector3();
             camRight.crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // ny positive = joystick DOWN = move BACKWARD (against camForward)
             const moveDir = camRight.clone().multiplyScalar(nx)
                 .add(camForward.clone().multiplyScalar(-ny));
 
@@ -3539,7 +3730,6 @@
 
             updateAimTarget(aimWorldPos);
 
-            // Sync reticle with peer (throttled)
             if (currentMode === 'multiplayer' && peerConnection?.open) {
                 const now = Date.now();
                 if (!aimMoveThrottleTimer || now - aimMoveThrottleTimer > AIM_SEND_THROTTLE) {
@@ -3561,16 +3751,13 @@
             document.getElementById('actionBar').style.display = 'none';
 
             if (IS_MOBILE) {
-                // --- Mobile: joystick mode ---
                 document.getElementById('aimHint').classList.remove('visible');
                 document.getElementById('mobileCannonControls').classList.add('active');
                 setupMobileCannonControls();
                 resetJoystick();
-                // Center the reticle on the board each time we enter aiming mode
                 aimWorldPos = new THREE.Vector3(0, 0.05, 0);
                 updateAimTarget(aimWorldPos);
             } else {
-                // --- Desktop: mouse aim mode ---
                 document.getElementById('aimHint').classList.add('visible');
                 if (!aimWorldPos) {
                     aimWorldPos = new THREE.Vector3(0, 0.05, 0);
@@ -4342,11 +4529,6 @@
                     if (peerConnection?.open) peerConnection.send({ type: 'gameover' });
                 }
             }
-            if (gameState.isInCheck(gameState.turn)) {
-                document.getElementById('checkWarning').classList.remove('hidden');
-            } else {
-                document.getElementById('checkWarning').classList.add('hidden');
-            }
         }
 
         function updateTurnIndicator() {
@@ -4359,8 +4541,29 @@
                 turnText.textContent = currentMode === 'ai' && playerColor === 'white' ? 'AI 回合 (黑)' : '黑方回合';
                 turnDot.className = 'turn-dot black';
             }
+            updateTurnMessage();
         }
 
+        // Show a blinking "your turn" notice whenever the local player is on move.
+        // In AI / multiplayer: only the human side sees it.
+        // In local two-player: shows whose colour is on move.
+        function updateTurnMessage() {
+            const el = document.getElementById('checkWarning');
+            if (!el) return;
+
+            if (currentMode === 'ai' || currentMode === 'multiplayer') {
+                if (gameState.turn === playerColor) {
+                    el.textContent = '🎯 輪到你了!';
+                    el.style.display = 'inline-block';
+                } else {
+                    el.style.display = 'none';
+                }
+            } else {
+                // local two-player — show whose colour is to move
+                el.textContent = gameState.turn === 'white' ? '⚪ 輪到白方!' : '⚫ 輪到黑方!';
+                el.style.display = 'inline-block';
+            }
+        }
         // ============================================================
         //  AI
         // ============================================================
@@ -4396,7 +4599,6 @@
         }
 
         function minimax(game, depth, alpha, beta, isMaximizing, startTime, timeLimit) {
-            // 超时检查
             if (performance.now() - startTime > timeLimit) {
                 return evaluateBoard(game, game.turn === 'white' ? 'black' : 'white');
             }
@@ -4415,7 +4617,6 @@
                 }
             }
             let actions = [...moves, ...abilities];
-            // 简单排序（可选）
             actions.sort((a, b) => {
                 let sa = 0, sb = 0;
                 if (a.type === 'ability') sa += 1000;
@@ -4473,15 +4674,11 @@
                 return;
             }
 
-            // 显示思考提示
             const msgEl = document.getElementById('aiThinkingMsg');
             if (msgEl) msgEl.style.display = 'inline';
-            // 标记正在思考，防止玩家操作
             aiThinking = true;
 
-            // 使用 setTimeout 延迟执行，让 UI 先刷新
             setTimeout(() => {
-                // ----- 以下为原计算逻辑（但加入了时间控制和迭代加深） -----
                 const moves = gameState.getAllLegalMoves(gameState.turn);
                 const abilities = [];
                 for (let r = 0; r < 8; r++) {
@@ -4501,7 +4698,6 @@
                     return;
                 }
 
-                // ----- 走法排序（提升剪枝效率） -----
                 allActions.sort((a, b) => {
                     let scoreA = 0, scoreB = 0;
                     if (a.type === 'ability') scoreA += 1000;
@@ -4517,19 +4713,16 @@
                     return scoreB - scoreA;
                 });
 
-                // 限制动作数量防止爆炸（最多30个）
                 if (allActions.length > 30) allActions = allActions.slice(0, 30);
 
                 let bestAction = allActions[0];
                 const startTime = performance.now();
-                const timeLimit = 3000; // 3秒超时
+                const timeLimit = 3000;
 
                 if (aiDifficulty === 'noob') {
-                    // 随机走
                     bestAction = allActions[Math.floor(Math.random() * allActions.length)];
                 } else {
-                    // 迭代加深：从深度1开始，逐步加深
-                    const maxDepth = aiDifficulty === 'easy' ? 2 : 4; // hard 深度4
+                    const maxDepth = aiDifficulty === 'easy' ? 2 : 4;
                     let currentBestAction = bestAction;
                     let currentBestScore = -Infinity;
 
@@ -4539,7 +4732,6 @@
                         let depthBestScore = -Infinity;
 
                         for (const action of allActions) {
-                            // 检查是否超时
                             if (performance.now() - startTime > timeLimit) break;
 
                             const clone = gameState.clone();
@@ -4548,7 +4740,6 @@
                             } else {
                                 clone.makeMove(action.fromR, action.fromC, action.toR, action.toC, 'queen');
                             }
-                            // 调用 minimax 时传入时间限制
                             const score = minimax(clone, depth - 1, -Infinity, Infinity, false, startTime, timeLimit);
                             if (score > depthBestScore) {
                                 depthBestScore = score;
@@ -4562,21 +4753,17 @@
                             currentBestAction = depthBestAction;
                             currentBestScore = depthBestScore;
                         } else {
-                            // 如果该层没有完成（超时），使用上一层的 bestAction，并跳出循环
                             break;
                         }
-                        // 如果已经达到最大深度或超时，结束
                         if (depth === maxDepth || performance.now() - startTime > timeLimit) break;
                     }
 
                     bestAction = currentBestAction;
                 }
 
-                // ----- 隐藏思考提示，重置标志 -----
                 aiThinking = false;
                 if (msgEl) msgEl.style.display = 'none';
 
-                // ----- 执行最佳走法（与原代码相同） -----
                 if (bestAction.type === 'ability') {
                     selectedPiece = {
                         row: bestAction.fromR,
@@ -4594,7 +4781,7 @@
                     validMoves = gameState.getLegalMoves(bestAction.fromR, bestAction.fromC);
                     attemptMove(bestAction.fromR, bestAction.fromC, bestAction.toR, bestAction.toC);
                 }
-            }, 10); // 10ms 延迟，让 UI 有机会刷新
+            }, 10);
         }
 
         // ============================================================
@@ -4849,7 +5036,6 @@
                     dragStartX = e.touches[0].clientX;
                     dragStartY = e.touches[0].clientY;
                 } else if (isAiming && !IS_MOBILE) {
-                    // Only the desktop/touch-hybrid path uses finger-drag aiming.
                     e.preventDefault();
                     const aimData = getFreeAimPosition(e.touches[0].clientX, e.touches[0].clientY);
                     if (aimData) {
@@ -4884,7 +5070,6 @@
             if (!dragMoved && e.changedTouches.length > 0) {
                 const touch = e.changedTouches[0];
                 if (isAiming) {
-                    // On mobile, firing is ONLY done through the fire button.
                     if (!IS_MOBILE && aimValid) fireAimedCannon();
                 } else {
                     processInput(touch.clientX, touch.clientY);
@@ -4902,7 +5087,6 @@
             const dt = lastFrameTime ? Math.min((now - lastFrameTime) / 1000, 0.05) : 0.016;
             lastFrameTime = now;
 
-            // Mobile joystick → drive the cannon reticle
             if (IS_MOBILE) updateJoystickAim(dt);
 
             if (isFreeCameraActive) {
@@ -4916,6 +5100,16 @@
                 cameraSmoothLookAt.lerp(cameraTarget.lookAt, 0.08);
                 camera.position.copy(cameraSmoothPos);
                 camera.lookAt(cameraSmoothLookAt);
+            }
+
+            // Pulse the ability-area highlights (十 cross / target markers)
+            if (highlightsGroup && highlightsGroup.userData.pulseMeshes) {
+                const pulse = 0.5 + 0.5 * Math.sin((now / 1000) * 4);
+                for (const mesh of highlightsGroup.userData.pulseMeshes) {
+                    const min = mesh.userData.minOpacity ?? 0;
+                    const max = mesh.userData.maxOpacity ?? 1;
+                    mesh.material.opacity = min + (max - min) * pulse;
+                }
             }
 
             renderer.render(scene, camera);
@@ -5193,7 +5387,6 @@
                     document.getElementById('topBar').classList.remove('hidden');
                     updateReadyUI();
 
-                    // 客户端在连接建立后立即发送 hello 握手信号
                     setTimeout(() => {
                         if (peerConnection?.open) {
                             peerConnection.send({ type: 'hello', color: playerColor });
@@ -5206,7 +5399,6 @@
                     handleDisconnect();
                 });
 
-                // 超时保护
                 if (settingsTimeout) clearTimeout(settingsTimeout);
                 settingsTimeout = setTimeout(() => {
                     if (!settingsReceived && !gameStarted) {
@@ -5245,17 +5437,14 @@
             peerConnection.on('data', (data) => {
                 console.log('📩 收到消息:', data.type, data);
 
-                // --- hello handshake (host receives) ---
                 if (data.type === 'hello') {
                     console.log('👋 客户端握手:', data.color);
                     if (isHost) {
-                        // 房主重发一次 settings，防止客户端漏收
                         sendSettingsToPeer();
                     }
                     return;
                 }
 
-                // --- settings ---
                 if (data.type === 'settings') {
                     if (settingsTimeout) {
                         clearTimeout(settingsTimeout);
@@ -5296,7 +5485,6 @@
                     return;
                 }
 
-                // --- ready ---
                 if (data.type === 'ready') {
                     opponentReady = true;
                     updateReadyUI();
@@ -5304,13 +5492,11 @@
                     return;
                 }
 
-                // --- move ---
                 if (data.type === 'move') {
                     executeMove(data.fromR, data.fromC, data.toR, data.toC, data.promotion, null, true);
                     return;
                 }
 
-                // --- ability ---
                 if (data.type === 'ability') {
                     const abilityName = data.abilityName || '普通攻擊 (Strike)';
                     const damage = data.damage || 40;
@@ -5335,7 +5521,6 @@
                     return;
                 }
 
-                // --- rematch ---
                 if (data.type === 'rematch') {
                     console.log('🔄 对手请求重开');
                     document.getElementById('gameOverOverlay').classList.add('hidden');
@@ -5344,7 +5529,6 @@
                     return;
                 }
 
-                // --- gameover ---
                 if (data.type === 'gameover') {
                     gameOverFlag = true;
                     stopTimer();
@@ -5355,7 +5539,6 @@
                     return;
                 }
 
-                // --- aim_start ---
                 if (data.type === 'aim_start') {
                     remoteAimFromR = data.fromR;
                     remoteAimFromC = data.fromC;
@@ -5382,7 +5565,6 @@
                     return;
                 }
 
-                // --- aim_move ---
                 if (data.type === 'aim_move') {
                     updateRemoteAimPosition(data.targetX, data.targetZ);
                     if (remoteAimTimer) {
@@ -5394,13 +5576,11 @@
                     return;
                 }
 
-                // --- aim_cancel ---
                 if (data.type === 'aim_cancel') {
                     hideRemoteAim();
                     return;
                 }
 
-                // --- aim_fire ---
                 if (data.type === 'aim_fire') {
                     const targets = data.targets || [];
                     playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || 50);
@@ -5565,7 +5745,6 @@
             resetTimers(roomSettings.timePerPlayer);
             initNewGame();
 
-            // 多人模式：通知对手同步重开
             if (currentMode === 'multiplayer' && peerConnection?.open) {
                 peerConnection.send({ type: 'rematch' });
             }
