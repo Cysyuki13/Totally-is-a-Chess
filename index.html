@@ -686,6 +686,143 @@
             background: #e74c3c;
         }
 
+        /* ============ Mobile cannon controls ============ */
+        #mobileCannonControls {
+            position: fixed;
+            inset: 0;
+            z-index: 250;
+            pointer-events: none;
+            display: none;
+        }
+
+        #mobileCannonControls.active {
+            display: block;
+        }
+
+        #joystickBase {
+            position: absolute;
+            bottom: 40px;
+            left: 30px;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(232, 197, 71, 0.18), rgba(232, 197, 71, 0.05));
+            border: 3px solid rgba(232, 197, 71, 0.55);
+            pointer-events: auto;
+            touch-action: none;
+            box-shadow: inset 0 0 40px rgba(232, 197, 71, 0.2),
+                0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        #joystickKnob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #f7e07a, #d8b22e);
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 30px rgba(232, 197, 71, 0.7),
+                inset 0 -4px 10px rgba(0, 0, 0, 0.25);
+            pointer-events: none;
+            will-change: transform;
+        }
+
+        #fireBtn {
+            position: absolute;
+            bottom: 50px;
+            right: 30px;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #ff7c70, #d63d2e);
+            color: white;
+            border: 4px solid rgba(255, 255, 255, 0.55);
+            pointer-events: auto;
+            touch-action: none;
+            cursor: pointer;
+            box-shadow: 0 0 40px rgba(231, 76, 60, 0.75),
+                inset 0 -5px 14px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            font-family: inherit;
+            font-weight: 900;
+            transition: transform 0.08s ease, box-shadow 0.15s ease;
+        }
+
+        #fireBtn:active,
+        #fireBtn.pressed {
+            transform: scale(0.93);
+            box-shadow: 0 0 70px rgba(231, 76, 60, 1);
+        }
+
+        #cancelCannonBtn {
+            position: absolute;
+            top: 70px;
+            right: 20px;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.65);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            font-size: 1.4rem;
+            font-weight: 900;
+            pointer-events: auto;
+            touch-action: none;
+            cursor: pointer;
+            font-family: inherit;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #cancelCannonBtn:active {
+            transform: scale(0.92);
+        }
+
+        /* Small landscape phones — shrink a bit */
+        @media (max-height: 500px) {
+            #joystickBase {
+                width: 120px;
+                height: 120px;
+                bottom: 20px;
+                left: 20px;
+            }
+
+            #joystickKnob {
+                width: 52px;
+                height: 52px;
+            }
+
+            #fireBtn {
+                width: 100px;
+                height: 100px;
+                bottom: 20px;
+                right: 20px;
+            }
+
+            #fireBtn span:first-child {
+                font-size: 1.5rem;
+            }
+
+            #fireBtn span:last-child {
+                font-size: 0.7rem;
+            }
+
+            #cancelCannonBtn {
+                width: 44px;
+                height: 44px;
+                font-size: 1.1rem;
+                top: 55px;
+            }
+        }
+
         @media (max-width: 768px) {
             .game-top-bar {
                 padding: 6px 10px;
@@ -813,6 +950,18 @@
 
     <div class="remote-aim-indicator" id="remoteAimIndicator"></div>
     <div class="remote-aim-line" id="remoteAimLine"></div>
+
+    <!-- Mobile-only cannon controls -->
+    <div id="mobileCannonControls">
+        <div id="joystickBase">
+            <div id="joystickKnob"></div>
+        </div>
+        <button id="cancelCannonBtn" aria-label="取消">✕</button>
+        <button id="fireBtn" aria-label="發射">
+            <span style="font-size:2rem;">🔥</span>
+            <span style="font-size:0.85rem;letter-spacing:1px;">發射</span>
+        </button>
+    </div>
 
     <!-- 主選單 -->
     <div class="overlay" id="mainMenu" style="inset:0;">
@@ -1027,6 +1176,25 @@
         const DRAG_THRESHOLD = 6;
         const TARGET_RADIUS = 0.7;
         const PIECE_VALUES = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 20000 };
+
+        // ============================================================
+        //  MOBILE DETECTION + JOYSTICK STATE
+        // ============================================================
+        const IS_MOBILE = ('ontouchstart' in window) &&
+            window.matchMedia('(pointer: coarse)').matches;
+
+        let joystickState = {
+            active: false,
+            touchId: null,
+            baseCenterX: 0,
+            baseCenterY: 0,
+            knobOffsetX: 0,
+            knobOffsetY: 0,
+            baseRadius: 55,          // max knob travel radius in px
+            moveSpeed: 4.5,          // world units per second at full tilt
+        };
+        let joystickSetup = false;
+        let lastFrameTime = 0;
 
         // ============================================================
         //  CHESS GAME CLASS
@@ -1433,7 +1601,7 @@
         const ABILITIES = {
             pawn: {
                 name: '冲锋爆炸',
-                damage: 50,
+                damage: 25,
                 selfDamage: 50,
                 getTargets: (game, r, c) => {
                     const piece = game.getPiece(r, c);
@@ -1462,7 +1630,7 @@
             },
             rook: {
                 name: '加農炮 (Cannon)',
-                damage: 50,
+                damage: 20,
                 getTargets: (game, r, c) => {
                     let targets = [];
                     for (let i = 0; i < 8; i++) {
@@ -3178,13 +3346,187 @@
             }
         }
 
+        // ============================================================
+        //  MOBILE JOYSTICK
+        // ============================================================
+        function setupMobileCannonControls() {
+            if (joystickSetup) return;
+            joystickSetup = true;
+
+            const base = document.getElementById('joystickBase');
+            const knob = document.getElementById('joystickKnob');
+            const fireBtn = document.getElementById('fireBtn');
+            const cancelBtn = document.getElementById('cancelCannonBtn');
+            if (!base || !knob || !fireBtn || !cancelBtn) return;
+
+            // ---------- joystick ----------
+            const onStart = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const touch = e.changedTouches ? e.changedTouches[0] : e;
+                const rect = base.getBoundingClientRect();
+                joystickState.active = true;
+                joystickState.touchId = touch.identifier !== undefined ? touch.identifier : null;
+                joystickState.baseCenterX = rect.left + rect.width / 2;
+                joystickState.baseCenterY = rect.top + rect.height / 2;
+                updateKnob(touch.clientX, touch.clientY);
+            };
+
+            const onMove = (e) => {
+                if (!joystickState.active) return;
+                e.preventDefault();
+                e.stopPropagation();
+                let touch = null;
+                if (e.changedTouches) {
+                    for (const t of e.changedTouches) {
+                        if (joystickState.touchId === null || t.identifier === joystickState.touchId) {
+                            touch = t; break;
+                        }
+                    }
+                } else {
+                    touch = e;
+                }
+                if (touch) updateKnob(touch.clientX, touch.clientY);
+            };
+
+            const onEnd = (e) => {
+                if (!joystickState.active) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.changedTouches && joystickState.touchId !== null) {
+                    let ended = false;
+                    for (const t of e.changedTouches) {
+                        if (t.identifier === joystickState.touchId) { ended = true; break; }
+                    }
+                    if (!ended) return;
+                }
+                resetJoystick();
+            };
+
+            base.addEventListener('touchstart', onStart, { passive: false });
+            base.addEventListener('touchmove', onMove, { passive: false });
+            base.addEventListener('touchend', onEnd, { passive: false });
+            base.addEventListener('touchcancel', onEnd, { passive: false });
+
+            // ---------- fire button ----------
+            const doFire = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                fireBtn.classList.add('pressed');
+                setTimeout(() => fireBtn.classList.remove('pressed'), 120);
+                if (isAiming) fireAimedCannon();
+            };
+            fireBtn.addEventListener('touchstart', doFire, { passive: false });
+            fireBtn.addEventListener('click', doFire);
+
+            // ---------- cancel button ----------
+            const doCancel = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                cancelAiming();
+            };
+            cancelBtn.addEventListener('touchstart', doCancel, { passive: false });
+            cancelBtn.addEventListener('click', doCancel);
+        }
+
+        function updateKnob(clientX, clientY) {
+            const dx = clientX - joystickState.baseCenterX;
+            const dy = clientY - joystickState.baseCenterY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const maxR = joystickState.baseRadius;
+            let nx = dx, ny = dy;
+            if (dist > maxR && dist > 0) {
+                nx = (dx / dist) * maxR;
+                ny = (dy / dist) * maxR;
+            }
+            joystickState.knobOffsetX = nx;
+            joystickState.knobOffsetY = ny;
+            const knob = document.getElementById('joystickKnob');
+            if (knob) {
+                knob.style.transform =
+                    `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+            }
+        }
+
+        function resetJoystick() {
+            joystickState.active = false;
+            joystickState.touchId = null;
+            joystickState.knobOffsetX = 0;
+            joystickState.knobOffsetY = 0;
+            const knob = document.getElementById('joystickKnob');
+            if (knob) knob.style.transform = 'translate(-50%, -50%)';
+        }
+
+        function updateJoystickAim(dt) {
+            if (!IS_MOBILE || !isAiming || !joystickState.active) return;
+
+            const maxR = joystickState.baseRadius;
+            const nx = joystickState.knobOffsetX / maxR;
+            const ny = joystickState.knobOffsetY / maxR;
+
+            // deadzone
+            if (Math.abs(nx) < 0.06 && Math.abs(ny) < 0.06) return;
+
+            // Camera-relative movement so it feels correct at any camera angle.
+            const camForward = new THREE.Vector3();
+            camera.getWorldDirection(camForward);
+            camForward.y = 0;
+            if (camForward.lengthSq() < 0.0001) camForward.set(0, 0, -1);
+            camForward.normalize();
+
+            const camRight = new THREE.Vector3();
+            camRight.crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize();
+
+            // ny positive = joystick DOWN = move BACKWARD (against camForward)
+            const moveDir = camRight.clone().multiplyScalar(nx)
+                .add(camForward.clone().multiplyScalar(-ny));
+
+            if (!aimWorldPos) aimWorldPos = new THREE.Vector3(0, 0.05, 0);
+            aimWorldPos.addScaledVector(moveDir, joystickState.moveSpeed * dt);
+            aimWorldPos.x = Math.max(-4.5, Math.min(4.5, aimWorldPos.x));
+            aimWorldPos.z = Math.max(-4.5, Math.min(4.5, aimWorldPos.z));
+            aimWorldPos.y = 0.05;
+
+            updateAimTarget(aimWorldPos);
+
+            // Sync reticle with peer (throttled)
+            if (currentMode === 'multiplayer' && peerConnection?.open) {
+                const now = Date.now();
+                if (!aimMoveThrottleTimer || now - aimMoveThrottleTimer > AIM_SEND_THROTTLE) {
+                    peerConnection.send({
+                        type: 'aim_move',
+                        targetX: aimWorldPos.x,
+                        targetZ: aimWorldPos.z
+                    });
+                    aimMoveThrottleTimer = now;
+                }
+            }
+        }
+
         function enterAimingMode() {
             isAiming = true;
-            document.getElementById('aimHint').classList.add('visible');
             clearHighlights();
             createGhostLine();
             document.getElementById('actionBar').classList.remove('visible');
             document.getElementById('actionBar').style.display = 'none';
+
+            if (IS_MOBILE) {
+                // --- Mobile: joystick mode ---
+                document.getElementById('aimHint').classList.remove('visible');
+                document.getElementById('mobileCannonControls').classList.add('active');
+                setupMobileCannonControls();
+                resetJoystick();
+                // Center the reticle on the board each time we enter aiming mode
+                aimWorldPos = new THREE.Vector3(0, 0.05, 0);
+                updateAimTarget(aimWorldPos);
+            } else {
+                // --- Desktop: mouse aim mode ---
+                document.getElementById('aimHint').classList.add('visible');
+                if (!aimWorldPos) {
+                    aimWorldPos = new THREE.Vector3(0, 0.05, 0);
+                }
+                updateAimTarget(aimWorldPos);
+            }
 
             if (currentMode === 'multiplayer' && peerConnection?.open && selectedPiece) {
                 peerConnection.send({
@@ -3193,11 +3535,6 @@
                     fromC: selectedPiece.col
                 });
             }
-
-            if (!aimWorldPos) {
-                aimWorldPos = new THREE.Vector3(0, 0.05, 0);
-            }
-            updateAimTarget(aimWorldPos);
         }
 
         function cancelAiming() {
@@ -3208,6 +3545,8 @@
             }
             isAiming = false;
             document.getElementById('aimHint').classList.remove('visible');
+            document.getElementById('mobileCannonControls').classList.remove('active');
+            resetJoystick();
             clearGhostLine();
             aimTargetPiece = null;
             aimValid = false;
@@ -4451,6 +4790,7 @@
                 const dx = e.touches[0].clientX - dragStartX;
                 const dy = e.touches[0].clientY - dragStartY;
                 if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) dragMoved = true;
+
                 if (dragMoved && isFreeCameraActive) {
                     e.preventDefault();
                     cameraTheta -= dx * 0.008;
@@ -4458,7 +4798,8 @@
                     cameraPhi = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, cameraPhi));
                     dragStartX = e.touches[0].clientX;
                     dragStartY = e.touches[0].clientY;
-                } else if (isAiming) {
+                } else if (isAiming && !IS_MOBILE) {
+                    // Only the desktop/touch-hybrid path uses finger-drag aiming.
                     e.preventDefault();
                     const aimData = getFreeAimPosition(e.touches[0].clientX, e.touches[0].clientY);
                     if (aimData) {
@@ -4493,7 +4834,8 @@
             if (!dragMoved && e.changedTouches.length > 0) {
                 const touch = e.changedTouches[0];
                 if (isAiming) {
-                    if (aimValid) fireAimedCannon();
+                    // On mobile, firing is ONLY done through the fire button.
+                    if (!IS_MOBILE && aimValid) fireAimedCannon();
                 } else {
                     processInput(touch.clientX, touch.clientY);
                 }
@@ -4505,6 +4847,13 @@
         // ============================================================
         function animate() {
             requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const dt = lastFrameTime ? Math.min((now - lastFrameTime) / 1000, 0.05) : 0.016;
+            lastFrameTime = now;
+
+            // Mobile joystick → drive the cannon reticle
+            if (IS_MOBILE) updateJoystickAim(dt);
 
             if (isFreeCameraActive) {
                 const x = cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
@@ -5233,6 +5582,9 @@
         window.onload = () => {
             initThree();
             hideRemoteAim();
+            if (IS_MOBILE) {
+                setupMobileCannonControls();
+            }
         };
     </script>
 </body>
