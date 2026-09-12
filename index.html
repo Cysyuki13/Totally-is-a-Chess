@@ -821,8 +821,7 @@
             <p style="opacity:0.7;margin-bottom:20px;">特色：你猜</p>
             <div class="btn-row">
                 <button class="btn" onclick="showAIDifficulty()">🤖 單人遊戲</button>
-                <!-- 修改：雙人遊戲按鈕 → 顯示「即將推出」提示 -->
-                <button class="btn" onclick="showComingSoon()">👥 雙人遊戲 (即將推出)</button>
+                <button class="btn" onclick="showMultiplayerSetup()">👥 雙人遊戲</button>
             </div>
         </div>
     </div>
@@ -841,22 +840,12 @@
         </div>
     </div>
 
-    <!-- 新增：即將推出提示 -->
-    <div class="overlay hidden" id="comingSoonOverlay" style="inset:0;">
-        <div class="panel">
-            <h2>🚀 即將推出</h2>
-            <p style="font-size:1.2rem;margin:20px 0;">多人模式正在開發中，敬請期待！</p>
-            <button class="btn"
-                onclick="document.getElementById('comingSoonOverlay').classList.add('hidden')">知道了</button>
-        </div>
-    </div>
-
-    <!-- 雙人連線選單（保留但不開放入口） -->
+    <!-- 雙人連線選單 -->
     <div class="overlay hidden" id="multiplayerMenu" style="inset:0;">
         <div class="panel">
             <h2>雙人連線對戰</h2>
             <p>透過 PeerJS 連線，輸入4位數房號進行配對</p>
-            <p style="font-size:0.85rem;opacity:0.6;margin-bottom:12px;">⚠️ 請確保雙方都在同一網路環境，或使用公共信令服務</p>
+            <p style="font-size:0.85rem;opacity:0.6;margin-bottom:12px;">⚠️ 房主請先「創建房間」，將房號告知對手後由對手「加入房間」</p>
             <div class="btn-row">
                 <button class="btn" onclick="showRoomSettings()">🏠 創建房間</button>
             </div>
@@ -4541,26 +4530,19 @@
             document.getElementById('aiDifficultyMenu').classList.remove('hidden');
         }
 
-        // 修改：双人游戏 → 显示"即将推出"提示
-        function showComingSoon() {
-            document.getElementById('comingSoonOverlay').classList.remove('hidden');
-        }
-
-        // 保留原函数以备未来恢复
         function showMultiplayerSetup() {
-            // 原逻辑已屏蔽，改用 showComingSoon
-            showComingSoon();
+            document.getElementById('mainMenu').classList.add('hidden');
+            document.getElementById('aiDifficultyMenu').classList.add('hidden');
+            document.getElementById('multiplayerMenu').classList.remove('hidden');
+            document.getElementById('multiplayerStatus').textContent = '';
+            document.getElementById('roomCodeInput').value = '';
         }
 
         function backToMenu() {
             stopTimer();
-            if (peer) peer.destroy();
+            destroyPeer();
             hideRemoteAim();
             settingsReceived = false;
-            if (settingsTimeout) {
-                clearTimeout(settingsTimeout);
-                settingsTimeout = null;
-            }
             myReady = false;
             opponentReady = false;
             gameStarted = false;
@@ -4629,7 +4611,63 @@
         }
 
         // ============================================================
-        //  PEERJS CONNECTION (FIXED)
+        //  PEERJS HELPERS
+        // ============================================================
+        const ICE_SERVERS = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        };
+
+        const PEER_ID_PREFIX = 'chess-totally-';
+
+        function destroyPeer() {
+            if (peerConnection) {
+                try { peerConnection.close(); } catch (e) { console.warn(e); }
+                peerConnection = null;
+            }
+            if (peer) {
+                try { peer.destroy(); } catch (e) { console.warn(e); }
+                peer = null;
+            }
+            if (settingsTimeout) {
+                clearTimeout(settingsTimeout);
+                settingsTimeout = null;
+            }
+        }
+
+        function sendSettingsToPeer() {
+            if (!peerConnection?.open) return;
+            peerConnection.send({
+                type: 'settings',
+                settings: {
+                    gameMode: roomSettings.gameMode,
+                    abilityPermissions: roomSettings.abilityPermissions,
+                    timePerPlayer: roomSettings.timePerPlayer
+                }
+            });
+            console.log('📤 已发送房间设定:', roomSettings);
+        }
+
+        function handleDisconnect() {
+            if (gameOverFlag) return;
+            const waitingStatusEl = document.getElementById('waitingStatus');
+            if (waitingStatusEl) waitingStatusEl.textContent = '⚠️ 对手已断开连线';
+
+            if (gameStarted) {
+                gameOverFlag = true;
+                stopTimer();
+                document.getElementById('gameOverOverlay').classList.remove('hidden');
+                document.getElementById('gameOverReason').textContent = '对手断线';
+                document.getElementById('gameOverText').textContent = '你赢了!';
+                document.getElementById('gameOverText').className = 'game-over-text win';
+            }
+        }
+
+        // ============================================================
+        //  PEERJS — HOST (CREATE ROOM)
         // ============================================================
         function createRoomWithSettings() {
             roomSettings.abilityPermissions.white = document.getElementById('abilityWhite').checked;
@@ -4641,57 +4679,81 @@
             myReady = false;
             opponentReady = false;
             gameStarted = false;
-
             settingsReceived = true;
+
+            destroyPeer();
 
             document.getElementById('roomSettings').classList.add('hidden');
             document.getElementById('waitingCodeDisplay').textContent = roomCode;
             document.getElementById('waitingOverlay').classList.remove('hidden');
+            document.getElementById('waitingStatus').textContent = '⏳ 正在初始化连线...';
             updateReadyUI();
 
-            // 使用 0.peerjs.com 免费信令服务（1.3.2 版本无需 API Key）
-            peer = new Peer('chess-' + roomCode, {
+            const hostId = PEER_ID_PREFIX + roomCode;
+
+            peer = new Peer(hostId, {
                 debug: 2,
-                host: '0.peerjs.com',
-                port: 443,
-                secure: true
+                config: ICE_SERVERS
             });
 
             peer.on('open', (id) => {
-                console.log('🏠 房间已创建，Peer ID:', id);
+                console.log('🏠 房主已上线，Peer ID:', id);
                 document.getElementById('waitingStatus').textContent = '⏳ 等待对手加入...';
-                peer.on('connection', (conn) => {
-                    console.log('👥 对手已连接！');
-                    peerConnection = conn;
-                    currentMode = 'multiplayer';
-                    setupPeerConnection();
-                    setTimeout(() => {
-                        if (peerConnection?.open) {
-                            peerConnection.send({
-                                type: 'settings',
-                                settings: {
-                                    gameMode: roomSettings.gameMode,
-                                    abilityPermissions: roomSettings.abilityPermissions,
-                                    timePerPlayer: roomSettings.timePerPlayer
-                                }
-                            });
-                        }
-                    }, 300);
-                    updateReadyUI();
-                    setTimeout(updateReadyUI, 100);
-                    document.getElementById('topBar').classList.remove('hidden');
-                });
+            });
+
+            peer.on('connection', (conn) => {
+                console.log('👥 对手已连接！Connection ID:', conn.peer);
+
+                if (peerConnection && peerConnection.open) {
+                    console.warn('⚠️ 已有连接，拒绝新连线');
+                    conn.close();
+                    return;
+                }
+
+                peerConnection = conn;
+                currentMode = 'multiplayer';
+                setupPeerConnection();
+
+                if (conn.open) {
+                    sendSettingsToPeer();
+                } else {
+                    conn.on('open', () => {
+                        console.log('🔗 连接已打开，发送房间设定');
+                        sendSettingsToPeer();
+                    });
+                }
+
+                updateReadyUI();
+                document.getElementById('topBar').classList.remove('hidden');
             });
 
             peer.on('error', (err) => {
                 console.error('❌ Peer 错误:', err);
-                document.getElementById('waitingStatus').textContent = '⚠️ 创建房间失败：' + err.type;
+                let msg = '⚠️ 创建房间失败：' + (err.type || err.message);
+                if (err.type === 'unavailable-id') {
+                    msg = '⚠️ 房号冲突，请重新尝试';
+                } else if (err.type === 'network') {
+                    msg = '⚠️ 网络错误，请检查连线';
+                }
+                document.getElementById('waitingStatus').textContent = msg;
+            });
+
+            peer.on('disconnected', () => {
+                console.log('⚠️ Peer 与信令伺服器断开，尝试重连...');
+                setTimeout(() => {
+                    if (peer && !peer.destroyed) {
+                        try { peer.reconnect(); } catch (e) { console.warn(e); }
+                    }
+                }, 1000);
             });
         }
 
+        // ============================================================
+        //  PEERJS — CLIENT (JOIN ROOM)
+        // ============================================================
         function joinRoom() {
-            const code = document.getElementById('roomCodeInput').value;
-            if (code.length !== 4) {
+            const code = document.getElementById('roomCodeInput').value.trim();
+            if (!/^\d{4}$/.test(code)) {
                 document.getElementById('multiplayerStatus').textContent = '⚠️ 请输入完整的4位房号';
                 return;
             }
@@ -4701,58 +4763,100 @@
             myReady = false;
             opponentReady = false;
             gameStarted = false;
-            document.getElementById('multiplayerStatus').textContent = '⏳ 正在连接...';
+            settingsReceived = false;
+            document.getElementById('multiplayerStatus').textContent = '⏳ 正在初始化连线...';
 
-            // 使用 0.peerjs.com 免费信令服务（1.3.2 版本无需 API Key）
-            peer = new Peer(undefined, {
+            destroyPeer();
+
+            peer = new Peer({
                 debug: 2,
-                host: '0.peerjs.com',
-                port: 443,
-                secure: true
+                config: ICE_SERVERS
             });
 
             peer.on('open', (id) => {
-                console.log('🔗 客户端 Peer ID:', id);
-                const targetId = 'chess-' + code;
-                document.getElementById('multiplayerStatus').textContent = '🔄 正在连接到 ' + targetId + ' ...';
-                const conn = peer.connect(targetId);
+                console.log('🔗 客户端已上线，本地 Peer ID:', id);
+                const targetId = PEER_ID_PREFIX + code;
+                document.getElementById('multiplayerStatus').textContent = '🔄 正在连接到房号 ' + code + ' ...';
+
+                const conn = peer.connect(targetId, { reliable: true });
                 if (!conn) {
-                    document.getElementById('multiplayerStatus').textContent = '⚠️ 无法连接，请确认房号是否正确';
+                    document.getElementById('multiplayerStatus').textContent = '⚠️ 无法建立连接，请确认房号';
                     return;
                 }
                 peerConnection = conn;
                 setupPeerConnection();
-                document.getElementById('multiplayerStatus').textContent = '✅ 连接成功！';
 
-                document.getElementById('waitingCodeDisplay').textContent = code;
-                document.getElementById('waitingOverlay').classList.remove('hidden');
-                document.getElementById('topBar').classList.remove('hidden');
-                updateReadyUI();
+                conn.on('open', () => {
+                    console.log('✅ 与房主连接成功！');
+                    document.getElementById('multiplayerStatus').textContent = '✅ 连接成功！等待房间设定...';
+                    document.getElementById('waitingCodeDisplay').textContent = code;
+                    document.getElementById('waitingOverlay').classList.remove('hidden');
+                    document.getElementById('topBar').classList.remove('hidden');
+                    updateReadyUI();
 
-                // 设置超时：如果 15 秒内没有收到 settings，提示用户
+                    // 客户端在连接建立后立即发送 hello 握手信号
+                    setTimeout(() => {
+                        if (peerConnection?.open) {
+                            peerConnection.send({ type: 'hello', color: playerColor });
+                        }
+                    }, 100);
+                });
+
+                conn.on('close', () => {
+                    console.log('🔌 与房主的连接已关闭');
+                    handleDisconnect();
+                });
+
+                // 超时保护
+                if (settingsTimeout) clearTimeout(settingsTimeout);
                 settingsTimeout = setTimeout(() => {
-                    if (!settingsReceived) {
-                        document.getElementById('waitingStatus').textContent = '⚠️ 等待房间设定超时，请确认房主已创建房间';
+                    if (!settingsReceived && !gameStarted) {
+                        document.getElementById('waitingStatus').textContent = '⚠️ 等待房间设定超时，请确认房主仍在等待';
                     }
                 }, 15000);
             });
 
             peer.on('error', (err) => {
                 console.error('❌ 连接错误:', err);
-                let msg = '⚠️ 连接失败: ' + err.type;
+                let msg = '⚠️ 连接失败: ' + (err.type || err.message);
                 if (err.type === 'peer-unavailable') {
                     msg = '⚠️ 找不到该房号，请确认对方已创建房间';
+                } else if (err.type === 'network') {
+                    msg = '⚠️ 网络错误，请检查连线';
                 }
                 document.getElementById('multiplayerStatus').textContent = msg;
                 setTimeout(() => {
                     document.getElementById('multiplayerStatus').textContent = '请输入房号重新加入';
                 }, 3000);
             });
+
+            peer.on('disconnected', () => {
+                setTimeout(() => {
+                    if (peer && !peer.destroyed) {
+                        try { peer.reconnect(); } catch (e) { console.warn(e); }
+                    }
+                }, 1000);
+            });
         }
 
+        // ============================================================
+        //  PEERJS — DATA CHANNEL HANDLER (shared)
+        // ============================================================
         function setupPeerConnection() {
             peerConnection.on('data', (data) => {
-                // --- 处理 settings ---
+                console.log('📩 收到消息:', data.type, data);
+
+                // --- hello handshake (host receives) ---
+                if (data.type === 'hello') {
+                    console.log('👋 客户端握手:', data.color);
+                    if (isHost) {
+                        // 房主重发一次 settings，防止客户端漏收
+                        sendSettingsToPeer();
+                    }
+                    return;
+                }
+
+                // --- settings ---
                 if (data.type === 'settings') {
                     if (settingsTimeout) {
                         clearTimeout(settingsTimeout);
@@ -4793,7 +4897,7 @@
                     return;
                 }
 
-                // --- 处理 ready ---
+                // --- ready ---
                 if (data.type === 'ready') {
                     opponentReady = true;
                     updateReadyUI();
@@ -4801,13 +4905,13 @@
                     return;
                 }
 
-                // --- 处理 move ---
+                // --- move ---
                 if (data.type === 'move') {
                     executeMove(data.fromR, data.fromC, data.toR, data.toC, data.promotion, null, true);
                     return;
                 }
 
-                // --- 处理 ability ---
+                // --- ability ---
                 if (data.type === 'ability') {
                     const abilityName = data.abilityName || '普通攻擊 (Strike)';
                     const damage = data.damage || 40;
@@ -4817,11 +4921,7 @@
                     const fromC = data.fromC;
 
                     if (abilityName === '冲锋爆炸' && targets.length > 0) {
-                        const ability = {
-                            name: abilityName,
-                            damage: damage,
-                            selfDamage: selfDamage
-                        };
+                        const ability = { name: abilityName, damage, selfDamage };
                         const firstTarget = targets[0];
                         if (firstTarget) {
                             executePawnAbility(fromR, fromC, firstTarget.r, firstTarget.c, ability, true);
@@ -4829,19 +4929,23 @@
                         return;
                     }
 
-                    const ability = {
-                        name: abilityName,
-                        damage: damage,
-                        selfDamage: selfDamage || 0
-                    };
-
+                    const ability = { name: abilityName, damage, selfDamage: selfDamage || 0 };
                     for (const t of targets) {
                         attemptAbility(fromR, fromC, t.r, t.c, ability, true);
                     }
                     return;
                 }
 
-                // --- 处理 gameover ---
+                // --- rematch ---
+                if (data.type === 'rematch') {
+                    console.log('🔄 对手请求重开');
+                    document.getElementById('gameOverOverlay').classList.add('hidden');
+                    resetTimers(roomSettings.timePerPlayer);
+                    initNewGame();
+                    return;
+                }
+
+                // --- gameover ---
                 if (data.type === 'gameover') {
                     gameOverFlag = true;
                     stopTimer();
@@ -4852,7 +4956,7 @@
                     return;
                 }
 
-                // --- 处理 aim_start ---
+                // --- aim_start ---
                 if (data.type === 'aim_start') {
                     remoteAimFromR = data.fromR;
                     remoteAimFromC = data.fromC;
@@ -4879,7 +4983,7 @@
                     return;
                 }
 
-                // --- 处理 aim_move ---
+                // --- aim_move ---
                 if (data.type === 'aim_move') {
                     updateRemoteAimPosition(data.targetX, data.targetZ);
                     if (remoteAimTimer) {
@@ -4891,13 +4995,13 @@
                     return;
                 }
 
-                // --- 处理 aim_cancel ---
+                // --- aim_cancel ---
                 if (data.type === 'aim_cancel') {
                     hideRemoteAim();
                     return;
                 }
 
-                // --- 处理 aim_fire ---
+                // --- aim_fire ---
                 if (data.type === 'aim_fire') {
                     const targets = data.targets || [];
                     playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || 50);
@@ -4907,16 +5011,19 @@
 
             peerConnection.on('close', () => {
                 console.log('🔌 连接已关闭');
-                if (!gameOverFlag) {
-                    document.getElementById('waitingStatus').textContent = '⚠️ 连接已断开';
-                }
+                handleDisconnect();
+            });
+
+            peerConnection.on('error', (err) => {
+                console.error('❌ 数据通道错误:', err);
             });
         }
 
         function cancelWaiting() {
-            if (peer) peer.destroy();
+            destroyPeer();
             myReady = false;
             opponentReady = false;
+            gameStarted = false;
             document.getElementById('waitingOverlay').classList.add('hidden');
             document.getElementById('multiplayerMenu').classList.remove('hidden');
         }
@@ -4994,7 +5101,7 @@
                         if (!gameState || gameOverFlag) {
                             initNewGame();
                         } else {
-                            restartGame();
+                            initNewGame();
                         }
                     }
                 }, 300);
@@ -5058,6 +5165,11 @@
             document.getElementById('gameOverOverlay').classList.add('hidden');
             resetTimers(roomSettings.timePerPlayer);
             initNewGame();
+
+            // 多人模式：通知对手同步重开
+            if (currentMode === 'multiplayer' && peerConnection?.open) {
+                peerConnection.send({ type: 'rematch' });
+            }
         }
 
         function initNewGame() {
