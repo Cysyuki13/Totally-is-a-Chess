@@ -4332,6 +4332,7 @@
 
         function updateJoystickAim(dt) {
             if (!IS_MOBILE || !isAiming || !joystickState.active) return;
+            if (!selectedPiece) return;
 
             const maxR = joystickState.baseRadius;
             const nx = joystickState.knobOffsetX / maxR;
@@ -4353,8 +4354,22 @@
 
             if (!aimWorldPos) aimWorldPos = new THREE.Vector3(0, 0.05, 0);
             aimWorldPos.addScaledVector(moveDir, joystickState.moveSpeed * dt);
+
+            // 棋盤邊界
             aimWorldPos.x = Math.max(-4.5, Math.min(4.5, aimWorldPos.x));
             aimWorldPos.z = Math.max(-4.5, Math.min(4.5, aimWorldPos.z));
+
+            // ★ 射程限制：把準星夾在加農炮的紅色圓圈內（不讓準星離開圓圈）
+            const casterPos = get3DPosition(selectedPiece.row, selectedPiece.col, 0);
+            const dx = aimWorldPos.x - casterPos.x;
+            const dz = aimWorldPos.z - casterPos.z;
+            const distSq = dx * dx + dz * dz;
+            if (distSq > CANNON_RANGE * CANNON_RANGE) {
+                const d = Math.sqrt(distSq);
+                const k = CANNON_RANGE / d;      // 縮回圓周上
+                aimWorldPos.x = casterPos.x + dx * k;
+                aimWorldPos.z = casterPos.z + dz * k;
+            }
             aimWorldPos.y = 0.05;
 
             updateAimTarget(aimWorldPos);
@@ -4384,12 +4399,29 @@
                 document.getElementById('mobileCannonControls').classList.add('active');
                 setupMobileCannonControls();
                 resetJoystick();
-                aimWorldPos = new THREE.Vector3(0, 0.05, 0);
+
+                // ★ 準星從加農炮自己的位置開始（保證在圓圈內）
+                const casterPos = get3DPosition(selectedPiece.row, selectedPiece.col, 0);
+                aimWorldPos = new THREE.Vector3(casterPos.x, 0.05, casterPos.z);
                 updateAimTarget(aimWorldPos);
             } else {
-                document.getElementById('aimHint').classList.add('visible');
+                document.getElementById('aimHint').classList.remove('visible');
+
+                // 桌面：把滑鼠瞄準位置也夾在圓圈內（避免第一次瞄準在圓外）
                 if (!aimWorldPos) {
-                    aimWorldPos = new THREE.Vector3(0, 0.05, 0);
+                    const casterPos = get3DPosition(selectedPiece.row, selectedPiece.col, 0);
+                    aimWorldPos = new THREE.Vector3(casterPos.x, 0.05, casterPos.z);
+                } else {
+                    const casterPos = get3DPosition(selectedPiece.row, selectedPiece.col, 0);
+                    const dx = aimWorldPos.x - casterPos.x;
+                    const dz = aimWorldPos.z - casterPos.z;
+                    const d = Math.hypot(dx, dz);
+                    if (d > CANNON_RANGE) {
+                        const k = CANNON_RANGE / d;
+                        aimWorldPos.x = casterPos.x + dx * k;
+                        aimWorldPos.z = casterPos.z + dz * k;
+                        aimWorldPos.y = 0.05;
+                    }
                 }
                 updateAimTarget(aimWorldPos);
             }
