@@ -388,6 +388,8 @@
             cursor: pointer;
             border: 1px solid transparent;
             transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
         }
 
         .parts-list .part-tag:hover {
@@ -408,6 +410,19 @@
         }
 
         .parts-list .part-tag .del-part:hover {
+            opacity: 1;
+        }
+
+        /* ★ 複製部件按鈕 */
+        .parts-list .part-tag .clone-part {
+            margin-left: 6px;
+            color: #e8c547;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.15s;
+        }
+
+        .parts-list .part-tag .clone-part:hover {
             opacity: 1;
         }
 
@@ -1485,6 +1500,19 @@
                     tag.textContent = name;
                     tag.title = id;
                     const isCustom = mesh.userData.isCustom || false;
+
+                    // ★ 複製按鈕（所有部件都可以複製）
+                    const cloneBtn = document.createElement('span');
+                    cloneBtn.className = 'clone-part';
+                    cloneBtn.textContent = '📋';
+                    cloneBtn.title = '複製部件';
+                    cloneBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        clonePart(type, id);
+                    });
+                    tag.appendChild(cloneBtn);
+
+                    // 刪除按鈕（僅自定義部件）
                     if (isCustom) {
                         const del = document.createElement('span');
                         del.className = 'del-part';
@@ -1495,6 +1523,7 @@
                         });
                         tag.appendChild(del);
                     }
+
                     tag.addEventListener('click', () => {
                         selectPart(type, id);
                     });
@@ -1591,7 +1620,7 @@
         }
 
         // ============================================================
-        //  7. 添加/刪除部件
+        //  7. 添加/複製/刪除部件
         // ============================================================
         function addPartToPiece(type) {
             const select = document.getElementById(`addPartType_${type}`);
@@ -1646,6 +1675,119 @@
             showToast('✅ 已添加 ' + partData.name);
         }
 
+        // ------------------------------------------------------------
+        //  ★ 從既有 mesh 反推 geometry 參數，用於複製內建部件時
+        //    能正確序列化到 params.parts 中。
+        // ------------------------------------------------------------
+        function inferGeometryInfo(mesh) {
+            const geo = mesh.geometry;
+            if (!geo) return null;
+            const p = geo.parameters || {};
+            switch (geo.type) {
+                case 'BoxGeometry':
+                    return { type: 'box', geometryParams: { width: p.width, height: p.height, depth: p.depth } };
+                case 'SphereGeometry':
+                    return { type: 'sphere', geometryParams: { radius: p.radius } };
+                case 'CylinderGeometry':
+                    return {
+                        type: 'cylinder',
+                        geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height }
+                    };
+                case 'ConeGeometry':
+                    return { type: 'cone', geometryParams: { radius: p.radius, height: p.height } };
+                case 'TorusGeometry':
+                    return { type: 'torus', geometryParams: { radius: p.radius, tube: p.tube } };
+                default:
+                    return null;
+            }
+        }
+
+        // ------------------------------------------------------------
+        //  ★ 複製部件（複製品與原部件完全重合）
+        //  - 幾何體：共用來源 mesh 的 geometry（不重建、不浪費記憶體）
+        //  - 材質：複製一份，並清空高亮狀態，避免繼承來源的 emissive
+        //  - 變換：position / rotation / scale 完整複製（不偏移）
+        // ------------------------------------------------------------
+        function clonePart(type, partId) {
+            const params = currentParams[type];
+            const group = pieceGroups[type];
+            if (!group) {
+                showToast('⚠️ 找不到棋子');
+                return;
+            }
+
+            const sourceMesh = getPartMesh(type, partId);
+            if (!sourceMesh) {
+                showToast('⚠️ 找不到該部件');
+                return;
+            }
+
+            const newId = 'custom_' + (partIdCounter++);
+
+            // --- 1. 建立新 mesh ---
+            //  材質：複製一份，並清除高亮狀態
+            const newMaterial = sourceMesh.material
+                ? sourceMesh.material.clone()
+                : new THREE.MeshStandardMaterial({ color: params.color || '#f5f0e1' });
+            if (newMaterial.emissive) {
+                newMaterial.emissive.setHex(0x000000);
+                newMaterial.emissiveIntensity = 1;
+            }
+
+            const newMesh = new THREE.Mesh(sourceMesh.geometry, newMaterial);
+            // ★ 完整複製變換（與原部件完全重合，不偏移）
+            newMesh.position.copy(sourceMesh.position);
+            newMesh.rotation.copy(sourceMesh.rotation);
+            newMesh.scale.copy(sourceMesh.scale);
+            newMesh.castShadow = true;
+            newMesh.receiveShadow = true;
+            newMesh.userData.partKey = newId;
+            newMesh.userData.partName = (sourceMesh.userData.partName || '部件') + ' Copy';
+            newMesh.userData.isCustom = true;
+
+            group.add(newMesh);
+            group.userData.parts[newId] = newMesh;
+
+            // --- 2. 寫入 params.parts（匯出時才會保留） ---
+            if (!params.parts) params.parts = {};
+
+            const sourceData = params.parts[partId];
+            let newData;
+
+            if (sourceData && sourceData.type) {
+                // 來源是自定義部件 → 深拷貝
+                newData = JSON.parse(JSON.stringify(sourceData));
+            } else {
+                // 來源是內建部件 → 從 mesh 反推 geometry 參數
+                const geoInfo = inferGeometryInfo(sourceMesh);
+                if (!geoInfo) {
+                    showToast('⚠️ 此部件無法複製（幾何體無法辨識）');
+                    group.remove(newMesh);
+                    delete group.userData.parts[newId];
+                    return;
+                }
+                newData = {
+                    type: geoInfo.type,
+                    geometryParams: geoInfo.geometryParams,
+                    roughness: (sourceMesh.material && sourceMesh.material.roughness) ?? 0.5,
+                    metalness: (sourceMesh.material && sourceMesh.material.metalness) ?? 0.2,
+                };
+            }
+
+            // ★ 使用「來源 mesh 的實際數值」，確保複製品與原部件完全重合
+            newData.position = { x: sourceMesh.position.x, y: sourceMesh.position.y, z: sourceMesh.position.z };
+            newData.rotation = { x: sourceMesh.rotation.x, y: sourceMesh.rotation.y, z: sourceMesh.rotation.z };
+            newData.scale = { x: sourceMesh.scale.x, y: sourceMesh.scale.y, z: sourceMesh.scale.z };
+            newData.name = newMesh.userData.partName;
+
+            params.parts[newId] = newData;
+
+            // --- 3. UI 更新 ---
+            updatePartsListUI();
+            selectPart(type, newId);
+            const total = Object.keys(group.userData.parts).length;
+            showToast('📋 已複製 ' + (sourceMesh.userData.partName || '部件') + `（共 ${total} 個部件）`);
+        }
         function deletePart(type, partId) {
             if (!confirm('確定刪除該部件嗎？')) return;
             const mesh = getPartMesh(type, partId);
@@ -1830,6 +1972,21 @@
                 // 覆盖当前参数
                 currentParams = imported;
                 selectedPart = null;
+
+                // ★ 掃描匯入資料中所有 custom_XXXX，把 partIdCounter 推到最大 +1，避免撞名
+                partIdCounter = 1000;
+                for (const t of PIECE_TYPES) {
+                    const parts = imported[t] && imported[t].parts;
+                    if (!parts) continue;
+                    for (const id of Object.keys(parts)) {
+                        const m = /^custom_(\d+)$/.exec(id);
+                        if (m) {
+                            const n = parseInt(m[1], 10);
+                            if (n >= partIdCounter) partIdCounter = n + 1;
+                        }
+                    }
+                }
+
                 buildPanel();
                 rebuildAllPieces();
                 const first = document.querySelector('.accordion-item');
@@ -1882,6 +2039,7 @@
         window.arrangeInRow = arrangeInRow;
         window.randomizePositions = randomizePositions;
         window.addPartToPiece = addPartToPiece;
+        window.clonePart = clonePart;
         window.deletePart = deletePart;
         window.selectPart = selectPart;
         window.showToast = showToast;

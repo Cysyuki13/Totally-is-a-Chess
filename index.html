@@ -447,28 +447,39 @@
             min-width: 100px;
         }
 
-        #actionBar .btn-action-move {
+        /* ─────────────────────────────────────────────
+           ★ Toggle 按鈕樣式：未選中＝石板灰、選中＝金色
+           ───────────────────────────────────────────── */
+        #actionBar .btn-action-move,
+        #actionBar .btn-action-attack {
+            background: #3a3a5c;
+            color: var(--text);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        #actionBar .btn-action-move.active,
+        #actionBar .btn-action-attack.active {
             background: var(--gold);
             color: #1a1a2e;
+            box-shadow: 0 4px 15px rgba(232, 197, 71, 0.4);
         }
 
-        #actionBar .btn-action-move:hover:not(:disabled) {
+        #actionBar .btn-action-move.active:hover:not(:disabled),
+        #actionBar .btn-action-attack.active:hover:not(:disabled) {
             background: var(--btn-hover);
+            box-shadow: 0 8px 25px rgba(232, 197, 71, 0.5);
         }
 
-        #actionBar .btn-action-attack {
-            background: var(--danger);
-            color: white;
-        }
-
-        #actionBar .btn-action-attack:hover:not(:disabled) {
-            background: #ff6b5e;
+        #actionBar .btn-action-move:not(.active):hover:not(:disabled),
+        #actionBar .btn-action-attack:not(.active):hover:not(:disabled) {
+            background: #4a4a6c;
         }
 
         #actionBar .btn-action-attack:disabled {
-            background: #555;
-            color: #999;
-            opacity: 0.6;
+            background: #2a2a3a !important;
+            color: #666 !important;
+            opacity: 0.5;
             cursor: not-allowed;
             transform: none !important;
             box-shadow: none !important;
@@ -989,13 +1000,18 @@
     </div>
 
     <div id="actionBar">
-        <button class="btn btn-action-move" id="btnActionMove" onclick="setActionMode('move')">🚶 移動</button>
+        <button class="btn btn-action-move active" id="btnActionMove" onclick="setActionMode('move')">🚶 移動</button>
         <span class="action-label">|</span>
         <button class="btn btn-action-attack" id="btnActionAttack" onclick="setActionMode('attack')">⚔️ 特殊技能</button>
         <span id="noTargetTip" class="no-target-tip hidden">(無目標)</span>
     </div>
 
-    <div id="aimHint">🎯 移動滑鼠自由瞄準 · 點擊左鍵發射 · 右鍵取消</div>
+    <div id="aimHint">
+        🎯 移動滑鼠自由瞄準 · 點擊左鍵發射 · 右鍵取消<br>
+        <span style="opacity:0.75;font-size:0.85rem;">
+            🟢 命中棋子 · 🟠 射向空地 · 🔴 超出射程
+        </span>
+    </div>
 
     <div class="remote-aim-indicator" id="remoteAimIndicator"></div>
     <div class="remote-aim-line" id="remoteAimLine"></div>
@@ -1216,6 +1232,15 @@
         const TARGET_RADIUS = 0.7;
         const PIECE_VALUES = { pawn: 100, knight: 320, bishop: 330, rook: 500, queen: 900, king: 20000 };
 
+        // ────────────────────────────────────────────────────────────
+        //  ★ 加農炮射程限制（可調）
+        //  棋盤共 8 格 = 8 個世界單位，所以「棋盤長度的一半」= 4。
+        //  想改射程只要改這個數字即可：
+        //      CANNON_RANGE = 3   → 3 格（更短）
+        //      CANNON_RANGE = 5.6 → 幾乎全盤（對角線全開）
+        // ────────────────────────────────────────────────────────────
+        const CANNON_RANGE = 4;
+
         const IS_MOBILE = ('ontouchstart' in window) &&
             window.matchMedia('(pointer: coarse)').matches;
 
@@ -1231,6 +1256,9 @@
         };
         let joystickSetup = false;
         let lastFrameTime = 0;
+
+        // 加農炮射程圓圈的 3D 物件（全域保存以便隨時移除）
+        let cannonRangeGroup = null;
 
         // ============================================================
         //  CHESS GAME CLASS
@@ -1736,12 +1764,13 @@
             }
 
             if (piece.type === 'rook') {
+                // ★ 加農炮：只保留射程圓圈以內的目標
                 const targets = [];
                 for (let i = 0; i < 8; i++) {
                     for (let j = 0; j < 8; j++) {
                         if (i === r && j === c) continue;
                         const targetPiece = this.board[i][j];
-                        if (targetPiece) {
+                        if (targetPiece && isWithinCannonRange(r, c, i, j)) {
                             targets.push({ type: 'ability', fromR: r, fromC: c, r: i, c: j, ability: abilityDef });
                         }
                     }
@@ -1914,7 +1943,11 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": -4.2, "y": 0, "z": 0 }
+                "position": {
+                    "x": -4.2,
+                    "y": 0,
+                    "z": 0
+                }
             },
             "rook": {
                 "bodyRadius": 0.2,
@@ -1924,7 +1957,117 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": -2.52, "y": 0.02, "z": 0 }
+                "position": {
+                    "x": -2.52,
+                    "y": 0.02,
+                    "z": 0
+                },
+                "parts": {
+                    "custom_1002": {
+                        "type": "box",
+                        "geometryParams": {
+                            "width": 0.2,
+                            "height": 0.2,
+                            "depth": 0.2
+                        },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": {
+                            "x": -0.21,
+                            "y": 0.62,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 1.56,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 0.4
+                        },
+                        "name": "Box Copy Copy Copy"
+                    },
+                    "custom_1000": {
+                        "type": "box",
+                        "geometryParams": {
+                            "width": 0.2,
+                            "height": 0.2,
+                            "depth": 0.2
+                        },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": {
+                            "x": 0,
+                            "y": 0.62,
+                            "z": 0.21
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 0.4
+                        },
+                        "name": "Box Copy"
+                    },
+                    "custom_1001": {
+                        "type": "box",
+                        "geometryParams": {
+                            "width": 0.2,
+                            "height": 0.2,
+                            "depth": 0.2
+                        },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": {
+                            "x": 0.21,
+                            "y": 0.62,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 1.56,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 0.4
+                        },
+                        "name": "Box Copy Copy"
+                    },
+                    "custom_1003": {
+                        "type": "box",
+                        "geometryParams": {
+                            "width": 0.2,
+                            "height": 0.2,
+                            "depth": 0.2
+                        },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": {
+                            "x": 0,
+                            "y": 0.62,
+                            "z": -0.21
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 0.4
+                        },
+                        "name": "Box Copy Copy"
+                    }
+                }
             },
             "knight": {
                 "bodyRadius": 0.26,
@@ -1938,22 +2081,62 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": -0.84, "y": 0.02, "z": 0 },
+                "position": {
+                    "x": -0.84,
+                    "y": 0.02,
+                    "z": 0
+                },
                 "parts": {
                     "body": {
-                        "position": { "x": 0, "y": 0.21, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.5, "y": 1.02, "z": 0.84 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.21,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.5,
+                            "y": 1.02,
+                            "z": 0.84
+                        }
                     },
                     "neck": {
-                        "position": { "x": 0, "y": 0.54, "z": 0.13 },
-                        "rotation": { "x": 0.22, "y": 0, "z": 0 },
-                        "scale": { "x": 0.58, "y": 2.44, "z": 1.12 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.54,
+                            "z": 0.13
+                        },
+                        "rotation": {
+                            "x": 0.22,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.58,
+                            "y": 2.44,
+                            "z": 1.12
+                        }
                     },
                     "head": {
-                        "position": { "x": 0, "y": 0.76, "z": 0.25 },
-                        "rotation": { "x": -0.08, "y": 0, "z": 0 },
-                        "scale": { "x": 0.98, "y": 1.2, "z": 1.76 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.76,
+                            "z": 0.25
+                        },
+                        "rotation": {
+                            "x": -0.08,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.98,
+                            "y": 1.2,
+                            "z": 1.76
+                        }
                     }
                 }
             },
@@ -1964,26 +2147,69 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": 0.84, "y": 0.02, "z": 0 },
+                "position": {
+                    "x": 0.84,
+                    "y": 0.02,
+                    "z": 0
+                },
                 "parts": {
                     "body": {
-                        "position": { "x": 0, "y": 0.31, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.5, "y": 1.2, "z": 0.5 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.31,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.5,
+                            "y": 1.2,
+                            "z": 0.5
+                        }
                     },
                     "sphere": {
-                        "position": { "x": 0, "y": 0.93, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 1 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.93,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 1
+                        }
                     },
                     "custom_1000": {
                         "type": "torus",
-                        "geometryParams": { "radius": 0.15, "tube": 0.05 },
+                        "geometryParams": {
+                            "radius": 0.15,
+                            "tube": 0.05
+                        },
                         "roughness": 0.5,
                         "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.42, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1.08, "y": 2, "z": 1.2 },
+                        "position": {
+                            "x": 0,
+                            "y": 0.42,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1.08,
+                            "y": 2,
+                            "z": 1.2
+                        },
                         "name": "Torus"
                     }
                 }
@@ -1997,52 +2223,137 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": 2.52, "y": 0.03, "z": 0 },
+                "position": {
+                    "x": 2.52,
+                    "y": 0.03,
+                    "z": 0
+                },
                 "parts": {
                     "custom_1000": {
                         "type": "torus",
-                        "geometryParams": { "radius": 0.15, "tube": 0.05 },
+                        "geometryParams": {
+                            "radius": 0.15,
+                            "tube": 0.05
+                        },
                         "roughness": 0.5,
                         "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.57, "z": 0 },
-                        "rotation": { "x": -1.56, "y": 0, "z": 0 },
-                        "scale": { "x": 1.56, "y": 1.58, "z": 1.12 },
+                        "position": {
+                            "x": 0,
+                            "y": 0.57,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": -1.56,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1.56,
+                            "y": 1.58,
+                            "z": 1.12
+                        },
                         "name": "Torus"
                     },
                     "custom_1001": {
                         "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
+                        "geometryParams": {
+                            "radius": 0.15,
+                            "height": 0.3
+                        },
                         "roughness": 0.5,
                         "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.62, "z": 0 },
-                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
-                        "scale": { "x": 2.12, "y": 0.5, "z": 1 },
+                        "position": {
+                            "x": 0,
+                            "y": 0.62,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": -3.14,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 2.12,
+                            "y": 0.5,
+                            "z": 1
+                        },
                         "name": "Cone"
                     },
                     "custom_1002": {
                         "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
+                        "geometryParams": {
+                            "radius": 0.15,
+                            "height": 0.3
+                        },
                         "roughness": 0.5,
                         "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.62, "z": 0 },
-                        "rotation": { "x": -3.14, "y": -1.58, "z": 0 },
-                        "scale": { "x": 2.16, "y": 0.5, "z": 1 },
+                        "position": {
+                            "x": 0,
+                            "y": 0.62,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": -3.14,
+                            "y": -1.58,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 2.16,
+                            "y": 0.5,
+                            "z": 1
+                        },
                         "name": "Cone"
                     },
                     "spike": {
-                        "position": { "x": 0, "y": 0.79, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 1 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.79,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 1
+                        }
                     },
                     "crown": {
-                        "position": { "x": 0, "y": 0.52, "z": 0 },
-                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 0.48, "z": 1 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.52,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": -3.14,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 0.48,
+                            "z": 1
+                        }
                     },
                     "body": {
-                        "position": { "x": 0, "y": 0.32, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.7, "y": 1, "z": 0.7 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.32,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.7,
+                            "y": 1,
+                            "z": 0.7
+                        }
                     }
                 }
             },
@@ -2057,36 +2368,167 @@
                 "color": "#f5f0e1",
                 "roughness": 0.25,
                 "metalness": 0.2,
-                "position": { "x": 4.2, "y": 0.04, "z": 0 },
+                "position": {
+                    "x": 4.2,
+                    "y": 0.04,
+                    "z": 0
+                },
                 "parts": {
                     "custom_1000": {
                         "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
+                        "geometryParams": {
+                            "radius": 0.15,
+                            "height": 0.3
+                        },
                         "roughness": 0.5,
                         "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.57, "z": 0 },
-                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
-                        "scale": { "x": 1.4, "y": 1, "z": 1.4 },
+                        "position": {
+                            "x": 0,
+                            "y": 0.82,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1.4,
+                            "y": 0.84,
+                            "z": 1.4
+                        },
                         "name": "Cone"
                     },
                     "body": {
-                        "position": { "x": 0, "y": 0.31, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.54, "y": 1, "z": 0.56 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.48,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.54,
+                            "y": 1.7,
+                            "z": 0.56
+                        }
                     },
                     "crown": {
-                        "position": { "x": 0, "y": 0.51, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.8, "y": 0.6, "z": 0.8 }
+                        "position": {
+                            "x": 0,
+                            "y": 0.81,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 0.8,
+                            "y": 0.6,
+                            "z": 0.8
+                        }
                     },
                     "crossH": {
-                        "position": { "x": 0, "y": 0.85, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 1 }
+                        "position": {
+                            "x": 0,
+                            "y": 1.04,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 1
+                        }
+                    },
+                    "crossV": {
+                        "position": {
+                            "x": 0,
+                            "y": 0.99,
+                            "z": 0
+                        },
+                        "rotation": {
+                            "x": 0,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1,
+                            "y": 1,
+                            "z": 1
+                        }
+                    },
+                    "custom_1001": {
+                        "type": "box",
+                        "geometryParams": {
+                            "width": 0.2,
+                            "height": 0.2,
+                            "depth": 0.2
+                        },
+                        "roughness": 0.5,
+                        "metalness": 0.2,
+                        "position": {
+                            "x": 0,
+                            "y": 0.42,
+                            "z": -0.18
+                        },
+                        "rotation": {
+                            "x": 0.42,
+                            "y": 0,
+                            "z": 0
+                        },
+                        "scale": {
+                            "x": 1.9,
+                            "y": 3,
+                            "z": 0.1
+                        },
+                        "name": "Box"
                     }
                 }
             }
         };
+
+        // ────────────────────────────────────────────────────────────
+        //  ★ 效能輔助
+        //  幾何體是不可變的，所有棋子共用同一批 primitive，
+        //  所以把每個唯一幾何體只建一次、永久重用。
+        // ────────────────────────────────────────────────────────────
+        const GEO_CACHE = new Map();
+        function getGeo(key, factory) {
+            let g = GEO_CACHE.get(key);
+            if (!g) {
+                g = factory();
+                GEO_CACHE.set(key, g);
+            }
+            return g;
+        }
+
+        // 常用 primitive 的簡寫
+        const gCyl = (rt, rb, h, s) => getGeo(`cyl_${rt}_${rb}_${h}_${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s));
+        const gBox = (w, h, d) => getGeo(`box_${w}_${h}_${d}`, () => new THREE.BoxGeometry(w, h, d));
+        const gSph = (r, w, h) => getGeo(`sph_${r}_${w}_${h}`, () => new THREE.SphereGeometry(r, w, h));
+        const gCone = (r, h, s) => getGeo(`cone_${r}_${h}_${s}`, () => new THREE.ConeGeometry(r, h, s));
+        const gTorus = (r, t, rs, ts) => getGeo(`tor_${r}_${t}_${rs}_${ts}`, () => new THREE.TorusGeometry(r, t, rs, ts));
+
+        // ────────────────────────────────────────────────────────────
+        //  ★ 裝置分級：依 CPU / 記憶體 / 是否為行動裝置
+        //  自動調降陰影品質或直接關閉陰影，並限制像素比。
+        // ────────────────────────────────────────────────────────────
+        const _CORES = navigator.hardwareConcurrency || 4;
+        const _MEM = navigator.deviceMemory || 4;
+        const IS_LOW_END = IS_MOBILE || _CORES <= 2 || _MEM <= 2;
+        const USE_SHADOWS = !IS_LOW_END;                            // 低階/手機：關閉陰影
+        const MAX_PIXEL_RATIO = IS_MOBILE ? 1.5 : Math.min(window.devicePixelRatio, 2);
+        const SHADOW_MAP_SIZE = IS_LOW_END ? 512 : 1024;
 
         // ============================================================
         //  THREE.JS INIT
@@ -2101,9 +2543,15 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            renderer.setPixelRatio(MAX_PIXEL_RATIO);
+            if (USE_SHADOWS) {
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+            } else {
+                renderer.shadowMap.enabled = false;
+            }
+
             document.getElementById('gameCanvas').appendChild(renderer.domElement);
 
             raycaster = new THREE.Raycaster();
@@ -2114,9 +2562,9 @@
 
             const dirLight = new THREE.DirectionalLight(0xffffff, 2.2);
             dirLight.position.set(5, 15, 8);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 1024;
-            dirLight.shadow.mapSize.height = 1024;
+            dirLight.castShadow = USE_SHADOWS;
+            dirLight.shadow.mapSize.width = SHADOW_MAP_SIZE;
+            dirLight.shadow.mapSize.height = SHADOW_MAP_SIZE;
             dirLight.shadow.bias = -0.0001;
             scene.add(dirLight);
 
@@ -2198,7 +2646,7 @@
                 boardSquares[r] = [];
                 for (let c = 0; c < 8; c++) {
                     const isLight = (r + c) % 2 === 0;
-                    const geo = new THREE.BoxGeometry(0.98, 0.1, 0.98);
+                    const geo = getGeo('boardSquare', () => new THREE.BoxGeometry(0.98, 0.1, 0.98));
                     const square = new THREE.Mesh(geo, isLight ? lightMat : darkMat);
                     square.position.set(c - 3.5, -0.05, 3.5 - r);
                     square.receiveShadow = true;
@@ -2207,7 +2655,7 @@
                     boardSquares[r][c] = square;
                 }
             }
-            const borderGeo = new THREE.BoxGeometry(8.6, 0.15, 8.6);
+            const borderGeo = getGeo('boardBorder', () => new THREE.BoxGeometry(8.6, 0.15, 8.6));
             const borderMat = new THREE.MeshStandardMaterial({ color: 0x5a3e28, roughness: 0.3 });
             const border = new THREE.Mesh(borderGeo, borderMat);
             border.position.set(0, -0.12, 0);
@@ -2218,23 +2666,34 @@
             const labelY = -0.03;
             const labelOffset = 4.25;
 
+            // ★ 若本地玩家是黑方，只翻轉文字的「方向」（旋轉 180°），
+            //   位置與文字內容完全不變 —— 因為棋盤標籤是物理固定在棋盤上的。
+            const flipLabels = (playerColor === 'black');
+
+            // 檔案字母 (A–H)：位置與文字永遠不變
             for (let c = 0; c < 8; c++) {
                 const x = c - 3.5;
-                const nearLabel = createTextLabel(FILES[c]);
+                const letter = FILES[c];   // ← 保持 A→H，不反轉
+
+                const nearLabel = createTextLabel(letter, '#e8c547', 0.40, flipLabels);
                 nearLabel.position.set(x, labelY, labelOffset);
                 boardGroup.add(nearLabel);
-                const farLabel = createTextLabel(FILES[c]);
+
+                const farLabel = createTextLabel(letter, '#e8c547', 0.40, flipLabels);
                 farLabel.position.set(x, labelY, -labelOffset);
                 boardGroup.add(farLabel);
             }
 
+            // 行號 (1–8)：位置與文字永遠不變
             for (let r = 0; r < 8; r++) {
                 const z = 3.5 - r;
-                const rankNum = String(r + 1);
-                const leftLabel = createTextLabel(rankNum);
+                const rankNum = String(r + 1);   // ← 保持 1→8，不反轉
+
+                const leftLabel = createTextLabel(rankNum, '#e8c547', 0.40, flipLabels);
                 leftLabel.position.set(-labelOffset, labelY, z);
                 boardGroup.add(leftLabel);
-                const rightLabel = createTextLabel(rankNum);
+
+                const rightLabel = createTextLabel(rankNum, '#e8c547', 0.40, flipLabels);
                 rightLabel.position.set(labelOffset, labelY, z);
                 boardGroup.add(rightLabel);
             }
@@ -2312,23 +2771,26 @@
         }
 
         function createGeometryFromPart(type, params) {
-            switch (type) {
-                case 'box':
-                    return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
-                case 'sphere':
-                    return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
-                case 'cylinder':
-                    return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
-                case 'cone':
-                    return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
-                case 'torus':
-                    return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
-                default:
-                    return new THREE.BoxGeometry(0.2, 0.2, 0.2);
-            }
+            const key = `part_${type}_${params.radius || 0}_${params.height || 0}_${params.width || 0}_${params.depth || 0}_${params.radiusTop || 0}_${params.radiusBottom || 0}_${params.tube || 0}`;
+            return getGeo(key, () => {
+                switch (type) {
+                    case 'box':
+                        return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
+                    case 'sphere':
+                        return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
+                    case 'cylinder':
+                        return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
+                    case 'cone':
+                        return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
+                    case 'torus':
+                        return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
+                    default:
+                        return new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                }
+            });
         }
 
-        function createTextLabel(text, color = '#e8c547', size = 0.40) {
+        function createTextLabel(text, color = '#e8c547', size = 0.40, flipped = false) {
             const canvas = document.createElement('canvas');
             canvas.width = 128;
             canvas.height = 128;
@@ -2338,7 +2800,20 @@
             ctx.font = 'bold 92px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            // ★ 黑方視角：先把文字在 canvas 上旋轉 180°，
+            //   這樣從棋盤另一側看時就會是正的
+            if (flipped) {
+                ctx.save();
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate(Math.PI);
+                ctx.translate(-canvas.width / 2, -canvas.height / 2);
+                ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+                ctx.restore();
+            } else {
+                ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            }
+
             const texture = new THREE.CanvasTexture(canvas);
             texture.needsUpdate = true;
             texture.anisotropy = 4;
@@ -2390,53 +2865,73 @@
             };
 
             const baseRadius = type === 'king' || type === 'queen' ? 0.35 : 0.3;
-            addMesh(new THREE.CylinderGeometry(baseRadius, baseRadius * 1.15, 0.12, 16), mat, 0, 0.06, 0, 'base');
+            addMesh(gCyl(baseRadius, baseRadius * 1.15, 0.12, 16), mat, 0, 0.06, 0, 'base');
 
             switch (type) {
                 case 'pawn': {
                     const { baseRadius: br, baseHeight: bh, topRadius: tr, topHeight: th, sphereRadius: sr } = p;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.2, bh, 12), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    addMesh(new THREE.CylinderGeometry(tr * 1.1, tr, th, 12), matDark, 0, 0.06 + bh + th / 2, 0, 'top');
-                    addMesh(new THREE.SphereGeometry(sr, 12, 12), mat, 0, 0.06 + bh + th + sr * 0.7, 0, 'sphere');
+                    addMesh(gCyl(br, br * 1.2, bh, 12), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(gCyl(tr * 1.1, tr, th, 12), matDark, 0, 0.06 + bh + th / 2, 0, 'top');
+                    addMesh(gSph(sr, 12, 12), mat, 0, 0.06 + bh + th + sr * 0.7, 0, 'sphere');
                     break;
                 }
                 case 'rook': {
                     const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch } = p;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
+                    addMesh(gCyl(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(gCyl(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
                     break;
                 }
                 case 'knight': {
                     const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd,
                         headWidth: hw, headHeight: hh, headDepth: hd } = p;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    const neck = addMesh(new THREE.BoxGeometry(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02, 'neck', new THREE.Euler(-0.3, 0, 0));
-                    const head = addMesh(new THREE.BoxGeometry(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08, 'head', new THREE.Euler(-0.15, 0, 0));
+                    addMesh(gCyl(br, br * 1.15, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(gBox(nw, nh, nd), mat, 0.05, 0.06 + bh + nh / 2, -0.02, 'neck', new THREE.Euler(-0.3, 0, 0));
+                    addMesh(gBox(hw, hh, hd), matDark, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08, 'head', new THREE.Euler(-0.15, 0, 0));
                     break;
                 }
                 case 'bishop': {
                     const { bodyRadius: br, bodyHeight: bh, sphereRadius: sr } = p;
-                    addMesh(new THREE.ConeGeometry(br, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    addMesh(new THREE.SphereGeometry(sr, 10, 10), matDark, 0, 0.06 + bh + sr * 0.7, 0, 'sphere');
+                    addMesh(gCone(br, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(gSph(sr, 10, 10), matDark, 0, 0.06 + bh + sr * 0.7, 0, 'sphere');
                     break;
                 }
                 case 'queen': {
                     const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch, spikeRadius: spr } = p;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.15, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
-                    addMesh(new THREE.SphereGeometry(spr, 8, 8), matDark, 0, 0.06 + bh + ch + spr * 1.2, 0, 'spike');
+                    addMesh(gCyl(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(gCyl(cr, cr * 1.15, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
+                    addMesh(gSph(spr, 8, 8), matDark, 0, 0.06 + bh + ch + spr * 1.2, 0, 'spike');
+
+                    const qCrownBaseY = 0.90;
+                    const qCrownRadius = 0.11;
+                    const qSpikeCount = 6;
+                    const qSpikeRadius = 0.022;
+                    const qSpikeHeight = 0.075;
+
+                    addMesh(gTorus(qCrownRadius, 0.018, 8, 24), matDark,
+                        0, qCrownBaseY, 0, 'qCrownBand',
+                        new THREE.Euler(Math.PI / 2, 0, 0));
+
+                    for (let i = 0; i < qSpikeCount; i++) {
+                        const a = (i / qSpikeCount) * Math.PI * 2;
+                        addMesh(gCone(qSpikeRadius, qSpikeHeight, 6), matDark,
+                            Math.cos(a) * qCrownRadius,
+                            qCrownBaseY + qSpikeHeight * 0.55,
+                            Math.sin(a) * qCrownRadius,
+                            'qCrownSpike' + i);
+                    }
+                    addMesh(gSph(0.03, 8, 8), matDark,
+                        0, qCrownBaseY + qSpikeHeight + 0.04, 0, 'qCrownTip');
                     break;
                 }
                 case 'king': {
                     const { bodyRadius: br, bodyHeight: bh, crownRadius: cr, crownHeight: ch,
                         crossWidth: cw, crossHeight: ch2, crossDepth: cd } = p;
-                    addMesh(new THREE.CylinderGeometry(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
-                    addMesh(new THREE.CylinderGeometry(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
-                    addMesh(new THREE.BoxGeometry(cw, ch2, cd), matDark, 0, 0.06 + bh + ch + ch2 / 2, 0, 'crossV');
-                    addMesh(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), matDark, 0, 0.06 + bh + ch + ch2 * 0.75, 0, 'crossH');
+                    addMesh(gCyl(br, br * 1.12, bh, 16), mat, 0, 0.06 + bh / 2, 0, 'body');
+                    addMesh(gCyl(cr, cr * 1.05, ch, 16), matDark, 0, 0.06 + bh + ch / 2, 0, 'crown');
+                    addMesh(gBox(cw, ch2, cd), matDark, 0, 0.06 + bh + ch + ch2 / 2, 0, 'crossV');
+                    addMesh(gBox(ch2 * 0.7, ch2 * 0.3, cd * 0.6), matDark, 0, 0.06 + bh + ch + ch2 * 0.75, 0, 'crossH');
                     break;
                 }
-                default: break;
             }
 
             if (p.parts) {
@@ -2472,7 +2967,9 @@
 
             addHealthBarToModel(group, hp, maxHp);
 
-            if (type === 'knight') {
+            // ★ 騎士與國王：白方旋轉 180° 面向黑方、黑方不旋轉面向白方
+            //   這樣兩邊的棋子都會朝向對手（棋盤中央）的正面
+            if (type === 'knight' || type === 'king') {
                 if (color === 'white') group.rotation.y = Math.PI;
                 if (color === 'black') group.rotation.y = 0;
             }
@@ -2552,6 +3049,66 @@
 
         function get3DPosition(r, c, yOffset = 0) {
             return new THREE.Vector3(c - 3.5, yOffset, 3.5 - r);
+        }
+
+        // ★ 加農炮射程判定：兩格中心的世界座標距離是否在 CANNON_RANGE 之內
+        function isWithinCannonRange(fromR, fromC, toR, toC) {
+            const a = get3DPosition(fromR, fromC, 0);
+            const b = get3DPosition(toR, toC, 0);
+            return a.distanceTo(b) <= CANNON_RANGE + 1e-6;
+        }
+
+        // ============================================================
+        //  ★ 加農炮射程圓圈（紅色空心圓，顯示在地面上）
+        // ============================================================
+        function showCannonRange(row, col) {
+            hideCannonRange();
+            if (!scene) return;
+
+            const g = new THREE.Group();
+            g.position.set(col - 3.5, 0.07, 3.5 - row);
+
+            // 主圓環（空心，無填充）
+            const edge = new THREE.Mesh(
+                new THREE.RingGeometry(CANNON_RANGE - 0.07, CANNON_RANGE, 96),
+                new THREE.MeshBasicMaterial({
+                    color: 0xff2b2b,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                })
+            );
+            edge.rotation.x = -Math.PI / 2;
+            g.add(edge);
+
+            // 內側淡光暈，讓邊界更好辨識
+            const glow = new THREE.Mesh(
+                new THREE.RingGeometry(CANNON_RANGE - 0.28, CANNON_RANGE - 0.07, 96),
+                new THREE.MeshBasicMaterial({
+                    color: 0xff2b2b,
+                    transparent: true,
+                    opacity: 0.15,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                })
+            );
+            glow.rotation.x = -Math.PI / 2;
+            glow.position.y = -0.004;
+            g.add(glow);
+
+            scene.add(g);
+            cannonRangeGroup = g;
+        }
+
+        function hideCannonRange() {
+            if (!cannonRangeGroup) return;
+            if (scene) scene.remove(cannonRangeGroup);
+            cannonRangeGroup.traverse(n => {
+                // ★ 幾何體共用，只釋放材質
+                if (n.material) n.material.dispose();
+            });
+            cannonRangeGroup = null;
         }
 
         // ============================================================
@@ -2706,7 +3263,7 @@
                 const child = highlightsGroup.children[0];
                 highlightsGroup.remove(child);
                 child.traverse(node => {
-                    if (node.geometry) node.geometry.dispose();
+                    // ★ 幾何體是全域快取的，不要 dispose
                     if (node.material) {
                         if (Array.isArray(node.material)) {
                             node.material.forEach(m => m.dispose());
@@ -2881,7 +3438,15 @@
             endPos.y = 0.05;
 
             const inBoard = worldPos.x >= -4.5 && worldPos.x <= 4.5 && worldPos.z >= -4.5 && worldPos.z <= 4.5;
-            const newTargets = inBoard ? getPiecesInRadius(worldPos, TARGET_RADIUS) : [];
+
+            // 射程限制：加農炮只能打到以自己為圓心、半徑 CANNON_RANGE 的範圍內
+            const casterPos = get3DPosition(selectedPiece.row, selectedPiece.col, 0);
+            const distFromCaster = Math.hypot(worldPos.x - casterPos.x, worldPos.z - casterPos.z);
+            const inRange = distFromCaster <= CANNON_RANGE;
+
+            const rawTargets = (inBoard && inRange) ? getPiecesInRadius(worldPos, TARGET_RADIUS) : [];
+            const newTargets = rawTargets.filter(t =>
+                isWithinCannonRange(selectedPiece.row, selectedPiece.col, t.r, t.c));
             const newTargetKeys = new Set(newTargets.map(t => `${t.r},${t.c}`));
 
             for (const key of lastAimedPieceKeys) {
@@ -2899,13 +3464,18 @@
             lastAimedPieceKeys = newTargetKeys;
 
             aimTargetPiece = newTargets.length > 0 ? newTargets[0].piece : null;
-            aimValid = inBoard && newTargets.length > 0;
+
+            // ★ 只要在棋盤內且在射程內就允許發射（可以打空地）
+            const canFire = inBoard && inRange;
+            const hasHit = newTargets.length > 0;
+            aimValid = canFire;
             aimWorldPos = worldPos.clone();
 
-            updateGhostLine(startPos, endPos, inBoard && newTargets.length > 0);
+            // 傳入 2 個狀態：canFire (能不能發射)、hasHit (會不會打中棋子)
+            updateGhostLine(startPos, endPos, canFire, hasHit);
         }
 
-        function updateGhostLine(startPos, endPos, valid) {
+        function updateGhostLine(startPos, endPos, canFire, hasHit) {
             if (!ghostLine) createGhostLine();
             const positions = ghostLine.geometry.attributes.position.array;
             const segments = 50;
@@ -2922,9 +3492,25 @@
             ghostLine.geometry.attributes.position.needsUpdate = true;
             ghostLine.geometry.setDrawRange(0, segments + 1);
 
-            const color = valid ? 0x00ff88 : 0xff4444;
+            // ★ 三種顏色：
+            //   🔴 紅 = 超出棋盤或射程（不可發射）
+            //   🟢 綠 = 在射程內且會命中棋子
+            //   🟠 橙 = 在射程內但只會打中空地（可發射，但沒有目標）
+            let color;
+            let opacity;
+            if (!canFire) {
+                color = 0xff4444;
+                opacity = 0.5;
+            } else if (hasHit) {
+                color = 0x00ff88;
+                opacity = 0.9;
+            } else {
+                color = 0xffaa00;
+                opacity = 0.9;
+            }
+
             ghostLine.material.color.setHex(color);
-            ghostLine.material.opacity = valid ? 0.9 : 0.5;
+            ghostLine.material.opacity = opacity;
             ghostLine.visible = true;
 
             const ring = ghostLine.userData.ring;
@@ -2948,7 +3534,7 @@
                 vLine.position.x = endPos.x;
                 vLine.position.z = endPos.z;
                 vLine.material.color.setHex(color);
-                vLine.visible = valid;
+                vLine.visible = canFire;
             }
             if (blastDisc) {
                 blastDisc.position.x = endPos.x;
@@ -2981,6 +3567,7 @@
             lastAimedPieceKeys.clear();
             if (ghostLine) {
                 ghostLineGroup.remove(ghostLine);
+                // ★ 不釋放幾何體（LineBasicMaterial 的 geometry 是動態的，可以釋放）
                 ghostLine.geometry.dispose();
                 ghostLine.material.dispose();
                 ghostLine = null;
@@ -2988,8 +3575,8 @@
             while (ghostLineGroup.children.length > 0) {
                 const child = ghostLineGroup.children[0];
                 ghostLineGroup.remove(child);
-                if (child.geometry) child.geometry.dispose();
                 if (child.material) child.material.dispose();
+                // ★ 保留 child.geometry，因為準星/環形圓柱體有可能被共用
             }
         }
 
@@ -3001,7 +3588,14 @@
 
             const worldPos = aimWorldPos.clone();
             worldPos.y = 0.05;
-            const targets = getPiecesInRadius(worldPos, TARGET_RADIUS);
+
+            // ★ 射程限制：超出圓圈外就當作沒有目標（只能打空氣）
+            const casterPos = get3DPosition(selectedPiece.row, selectedPiece.col, 0);
+            const distFromCaster = Math.hypot(worldPos.x - casterPos.x, worldPos.z - casterPos.z);
+            const inRange = distFromCaster <= CANNON_RANGE;
+
+            let targets = inRange ? getPiecesInRadius(worldPos, TARGET_RADIUS) : [];
+            targets = targets.filter(t => isWithinCannonRange(selectedPiece.row, selectedPiece.col, t.r, t.c));
 
             for (const key of lastAimedPieceKeys) {
                 const [r, c] = key.split(',').map(Number);
@@ -3039,8 +3633,30 @@
                 isAnimating = true;
                 flyCannonball(startPos, endPos, () => {
                     createEmptyExplosion(worldPos);
+
+                    // ★ 打空地也算一次行動：切換回合並同步計時器
+                    gameState.turn = gameState.turn === 'white' ? 'black' : 'white';
+                    gameState.moveHistory.push({
+                        type: 'areaAbility',
+                        abilityName: abilityDef.name,
+                        fromR, fromC,
+                        targets: [],
+                        damageDealt: 0,
+                        missed: true
+                    });
+
                     isAnimating = false;
                     deselectPiece();
+                    syncPiecesAfterMove();
+                    switchTimer(gameState.turn);
+                    checkGameStatus();
+                    if (!gameOverFlag) {
+                        updateCameraTargets();
+                        if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                            aiThinking = true;
+                            setTimeout(makeAIMove, 500);
+                        }
+                    }
                     updateTurnIndicator();
                 });
                 return;
@@ -3539,58 +4155,71 @@
                 bar.style.display = 'flex';
                 if (hasTargets) {
                     attackBtn.disabled = false;
-                    attackBtn.style.opacity = '1';
-                    attackBtn.style.cursor = 'pointer';
                     noTargetTip.classList.add('hidden');
                 } else {
                     attackBtn.disabled = true;
-                    attackBtn.style.opacity = '0.5';
-                    attackBtn.style.cursor = 'not-allowed';
+                    attackBtn.classList.remove('active');
                     noTargetTip.classList.remove('hidden');
                 }
             } else {
                 bar.classList.remove('visible');
                 bar.style.display = 'none';
                 attackBtn.disabled = false;
-                attackBtn.style.opacity = '1';
-                attackBtn.style.cursor = 'pointer';
                 noTargetTip.classList.add('hidden');
             }
         }
 
-        function setActionMode(mode) {
-            if (isAiming) cancelAiming();
-
-            actionMode = mode;
+        // ★ 更新兩顆按鈕的 active 狀態（互斥的 toggle）
+        function updateActionButtonStates() {
             const moveBtn = document.getElementById('btnActionMove');
             const attackBtn = document.getElementById('btnActionAttack');
+            if (!moveBtn || !attackBtn) return;
+            moveBtn.classList.toggle('active', actionMode === 'move');
+            attackBtn.classList.toggle('active', actionMode === 'attack');
+        }
+
+        function setActionMode(mode) {
+            // 切換到不同模式前，先取消正在進行中的瞄準
+            if (isAiming) cancelAiming();
+
+            // 若切到「特殊技能」但沒有可用目標，直接退回「移動」模式
+            if (mode === 'attack' && abilityTargets.length === 0) {
+                actionMode = 'move';
+                hideCannonRange();
+                if (selectedPiece) {
+                    showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
+                }
+                updateActionButtonStates();
+                return;
+            }
+
+            actionMode = mode;
 
             if (mode === 'move') {
-                moveBtn.style.background = 'var(--gold)';
-                moveBtn.style.color = '#1a1a2e';
-                attackBtn.style.background = 'var(--danger)';
-                attackBtn.style.color = 'white';
+                // ★ 移動模式：一定隱藏加農炮射程圈
+                hideCannonRange();
                 document.getElementById('aimHint').classList.remove('visible');
                 hideGhostLine();
-                if (selectedPiece) showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
-            } else {
-                if (abilityTargets.length === 0) {
-                    setActionMode('move');
-                    return;
+                if (selectedPiece) {
+                    showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
                 }
-                attackBtn.style.background = 'var(--gold)';
-                attackBtn.style.color = '#1a1a2e';
-                moveBtn.style.background = '#3a3a5c';
-                moveBtn.style.color = 'var(--text)';
+            } else {
+                // ★ 攻擊模式
+                document.getElementById('aimHint').classList.remove('visible');
 
                 const piece = gameState.getPiece(selectedPiece.row, selectedPiece.col);
                 if (piece && piece.type === 'rook') {
+                    // 加農炮：只有在此模式才顯示紅色空心射程圈
+                    showCannonRange(selectedPiece.row, selectedPiece.col);
                     enterAimingMode();
                 } else {
-                    document.getElementById('aimHint').classList.remove('visible');
+                    // 其他技能：把射程圈關掉，只顯示技能目標格
+                    hideCannonRange();
                     showAbilityHighlights(abilityTargets, selectedPiece.row, selectedPiece.col);
                 }
             }
+
+            updateActionButtonStates();
         }
 
         // ============================================================
@@ -3787,14 +4416,27 @@
             clearGhostLine();
             aimTargetPiece = null;
             aimValid = false;
+
+            // ★ 取消瞄準後，回到移動模式並隱藏射程圈
+            actionMode = 'move';
+            hideCannonRange();
+
             if (selectedPiece) {
                 const hasAbility = pieceHasAbility(selectedPiece.piece);
                 if (hasAbility) {
                     const hasTargets = abilityTargets.length > 0;
                     updateActionBar(true, hasTargets);
-                    setActionMode('move');
                 }
+                showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
             }
+
+            // 恢復 actionBar 顯示
+            if (selectedPiece) {
+                document.getElementById('actionBar').classList.add('visible');
+                document.getElementById('actionBar').style.display = 'flex';
+            }
+
+            updateActionButtonStates();
             hideRemoteAim();
         }
 
@@ -3809,27 +4451,37 @@
             abilityTargets = gameState.getLegalAbilities(row, col);
 
             const hasAbility = pieceHasAbility(piece);
-            let hasTargets = abilityTargets.length > 0;
+            const hasTargets = abilityTargets.length > 0;
+
+            // ★ 選中棋子時不顯示射程圈，只有切到「特殊技能」時才顯示
+            hideCannonRange();
 
             if (hasAbility) {
                 updateActionBar(true, hasTargets);
-                setActionMode('move');
             } else {
                 updateActionBar(false, false);
-                actionMode = 'move';
-                showValidMoveHighlights(validMoves, row, col);
             }
+
+            // 一律從「移動」模式開始
+            actionMode = 'move';
+            document.getElementById('aimHint').classList.remove('visible');
+            hideGhostLine();
+            showValidMoveHighlights(validMoves, row, col);
+            updateActionButtonStates();
 
             if (pieceObjects[`${row},${col}`]) selectedPiecePulse = 0;
         }
 
         function deselectPiece() {
             if (isAiming) cancelAiming();
+            hideCannonRange();   // ★ 取消選取時同時移除射程圓圈
             selectedPiece = null;
             validMoves = [];
             abilityTargets = [];
+            actionMode = 'move';
             clearHighlights();
             updateActionBar(false, false);
+            updateActionButtonStates();
             document.getElementById('aimHint').classList.remove('visible');
             updateCameraTargets();
         }
@@ -4812,6 +5464,19 @@
             cameraTarget.pos.set(tx, ty, tz);
         }
 
+        // ★ 依玩家顏色重置自由相機角度，讓黑方預設從黑方那側看棋盤
+        function resetCameraForPlayer() {
+            if (playerColor === 'black') {
+                cameraTheta = Math.PI + 0.5;   // 轉到 -z 那側（黑方）
+            } else {
+                cameraTheta = 0.5;             // 預設 +z 那側（白方）
+            }
+            cameraPhi = 0.8;
+            cameraRadius = 12;
+            isFreeCameraActive = true;         // 確保使用自由相機（可拖曳旋轉）
+            updateFreeCamButton();
+        }
+
         function toggleFullscreen() {
             if (!document.fullscreenElement) {
                 const el = document.documentElement;
@@ -4841,6 +5506,7 @@
             updateFreeCamButton();
             if (!isFreeCameraActive) {
                 updateCameraTargets();
+                resetCameraForPlayer();
             }
         }
 
@@ -5097,7 +5763,7 @@
                 camera.lookAt(0, 0, 0);
             } else {
                 cameraSmoothPos.lerp(cameraTarget.pos, 0.08);
-                cameraSmoothLookAt.lerp(cameraTarget.lookAt, 0.08);
+                cameraSmoothLookAt.lerp(cameraTarget.lookat, 0.08);
                 camera.position.copy(cameraSmoothPos);
                 camera.lookAt(cameraSmoothLookAt);
             }
@@ -5135,6 +5801,7 @@
             stopTimer();
             destroyPeer();
             hideRemoteAim();
+            hideCannonRange();          // ★ 回到主選單時清掉射程圓圈
             settingsReceived = false;
             myReady = false;
             opponentReady = false;
@@ -5729,6 +6396,7 @@
             document.getElementById('topBar').classList.remove('hidden');
 
             document.getElementById('timerDisplay').style.display = 'none';
+            resetCameraForPlayer();
 
             stopTimer();
             updateTurnIndicator();
@@ -5757,11 +6425,14 @@
             selectedPiece = null;
             validMoves = [];
             abilityTargets = [];
+            actionMode = 'move';
             isAnimating = false;
             aiThinking = false;
             pendingPromotion = null;
             if (isAiming) cancelAiming();
             hideRemoteAim();
+            hideCannonRange();
+            updateActionButtonStates();
 
             if (currentMode === 'multiplayer') {
                 document.getElementById('timerDisplay').style.display = 'flex';
@@ -5791,6 +6462,7 @@
 
             createBoard3D();
             createPieces3D();
+            resetCameraForPlayer();
             updateTurnIndicator();
             updateCameraTargets();
 
@@ -5811,6 +6483,7 @@
         window.onload = () => {
             initThree();
             hideRemoteAim();
+            updateActionButtonStates();
             if (IS_MOBILE) {
                 setupMobileCannonControls();
             }
