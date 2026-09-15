@@ -176,8 +176,8 @@ function applyMoveToClone(game, action) {
         ? { r: (action.fromR + toR) / 2, c: toC }
         : null;
 
-    // Knight push (the executor always applies it to knight moves)
-    if (piece.type === 'knight') {
+    // Knight push — only when the knockback skill is off cooldown
+    if (piece.type === 'knight' && (piece.skillCooldown || 0) === 0) {
         const pushed = applyKnightPushSim(game, action.fromR, action.fromC, toR, toC, piece.color);
         if (pushed) {
             const movedKnight = game.board[toR][toC];
@@ -357,7 +357,10 @@ function evaluateBoard(game, side, cfg) {
     for (const t of threats) {
         const val = PIECE_VALUES[t.piece.type] * (t.piece.hp / t.piece.maxHp);
         if (t.piece.type === 'king') {
-            score -= val * cfg.ownKingSafetyWeight * 0.4;
+            // ★ King under attack = captured next move (capturing the king ends
+            //   the game here). Penalty must dwarf any material gain so the AI
+            //   resolves the threat instead of greedily chipping a piece.
+            score -= PIECE_VALUES.king * 20 * (cfg.ownKingSafetyWeight / 6);
         } else {
             score -= val * cfg.threatWeight;
         }
@@ -382,6 +385,7 @@ function scoreActionImmediate(game, action, side, cfg) {
         // Knight push value (best case)
         const piece = game.getPiece(action.fromR, action.fromC);
         if (piece && piece.type === 'knight') {
+            const canPush = (piece.skillCooldown || 0) === 0;
             const victims = getPushableVictims(game, action.toR, action.toC, action.fromR, action.fromC, piece.color);
             for (const v of victims) {
                 const vp = game.getPiece(v.r, v.c);
@@ -442,8 +446,8 @@ function minimax(game, depth, alpha, beta, isMax, aiSide, startTime, timeLimit, 
         scoreActionImmediate(game, a, side, cfg)
     );
 
-    // Prune branching on deeper plies
-    const branchLimit = depth >= 3 ? 20 : 32;
+    // Prune branching on deeper plies (king captures are always ordered first)
+    const branchLimit = depth >= 3 ? 14 : (depth === 2 ? 18 : 24);
     const searchList = actions.length > branchLimit ? actions.slice(0, branchLimit) : actions;
 
     if (isMax) {
@@ -514,32 +518,31 @@ function selectBestAction(game, aiSide, cfg) {
     for (let depth = 1; depth <= cfg.maxDepth; depth++) {
         let depthBest = null;
         let depthBestScore = -Infinity;
-        let foundAny = false;
+        let depthCompleted = true;
 
         for (const action of actions) {
-            if (performance.now() - startTime > cfg.timeLimit) break;
+            if (performance.now() - startTime > cfg.timeLimit) { depthCompleted = false; break; }
             const next = simulateAction(game, action);
             const val = minimax(next, depth - 1, -Infinity, Infinity, false, aiSide, startTime, cfg.timeLimit, cfg);
-            if (val > depthBestScore) {
-                depthBestScore = val;
-                depthBest = action;
-                foundAny = true;
-            }
-            if (performance.now() - startTime > cfg.timeLimit) break;
+            if (val > depthBestScore) { depthBestScore = val; depthBest = action; }
+            if (performance.now() - startTime > cfg.timeLimit) { depthCompleted = false; break; }
         }
 
-        if (foundAny) {
+        // ★ Only trust a depth that finished. If the clock cut the search short,
+        //   the remaining candidates were never evaluated — adopting that partial
+        //   result makes the AI blindly play the highest-ordered action (the
+        //   cannon), which is exactly the "ignores its doomed king" behaviour.
+        //   depth 1 is exempt: those are plain static evals, still valid.
+        if (depthBest && (depthCompleted || depth === 1)) {
             bestAction = depthBest;
             bestScore = depthBestScore;
-        } else break;
+        }
 
-        // Re-order for next iteration using this depth's ranking
+        if (!depthCompleted) break;
+
         if (depthBest) {
             const idx = actions.indexOf(depthBest);
-            if (idx > 0) {
-                actions.splice(idx, 1);
-                actions.unshift(depthBest);
-            }
+            if (idx > 0) { actions.splice(idx, 1); actions.unshift(depthBest); }
         }
 
         if (bestScore === Infinity) break;
@@ -618,9 +621,12 @@ function executeChosenAction(action) {
         const landR = action.type === 'move' ? action.toR : action.r;
         const landC = action.type === 'move' ? action.toC : action.c;
 
-        const victims = getPushableVictims(
-            gameState, landR, landC, action.fromR, action.fromC, movingPiece.color
-        );
+        // ★ Knockback is the knight's special skill → if it's cooling down,
+        //   treat this as a plain move (no victims, no push, no cooldown reset).
+        const canPush = (movingPiece.skillCooldown || 0) === 0;
+        const victims = canPush
+            ? getPushableVictims(gameState, landR, landC, action.fromR, action.fromC, movingPiece.color)
+            : [];
 
         selectedPiece = { row: action.fromR, col: action.fromC, piece: movingPiece };
         validMoves = gameState.getLegalMoves(action.fromR, action.fromC);

@@ -73,7 +73,23 @@
         </button>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  MAIN MENU                                                    -->
+    <!-- ============================================================ -->
     <div class="overlay" id="mainMenu" style="inset:0;">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
         <div class="panel">
             <h1>♞ 西洋棋</h1>
             <p style="opacity:0.7;margin-bottom:20px;">與眾同樂</p>
@@ -84,7 +100,23 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  AI DIFFICULTY MENU                                           -->
+    <!-- ============================================================ -->
     <div class="overlay hidden" id="aiDifficultyMenu" style="inset:0;">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
         <div class="panel">
             <h2>選擇難度</h2>
             <p>選擇AI的難度等級</p>
@@ -97,7 +129,23 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  MULTIPLAYER MENU                                             -->
+    <!-- ============================================================ -->
     <div class="overlay hidden" id="multiplayerMenu" style="inset:0;">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
         <div class="panel">
             <h2>雙人連線對戰</h2>
             <p>透過 PeerJS 連線，輸入4位數房號進行配對</p>
@@ -116,7 +164,23 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  ROOM SETTINGS                                                -->
+    <!-- ============================================================ -->
     <div class="overlay hidden" id="roomSettings" style="inset:0;">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
         <div class="panel">
             <h2>🏠 房間設定</h2>
             <div class="settings-group">
@@ -155,7 +219,23 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  WAITING LOBBY                                                -->
+    <!-- ============================================================ -->
     <div class="overlay hidden" id="waitingOverlay" style="inset:0;">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
         <div class="panel">
             <h2>🏠 遊戲大廳</h2>
             <p>房號：<strong class="code-display" id="waitingCodeDisplay"
@@ -180,6 +260,9 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  PROMOTION                                                    -->
+    <!-- ============================================================ -->
     <div class="overlay hidden" id="promotionOverlay" style="inset:0;">
         <div class="panel">
             <h2>兵升變</h2>
@@ -193,7 +276,38 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!--  RESTART CONFIRM                                              -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="restartConfirmOverlay" style="inset:0;">
+        <div class="panel" style="max-width: 420px;">
+            <h2>🔄 重新開始？</h2>
+            <p style="opacity:0.85;margin-bottom:8px;">目前的對局進度將會遺失。</p>
+            <p style="opacity:0.6;font-size:0.9rem;">確定要重新開始嗎？</p>
+            <div class="btn-row" style="margin-top:16px;">
+                <button class="btn btn-danger" onclick="doRestartConfirm()">✅ 確定重開</button>
+                <button class="btn btn-secondary" onclick="cancelRestartConfirm()">✕ 取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  GAME OVER                                                    -->
+    <!-- ============================================================ -->
     <div class="overlay hidden" id="gameOverOverlay" style="inset:0;">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
         <div class="panel">
             <h2>遊戲結束</h2>
             <div class="game-over-text" id="gameOverText">獲勝!</div>

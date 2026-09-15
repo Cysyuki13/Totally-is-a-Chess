@@ -525,7 +525,7 @@ const ABILITIES = {
     },
     rook: {
         name: '加農炮 (Cannon)',
-        damage: 20,
+        damage: 35,
         getTargets: (game, r, c) => {
             let targets = [];
             for (let i = 0; i < 8; i++) {
@@ -4168,6 +4168,7 @@ function backToMenu() {
     document.getElementById('roomSettings').classList.add('hidden');
     document.getElementById('waitingOverlay').classList.add('hidden');
     document.getElementById('gameOverOverlay').classList.add('hidden');
+    document.getElementById('restartConfirmOverlay').classList.add('hidden');
     document.getElementById('topBar').classList.add('hidden');
     document.getElementById('actionBar').classList.remove('visible');
     document.getElementById('aimHint').classList.remove('visible');
@@ -4528,7 +4529,7 @@ function setupPeerConnection() {
         if (data.type === 'aim_cancel') { hideRemoteAim(); return; }
         if (data.type === 'aim_fire') {
             const targets = data.targets || [];
-            playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || 50);
+            playRemoteCannonFire(data.fromR, data.fromC, data.targetX, data.targetZ, targets, data.damage || ABILITIES.rook.damage);
             return;
         }
     });
@@ -4662,7 +4663,22 @@ function startAIGame(difficulty) {
 }
 
 function confirmRestart() {
-    if (confirm('確定要重新開始遊戲嗎？')) restartGame();
+    // ★ Was: if (confirm('確定要重新開始遊戲嗎？')) restartGame();
+    //   Now: show our own styled in-game modal.
+    const overlay = document.getElementById('restartConfirmOverlay');
+    if (!overlay) { restartGame(); return; }   // safety fallback
+    overlay.classList.remove('hidden');
+}
+
+function cancelRestartConfirm() {
+    const overlay = document.getElementById('restartConfirmOverlay');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+function doRestartConfirm() {
+    const overlay = document.getElementById('restartConfirmOverlay');
+    if (overlay) overlay.classList.add('hidden');
+    restartGame();
 }
 
 function restartGame() {
@@ -4745,4 +4761,15 @@ window.onload = () => {
     hideRemoteAim();
     updateActionButtonStates();
     if (IS_MOBILE) setupMobileCannonControls();
+
+    // ★ ESC closes the restart confirmation modal
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const overlay = document.getElementById('restartConfirmOverlay');
+            if (overlay && !overlay.classList.contains('hidden')) {
+                e.preventDefault();
+                cancelRestartConfirm();
+            }
+        }
+    });
 };

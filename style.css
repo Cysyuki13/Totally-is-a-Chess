@@ -57,6 +57,16 @@ body {
     pointer-events: none;
 }
 
+/* Restart modal: subtle pop-in when appearing */
+#restartConfirmOverlay:not(.hidden) .panel {
+    animation: modalPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalPop {
+    from { transform: scale(0.92); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+
 .check-warning.hidden,
 .game-top-bar.hidden,
 .no-target-tip.hidden,
@@ -961,5 +971,191 @@ body {
     .ready-status-item {
         font-size: 0.8rem;
         padding: 4px 10px;
+    }
+}
+
+/* ============================================================
+   Animated chess background for menus
+   ============================================================ */
+.overlay {
+    overflow: hidden;
+    /* keep drifting glyphs from leaking out */
+}
+
+.chess-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── Slow-drifting checkerboard ── */
+.bg-grid {
+    position: absolute;
+    inset: -25%;
+    background-image:
+        linear-gradient(45deg, rgba(232, 197, 71, 0.06) 25%, transparent 25%,
+            transparent 75%, rgba(232, 197, 71, 0.06) 75%),
+        linear-gradient(45deg, rgba(232, 197, 71, 0.06) 25%, transparent 25%,
+            transparent 75%, rgba(232, 197, 71, 0.06) 75%);
+    background-size: 140px 140px;
+    background-position: 0 0, 70px 70px;
+    animation: bgGridDrift 80s linear infinite;
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 72%);
+    mask-image: radial-gradient(ellipse at center, #000 20%, transparent 72%);
+    opacity: 0.9;
+}
+
+@keyframes bgGridDrift {
+    from {
+        transform: translate3d(0, 0, 0);
+    }
+
+    to {
+        transform: translate3d(140px, 140px, 0);
+    }
+}
+
+/* ── Pulsing golden glow behind the panel ── */
+.bg-glow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 140vmax;
+    height: 140vmax;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle,
+            rgba(232, 197, 71, 0.16) 0%,
+            rgba(232, 197, 71, 0.06) 22%,
+            rgba(232, 197, 71, 0.02) 42%,
+            transparent 62%);
+    animation: bgGlowPulse 9s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes bgGlowPulse {
+
+    0%,
+    100% {
+        opacity: 0.75;
+        transform: translate(-50%, -50%) scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.08);
+    }
+}
+
+/* ── Floating chess glyphs ── */
+.piece {
+    position: absolute;
+    top: 0;
+    color: rgba(232, 197, 71, 0.10);
+    font-family: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", serif;
+    line-height: 1;
+    user-select: none;
+    -webkit-user-select: none;
+    filter: blur(0.5px);
+    text-shadow: 0 0 32px rgba(232, 197, 71, 0.25);
+    animation: pieceFloat linear infinite;
+    will-change: transform, opacity;
+}
+
+.piece.p1 {
+    left: 4%;
+    font-size: 130px;
+    animation-duration: 44s;
+    animation-delay: -2s;
+}
+
+.piece.p2 {
+    left: 18%;
+    font-size: 70px;
+    animation-duration: 58s;
+    animation-delay: -18s;
+}
+
+.piece.p3 {
+    left: 32%;
+    font-size: 100px;
+    animation-duration: 50s;
+    animation-delay: -30s;
+}
+
+.piece.p4 {
+    left: 46%;
+    font-size: 60px;
+    animation-duration: 64s;
+    animation-delay: -10s;
+}
+
+.piece.p5 {
+    left: 60%;
+    font-size: 110px;
+    animation-duration: 46s;
+    animation-delay: -40s;
+}
+
+.piece.p6 {
+    left: 74%;
+    font-size: 75px;
+    animation-duration: 56s;
+    animation-delay: -24s;
+}
+
+.piece.p7 {
+    left: 86%;
+    font-size: 95px;
+    animation-duration: 52s;
+    animation-delay: -6s;
+}
+
+.piece.p8 {
+    left: 94%;
+    font-size: 55px;
+    animation-duration: 62s;
+    animation-delay: -36s;
+}
+
+@keyframes pieceFloat {
+    0% {
+        transform: translate3d(0, 110vh, 0) rotate(0deg);
+        opacity: 0;
+    }
+
+    8% {
+        opacity: 1;
+    }
+
+    92% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate3d(30px, -25vh, 0) rotate(28deg);
+        opacity: 0;
+    }
+}
+
+/* ── Panel must paint above the animated background ── */
+.overlay .panel {
+    position: relative;
+    z-index: 1;
+}
+
+/* ── Respect reduced-motion preference ── */
+@media (prefers-reduced-motion: reduce) {
+
+    .bg-grid,
+    .bg-glow,
+    .piece {
+        animation: none !important;
+    }
+
+    .piece {
+        opacity: 0.08;
+        transform: translateY(50vh);
     }
 }
