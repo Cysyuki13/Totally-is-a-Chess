@@ -74,6 +74,19 @@ let lastFrameTime = 0;
 
 let cannonRangeGroup = null;
 
+// ★ 主教地板特效 registry — 讓殘留特效可被新動作強制提早淡出
+let activeBishopLeapEffects = [];
+
+function triggerBishopLeapFadeOut() {
+    for (const fx of activeBishopLeapEffects) {
+        if (!fx.fadingOut) {
+            fx.fadingOut = true;
+            fx.fadeStartTime = clock.getElapsedTime();
+        }
+    }
+}
+
+
 // ★ 騎士技能狀態（三步驟：landing → victim → direction）
 let knightAbilityActive = false;
 let knightAbilityState = null;
@@ -87,7 +100,7 @@ const KNOCKBACK_BLOCK_DAMAGE = 25;
 const SKILL_COOLDOWNS = {
     pawn: 1,
     knight: 2,
-    bishop: 1,
+    bishop: 2,
     rook: 1,
     queen: 1,
     king: 1,
@@ -543,6 +556,36 @@ const ABILITIES = {
         damage: 0,
         getTargets: (game, r, c) => game.getLegalMoves(r, c),
     },
+    bishop: {
+        name: '炮躍 (Cannon Leap)',
+        damage: 50,
+        getTargets: (game, r, c) => {
+            const piece = game.getPiece(r, c);
+            if (!piece) return [];
+            const targets = [];
+            const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+
+            for (const [dr, dc] of dirs) {
+                // Walk outward along this diagonal
+                let hasPiece = false;   // true once we've passed ≥1 piece
+                for (let step = 1; step < 8; step++) {
+                    const tr = r + dr * step;
+                    const tc = c + dc * step;
+                    if (!game.isInBounds(tr, tc)) break;
+
+                    const target = game.getPiece(tr, tc);
+                    if (target) {
+                        // Any piece (friend or foe) counts as a screen
+                        hasPiece = true;
+                    } else if (hasPiece) {
+                        // Empty square with at least one piece behind it → valid landing
+                        targets.push({ r: tr, c: tc });
+                    }
+                }
+            }
+            return targets;
+        }
+    },
     default: {
         name: '普通攻擊 (Strike)',
         damage: 40,
@@ -630,6 +673,23 @@ function getKnightPushLandings(game, fromR, fromC) {
     });
 }
 
+// ★ 取得騎士/主教「跳躍路徑上」的所有棋子（不含起點與落點）
+function getBishopPathPieces(game, fromR, fromC, toR, toC) {
+    const pieces = [];
+    if (Math.abs(toR - fromR) !== Math.abs(toC - fromC)) return pieces;
+    const dr = Math.sign(toR - fromR);
+    const dc = Math.sign(toC - fromC);
+    if (dr === 0 || dc === 0) return pieces;
+    const steps = Math.abs(toR - fromR);
+    for (let i = 1; i < steps; i++) {
+        const r = fromR + dr * i;
+        const c = fromC + dc * i;
+        const p = game.getPiece(r, c);
+        if (p) pieces.push({ r, c, piece: p });
+    }
+    return pieces;
+}
+
 // ============================================================
 //  ROOM SETTINGS
 // ============================================================
@@ -642,6 +702,28 @@ let roomSettings = {
 function isAbilityEnabledForColor(color) {
     if (roomSettings.gameMode === 'normal') return false;
     return roomSettings.abilityPermissions[color] === true;
+}
+
+// ★ AI mode toggle state — reflects the switch in the AI difficulty menu.
+//   true  = skills enabled ("totally")
+//   false = no skills      ("normal")
+let aiGameModeEnabled = true;
+
+function onAIModeToggleChange() {
+    const cb = document.getElementById('aiGameModeToggle');
+    aiGameModeEnabled = !!cb.checked;
+    updateAIModeUI();
+}
+
+function updateAIModeUI() {
+    const panel = document.querySelector('#aiDifficultyMenu .panel');
+    if (panel) panel.dataset.mode = aiGameModeEnabled ? 'totally' : 'normal';
+    const hint = document.getElementById('aiModeHint');
+    if (hint) {
+        hint.innerHTML = aiGameModeEnabled
+            ? '目前：<strong>技能模式</strong> — 棋子可使用特殊技能'
+            : '目前：<strong>純西洋棋</strong> — 不啟用任何特殊技能';
+    }
 }
 
 function pieceHasAbility(piece) {
@@ -661,6 +743,15 @@ ChessGame.prototype.getLegalAbilities = function (r, c) {
     if (!abilityDef) return [];
 
     if (piece.type === 'pawn') {
+        const targets = abilityDef.getTargets(this, r, c);
+        return targets.map(t => ({
+            type: 'ability', fromR: r, fromC: c, r: t.r, c: t.c, ability: abilityDef
+        }));
+    }
+
+    // ★ Bishop: leap targets (empty squares) — must NOT go through the
+    //   default enemy-filter fallback below.
+    if (piece.type === 'bishop') {
         const targets = abilityDef.getTargets(this, r, c);
         return targets.map(t => ({
             type: 'ability', fromR: r, fromC: c, r: t.r, c: t.c, ability: abilityDef
@@ -2227,6 +2318,7 @@ function spawnKnightDashWind(fromR, fromC, landingR, landingC, duration) {
 //  ★ 執行騎士技能（移動 + 擊退 / 撞牆）
 // ============================================================
 function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOption, isRemote = false) {
+    triggerBishopLeapFadeOut();
     if (isAnimating) return;
     isAnimating = true;
 
@@ -2362,6 +2454,538 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
         }
     };
     animateMove();
+}
+
+// ============================================================
+//  ★ 主教「炮躍」技能（跳過棋子 + 路徑震地傷害）
+// ============================================================
+function executeBishopAbility(fromR, fromC, toR, toC, ability, isRemote = false) {
+    if (isAnimating) return;
+    isAnimating = true;
+
+    // ★ 施放者進入冷卻（在移動前先抓原 ref，跟兵/騎士一致）
+    const casterBishop = gameState.getPiece(fromR, fromC);
+    gameState.putOnSkillCooldown(casterBishop);
+
+    const pieceObj = pieceObjects[`${fromR},${fromC}`];
+    if (!pieceObj) { isAnimating = false; return; }
+
+    // 防守：落點必須是空的
+    if (gameState.getPiece(toR, toC)) { isAnimating = false; return; }
+
+    // ★ 路徑棋子必須在「移動前」算好，因為移動後棋盤會變
+    const pathPieces = getBishopPathPieces(gameState, fromR, fromC, toR, toC);
+
+    // ── 網路同步（使用既有的 'ability' 訊息格式） ──
+    if (currentMode === 'multiplayer' && peerConnection?.open && !isRemote) {
+        sendAbilityToPeer(
+            fromR, fromC,
+            [{ r: toR, c: toC }],
+            ability.name, ability.damage, 0
+        );
+    }
+
+    // ── 視覺：震地路徑 + 落地衝擊波 ──
+    spawnBishopLeapEffect(fromR, fromC, toR, toC);
+
+    // ── 跳躍動畫（拋物線） ──
+    const startPos = pieceObj.position.clone();
+    const targetPos = get3DPosition(toR, toC, 0);
+    const duration = 0.4;
+    const startTime = clock.getElapsedTime();
+    const arcHeight = 1.2;
+
+    const animateJump = () => {
+        const now = clock.getElapsedTime();
+        const progress = Math.min((now - startTime) / duration, 1);
+        const ease = t => t * (2 - t);
+        const t = ease(progress);
+        const x = startPos.x + (targetPos.x - startPos.x) * t;
+        const z = startPos.z + (targetPos.z - startPos.z) * t;
+        const y = startPos.y + (targetPos.y - startPos.y) * t +
+            Math.sin(progress * Math.PI) * arcHeight;
+        pieceObj.position.set(x, y, z);
+
+        if (progress < 1) {
+            requestAnimationFrame(animateJump);
+        } else {
+            pieceObj.position.copy(targetPos);
+
+            // ── 遊戲狀態：手動移動主教（不是合法 getLegalMoves 走法） ──
+            const piece = gameState.getPiece(fromR, fromC);
+            if (!piece) { isAnimating = false; return; }
+            gameState.board[fromR][fromC] = null;
+            gameState.board[toR][toC] = piece;
+            piece.hasMoved = true;
+            delete pieceObjects[`${fromR},${fromC}`];
+            pieceObjects[`${toR},${toC}`] = pieceObj;
+            pieceObj.userData.row = toR;
+            pieceObj.userData.col = toC;
+
+            // ── 套用路徑震地傷害 ──
+            for (const pp of pathPieces) {
+                const target = gameState.getPiece(pp.r, pp.c);
+                if (target) {
+                    target.hp -= ability.damage;
+                    if (target.hp <= 0) gameState.board[pp.r][pp.c] = null;
+                    showDamageEffect(pp.r, pp.c, ability.damage);
+                }
+            }
+
+            // ── 動畫結束後才 flipTurn ──
+            gameState.flipTurn();
+            gameState.moveHistory.push({
+                type: 'bishop_leap',
+                fromR, fromC, toR, toC,
+                damageDealt: ability.damage,
+                victims: pathPieces.map(p => ({ r: p.r, c: p.c }))
+            });
+
+            deselectPiece();
+            isAnimating = false;
+            syncPiecesAfterMove();
+            switchTimer(gameState.turn);
+            checkGameStatus();
+            updateTurnIndicator();
+            if (!gameOverFlag) {
+                updateCameraTargets();
+                if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                    aiThinking = true;
+                    setTimeout(makeAIMove, 500);
+                }
+            }
+        }
+    };
+    animateJump();
+}
+
+// ★ 視覺：主教「熔岩裂地」技能特效
+//   LONG cracks / lava / residual heat, but SHORT + SMALL landing boom
+//   + can be force-faded early when the next action starts
+function spawnBishopLeapEffect(fromR, fromC, toR, toC) {
+    const dr = Math.sign(toR - fromR);
+    const dc = Math.sign(toC - fromC);
+    const steps = Math.abs(toR - fromR);
+
+    const effectGroup = new THREE.Group();
+    scene.add(effectGroup);
+
+    const startTime = clock.getElapsedTime();
+    const LEAP_DURATION = 0.4;
+    const TOTAL_DURATION = 3.6;
+    const LANDING_FX_DURATION = 0.7;
+    const EARLY_FADE_DURATION = 0.4;   // ★ fade speed when next action starts
+
+    // ★ Register this effect so it can be force-faded
+    const effectState = {
+        group: effectGroup,
+        fadingOut: false,
+        fadeStartTime: 0,
+        disposed: false
+    };
+    activeBishopLeapEffects.push(effectState);
+
+    const disposeEffect = () => {
+        if (effectState.disposed) return;
+        effectState.disposed = true;
+        scene.remove(effectGroup);
+        effectGroup.traverse(n => {
+            if (n.geometry) n.geometry.dispose();
+            if (n.material) {
+                if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                else n.material.dispose();
+            }
+        });
+        const idx = activeBishopLeapEffects.indexOf(effectState);
+        if (idx >= 0) activeBishopLeapEffects.splice(idx, 1);
+    };
+
+    const cracks = [];
+    const lavaParticles = [];
+    const embers = [];
+    const shockRings = [];
+    const residualGlows = [];
+
+    const makeGroundSegment = (p1, p2, width, mat, y) => {
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const len = Math.hypot(dx, dz);
+        if (len < 0.0001) return null;
+        const geo = new THREE.PlaneGeometry(len, width);
+        const mesh = new THREE.Mesh(geo, mat);
+        const dir = new THREE.Vector3(dx, 0, dz).normalize();
+        const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+        const up = new THREE.Vector3(0, 1, 0);
+        const m = new THREE.Matrix4().makeBasis(dir, perp, up);
+        mesh.quaternion.setFromRotationMatrix(m);
+        mesh.position.set((p1.x + p2.x) / 2, y, (p1.z + p2.z) / 2);
+        return mesh;
+    };
+
+    const buildCrackCluster = (cx, cz, delay, sizeMul) => {
+        const baseAngle = Math.random() * Math.PI * 2;
+        const mainLen = (0.65 + Math.random() * 0.3) * sizeMul;
+        const segments = 6;
+
+        const mainPts = [];
+        for (let s = 0; s <= segments; s++) {
+            const t = s / segments - 0.5;
+            const jitter = (Math.random() - 0.5) * 0.14;
+            mainPts.push(new THREE.Vector3(
+                cx + Math.cos(baseAngle) * mainLen * t + Math.cos(baseAngle + Math.PI / 2) * jitter,
+                0,
+                cz + Math.sin(baseAngle) * mainLen * t + Math.sin(baseAngle + Math.PI / 2) * jitter
+            ));
+        }
+
+        const meshes = [];
+        const darkMainMat = new THREE.MeshBasicMaterial({
+            color: 0x080200, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide
+        });
+        const lavaMainMat = new THREE.MeshBasicMaterial({
+            color: 0xff8822, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+        });
+
+        for (let s = 0; s < mainPts.length - 1; s++) {
+            const p1 = mainPts[s], p2 = mainPts[s + 1];
+            const dm = makeGroundSegment(p1, p2, 0.085, darkMainMat, 0.018);
+            if (dm) { dm.renderOrder = 10; effectGroup.add(dm); meshes.push({ mesh: dm, kind: 'dark' }); }
+            const lm = makeGroundSegment(p1, p2, 0.055, lavaMainMat, 0.030);
+            if (lm) { lm.renderOrder = 11; effectGroup.add(lm); meshes.push({ mesh: lm, kind: 'lava' }); }
+        }
+
+        const branchCount = 3 + Math.floor(Math.random() * 2);
+        for (let b = 0; b < branchCount; b++) {
+            const startIdx = 1 + Math.floor(Math.random() * (mainPts.length - 2));
+            const startPt = mainPts[startIdx];
+            const branchAngle = baseAngle + (Math.random() < 0.5 ? 1 : -1) * (0.5 + Math.random() * 1.1);
+            const branchLen = (0.20 + Math.random() * 0.25) * sizeMul;
+            const bSegs = 3;
+
+            const bPts = [startPt.clone()];
+            for (let s = 1; s <= bSegs; s++) {
+                const t = s / bSegs;
+                const j = (Math.random() - 0.5) * 0.06;
+                bPts.push(new THREE.Vector3(
+                    startPt.x + Math.cos(branchAngle) * branchLen * t + j,
+                    0,
+                    startPt.z + Math.sin(branchAngle) * branchLen * t + j
+                ));
+            }
+
+            const darkBranchMat = new THREE.MeshBasicMaterial({
+                color: 0x080200, transparent: true, opacity: 0,
+                depthWrite: false, side: THREE.DoubleSide
+            });
+            const lavaBranchMat = new THREE.MeshBasicMaterial({
+                color: 0xff6611, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+            });
+
+            for (let s = 0; s < bPts.length - 1; s++) {
+                const p1 = bPts[s], p2 = bPts[s + 1];
+                const dm = makeGroundSegment(p1, p2, 0.060, darkBranchMat, 0.018);
+                if (dm) { dm.renderOrder = 10; effectGroup.add(dm); meshes.push({ mesh: dm, kind: 'dark' }); }
+                const lm = makeGroundSegment(p1, p2, 0.038, lavaBranchMat, 0.030);
+                if (lm) { lm.renderOrder = 11; effectGroup.add(lm); meshes.push({ mesh: lm, kind: 'lava' }); }
+            }
+        }
+
+        cracks.push({
+            meshes,
+            bornAt: delay,
+            pulsePhase: Math.random() * Math.PI * 2,
+            lifeStart: delay + 0.5,
+            fadeDuration: TOTAL_DURATION - delay - 0.5
+        });
+    };
+
+    for (let i = 0; i <= steps; i++) {
+        const r = fromR + dr * i;
+        const c = fromC + dc * i;
+        const pos = get3DPosition(r, c, 0);
+        const delay = (i / steps) * LEAP_DURATION;
+        const isLanding = (i === steps);
+
+        buildCrackCluster(pos.x, pos.z, delay, isLanding ? 1.25 : 1.05);
+
+        const lavaCount = isLanding
+            ? (28 + Math.floor(Math.random() * 8))
+            : (14 + Math.floor(Math.random() * 6));
+        for (let p = 0; p < lavaCount; p++) {
+            const pGeo = new THREE.SphereGeometry(0.045 + Math.random() * 0.055, 6, 6);
+            const pMat = new THREE.MeshBasicMaterial({
+                color: 0xffcc44, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            const mesh = new THREE.Mesh(pGeo, pMat);
+            mesh.renderOrder = 20;
+            mesh.position.set(
+                pos.x + (Math.random() - 0.5) * 0.4,
+                0.08,
+                pos.z + (Math.random() - 0.5) * 0.4
+            );
+            effectGroup.add(mesh);
+
+            const angle = Math.random() * Math.PI * 2;
+            const spread = 0.6 + Math.random() * 1.4;
+            const upSpeed = isLanding
+                ? (3.2 + Math.random() * 3.2)
+                : (2.2 + Math.random() * 2.0);
+
+            lavaParticles.push({
+                mesh,
+                vel: new THREE.Vector3(
+                    Math.cos(angle) * spread * 0.75,
+                    upSpeed,
+                    Math.sin(angle) * spread * 0.75
+                ),
+                bornAt: delay + Math.random() * 0.15,
+                life: 1.2 + Math.random() * 0.9
+            });
+        }
+
+        const emberCount = 8 + Math.floor(Math.random() * 5);
+        for (let e = 0; e < emberCount; e++) {
+            const pGeo = new THREE.SphereGeometry(0.020 + Math.random() * 0.026, 4, 4);
+            const pMat = new THREE.MeshBasicMaterial({
+                color: 0xffaa33, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            const mesh = new THREE.Mesh(pGeo, pMat);
+            mesh.renderOrder = 20;
+            mesh.position.set(
+                pos.x + (Math.random() - 0.5) * 0.35,
+                0.06,
+                pos.z + (Math.random() - 0.5) * 0.35
+            );
+            effectGroup.add(mesh);
+
+            embers.push({
+                mesh,
+                velY: 0.7 + Math.random() * 1.4,
+                driftX: (Math.random() - 0.5) * 0.6,
+                driftZ: (Math.random() - 0.5) * 0.6,
+                bornAt: delay + Math.random() * 0.2,
+                life: 1.8 + Math.random() * 1.0
+            });
+        }
+
+        if (!isLanding) {
+            const rGeo = new THREE.RingGeometry(0.10, 0.26, 24);
+            const rMat = new THREE.MeshBasicMaterial({
+                color: 0xff7700, transparent: true, opacity: 0,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            const ring = new THREE.Mesh(rGeo, rMat);
+            ring.renderOrder = 12;
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(pos.x, 0.035, pos.z);
+            effectGroup.add(ring);
+
+            shockRings.push({
+                mesh: ring,
+                bornAt: delay,
+                duration: 0.45,
+                startScale: 1,
+                endScale: 3.2,
+                maxOpacity: 0.6
+            });
+        }
+
+        const heatGeo = new THREE.CircleGeometry(0.55, 20);
+        const heatMat = new THREE.MeshBasicMaterial({
+            color: 0xff5500, transparent: true, opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, depthWrite: false
+        });
+        const heat = new THREE.Mesh(heatGeo, heatMat);
+        heat.renderOrder = 8;
+        heat.rotation.x = -Math.PI / 2;
+        heat.position.set(pos.x, 0.022, pos.z);
+        effectGroup.add(heat);
+
+        residualGlows.push({
+            mesh: heat,
+            bornAt: delay,
+            duration: TOTAL_DURATION - delay,
+            maxOpacity: isLanding ? 0.85 : 0.55,
+            pulsePhase: Math.random() * Math.PI * 2
+        });
+    }
+
+    const landingPos = get3DPosition(toR, toC, 0);
+
+    const landRingGeo = new THREE.RingGeometry(0.16, 0.34, 40);
+    const landRingMat = new THREE.MeshBasicMaterial({
+        color: 0xffcc66, transparent: true, opacity: 0,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const landRing = new THREE.Mesh(landRingGeo, landRingMat);
+    landRing.renderOrder = 12;
+    landRing.rotation.x = -Math.PI / 2;
+    landRing.position.set(landingPos.x, 0.045, landingPos.z);
+    effectGroup.add(landRing);
+
+    shockRings.push({
+        mesh: landRing,
+        bornAt: LEAP_DURATION,
+        duration: LANDING_FX_DURATION,
+        startScale: 1,
+        endScale: 4.5,
+        maxOpacity: 0.85
+    });
+
+    const landRing2Geo = new THREE.RingGeometry(0.24, 0.40, 40);
+    const landRing2Mat = new THREE.MeshBasicMaterial({
+        color: 0xff4400, transparent: true, opacity: 0,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const landRing2 = new THREE.Mesh(landRing2Geo, landRing2Mat);
+    landRing2.renderOrder = 12;
+    landRing2.rotation.x = -Math.PI / 2;
+    landRing2.position.set(landingPos.x, 0.035, landingPos.z);
+    effectGroup.add(landRing2);
+
+    shockRings.push({
+        mesh: landRing2,
+        bornAt: LEAP_DURATION + 0.08,
+        duration: LANDING_FX_DURATION + 0.1,
+        startScale: 1,
+        endScale: 3.0,
+        maxOpacity: 0.5
+    });
+
+    const glowGeo = new THREE.CircleGeometry(0.55, 32);
+    const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xff5500, transparent: true, opacity: 0,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const glowDisc = new THREE.Mesh(glowGeo, glowMat);
+    glowDisc.renderOrder = 9;
+    glowDisc.rotation.x = -Math.PI / 2;
+    glowDisc.position.set(landingPos.x, 0.025, landingPos.z);
+    effectGroup.add(glowDisc);
+
+    const animateFx = () => {
+        if (effectState.disposed) return;
+
+        const nowT = clock.getElapsedTime();
+        const elapsed = nowT - startTime;
+
+        // ★ Compute global fade multiplier if the effect is being force-faded
+        let fadeMul = 1;
+        if (effectState.fadingOut) {
+            const fadeElapsed = nowT - effectState.fadeStartTime;
+            if (fadeElapsed >= EARLY_FADE_DURATION) {
+                disposeEffect();
+                return;
+            }
+            fadeMul = 1 - (fadeElapsed / EARLY_FADE_DURATION);
+        }
+
+        if (elapsed >= TOTAL_DURATION) {
+            disposeEffect();
+            return;
+        }
+
+        // ── Cracks ──
+        for (const c of cracks) {
+            const t = elapsed - c.bornAt;
+            if (t < 0) {
+                for (const entry of c.meshes) entry.mesh.material.opacity = 0;
+                continue;
+            }
+            const growT = Math.min(t / 0.22, 1);
+            const fadeStart = c.lifeStart - c.bornAt;
+            const fadeT = t < fadeStart
+                ? 1
+                : Math.max(0, 1 - (t - fadeStart) / c.fadeDuration);
+            const pulse = 0.72 + 0.28 * Math.sin(elapsed * 20 + c.pulsePhase);
+            for (const entry of c.meshes) {
+                if (entry.kind === 'dark') {
+                    entry.mesh.material.opacity = growT * fadeT * 0.95 * fadeMul;
+                } else {
+                    entry.mesh.material.opacity = growT * fadeT * 1.0 * pulse * fadeMul;
+                }
+            }
+        }
+
+        // ── Lava ──
+        for (const p of lavaParticles) {
+            const t = elapsed - p.bornAt;
+            if (t < 0 || t > p.life) { p.mesh.visible = false; continue; }
+            p.mesh.visible = true;
+            p.mesh.position.x += p.vel.x * 0.016;
+            p.mesh.position.y += p.vel.y * 0.016;
+            p.mesh.position.z += p.vel.z * 0.016;
+            p.vel.y -= 0.20;
+            const lifeT = t / p.life;
+            p.mesh.material.opacity = (1 - lifeT) * 1.0 * fadeMul;
+            const hue = 0.135 - lifeT * 0.085;
+            const light = 0.78 - lifeT * 0.34;
+            p.mesh.material.color.setHSL(hue, 1, light);
+            p.mesh.scale.setScalar(1 - lifeT * 0.35);
+        }
+
+        // ── Embers ──
+        for (const e of embers) {
+            const t = elapsed - e.bornAt;
+            if (t < 0 || t > e.life) { e.mesh.visible = false; continue; }
+            e.mesh.visible = true;
+            e.mesh.position.y += e.velY * 0.016;
+            e.mesh.position.x += e.driftX * 0.016;
+            e.mesh.position.z += e.driftZ * 0.016;
+            const lifeT = t / e.life;
+            e.mesh.material.opacity = (1 - lifeT) * 0.85 * fadeMul;
+            e.mesh.material.color.setHSL(0.08 - lifeT * 0.03, 1, 0.7 - lifeT * 0.25);
+            e.mesh.scale.setScalar(0.9 + Math.sin(t * 24) * 0.25);
+        }
+
+        // ── Shock rings ──
+        for (const sr of shockRings) {
+            const t = elapsed - sr.bornAt;
+            if (t < 0 || t > sr.duration) {
+                sr.mesh.material.opacity = 0;
+                continue;
+            }
+            const progress = t / sr.duration;
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const scale = sr.startScale + (sr.endScale - sr.startScale) * eased;
+            sr.mesh.scale.setScalar(scale);
+            sr.mesh.material.opacity = sr.maxOpacity * (1 - progress) * fadeMul;
+        }
+
+        // ── Residual ground heat ──
+        for (const rg of residualGlows) {
+            const t = elapsed - rg.bornAt;
+            if (t < 0) continue;
+            const progress = Math.min(t / rg.duration, 1);
+            const fadeIn = Math.min(t / 0.25, 1);
+            const pulse = 0.75 + 0.25 * Math.sin(elapsed * 14 + rg.pulsePhase);
+            rg.mesh.material.opacity = rg.maxOpacity * fadeIn * (1 - progress) * pulse * fadeMul;
+            rg.mesh.scale.setScalar(1 + progress * 0.8);
+        }
+
+        // ── Landing glow ──
+        const glowT = (elapsed - LEAP_DURATION) / LANDING_FX_DURATION;
+        if (glowT > 0 && glowT < 1) {
+            const pulse = 0.65 + 0.35 * Math.sin(elapsed * 20);
+            glowDisc.material.opacity = 0.7 * (1 - glowT) * pulse * fadeMul;
+            glowDisc.scale.setScalar(1 + glowT * 1.2);
+        } else if (glowT >= 1) {
+            glowDisc.material.opacity = 0;
+        }
+
+        requestAnimationFrame(animateFx);
+    };
+    animateFx();
 }
 
 // ============================================================
@@ -3586,8 +4210,15 @@ function createCrossExplosion(row, col, damage, selfDamage, callback) {
 function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = false) {
     if (isAnimating) return;
     const piece = gameState.getPiece(fromR, fromC);
+
     if (piece && piece.type === 'pawn' && ability.name === '冲锋爆炸') {
         executePawnAbility(fromR, fromC, targetR, targetC, ability, isRemote);
+        return;
+    }
+
+    // ★ 主教跳躍技能
+    if (piece && piece.type === 'bishop' && ability.name === '炮躍 (Cannon Leap)') {
+        executeBishopAbility(fromR, fromC, targetR, targetC, ability, isRemote);
         return;
     }
 
@@ -3643,6 +4274,7 @@ function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = fals
 }
 
 function executeMove(fromR, fromC, toR, toC, promotionType, moveData, isRemote = false) {
+    triggerBishopLeapFadeOut();
     if (isAnimating) return;
     isAnimating = true;
     const targetPiece = gameState.getPiece(toR, toC);
@@ -4138,6 +4770,12 @@ function animate() {
 //  MENU / UI FUNCTIONS
 // ============================================================
 function showAIDifficulty() {
+    // ★ Refresh the toggle to its default state (skills ON) each time we open the menu
+    const cb = document.getElementById('aiGameModeToggle');
+    if (cb) cb.checked = true;
+    aiGameModeEnabled = true;
+    updateAIModeUI();
+
     document.getElementById('mainMenu').classList.add('hidden');
     document.getElementById('aiDifficultyMenu').classList.remove('hidden');
 }
@@ -4643,6 +5281,10 @@ function startAIGame(difficulty) {
     aiDifficulty = difficulty;
     currentMode = 'ai';
     playerColor = 'white';
+
+    // ★ Read mode from the toggle switch
+    roomSettings.gameMode = aiGameModeEnabled ? 'totally' : 'normal';
+    roomSettings.abilityPermissions = { white: true, black: true };
     roomSettings.timePerPlayer = 0;
 
     gameState = new ChessGame();
@@ -4761,6 +5403,9 @@ window.onload = () => {
     hideRemoteAim();
     updateActionButtonStates();
     if (IS_MOBILE) setupMobileCannonControls();
+
+    // ★ Initialize AI mode toggle UI
+    updateAIModeUI();
 
     // ★ ESC closes the restart confirmation modal
     window.addEventListener('keydown', (e) => {

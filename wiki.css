@@ -1,0 +1,318 @@
+/* ============================================================
+   wiki.css — 技能圖鑑
+   ============================================================ */
+
+#wikiOverlay {
+    background: rgba(0, 0, 0, 0.9);
+    padding: 20px;
+    z-index: 200;
+}
+
+.wiki-layout {
+    display: flex;
+    width: 100%;
+    max-width: 1500px;
+    height: 100%;
+    max-height: 900px;
+    background: var(--panel);
+    border: 2px solid var(--gold);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+    position: relative;
+    z-index: 1;
+}
+
+/* ── Sidebar ── */
+.wiki-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.35);
+    border-right: 1px solid rgba(232, 197, 71, 0.2);
+    padding: 22px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.wiki-sidebar h2 {
+    color: var(--gold);
+    font-size: 1.15rem;
+    text-align: center;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+}
+
+.wiki-subtitle {
+    font-size: 0.78rem;
+    text-align: center;
+    opacity: 0.55;
+    margin-bottom: 12px;
+}
+
+.wiki-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.wiki-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+}
+
+.wiki-tab:hover {
+    background: rgba(232, 197, 71, 0.12);
+}
+
+.wiki-tab.active {
+    background: rgba(232, 197, 71, 0.22);
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 14px rgba(232, 197, 71, 0.25);
+}
+
+.wiki-tab-glyph {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+
+.wiki-back-btn {
+    width: 100%;
+    margin: 0;
+    padding: 10px;
+    font-size: 0.85rem;
+}
+
+/* ── Main content ── */
+.wiki-main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.wiki-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(232, 197, 71, 0.2);
+}
+
+.wiki-header h1 {
+    color: var(--gold);
+    font-size: 1.8rem;
+    letter-spacing: 3px;
+    margin: 0;
+}
+
+.wiki-badges {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.wiki-badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.wiki-badge.damage { color: #ff8a70; border-color: rgba(255, 138, 112, 0.4); }
+.wiki-badge.selfdamage { color: #d98cff; border-color: rgba(217, 140, 255, 0.4); }
+.wiki-badge.cooldown { color: #7ac8ff; border-color: rgba(122, 200, 255, 0.4); }
+.wiki-badge.hidden { display: none; }
+
+.wiki-skill-name {
+    color: var(--gold);
+    font-size: 1.25rem;
+    letter-spacing: 1px;
+    margin: 0;
+}
+
+.wiki-description {
+    font-size: 0.95rem;
+    line-height: 1.7;
+    opacity: 0.85;
+    margin: 0;
+}
+
+/* ── Card grid ── */
+.wiki-visual-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.wiki-card {
+    flex: 1 1 280px;
+    min-width: 260px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(232, 197, 71, 0.18);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.wiki-card-wide { flex: 1 1 100%; }
+
+.wiki-card h3 {
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    color: var(--gold);
+    font-weight: 700;
+    margin: 0;
+}
+
+.wiki-canvas-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: radial-gradient(circle at 50% 30%, rgba(232, 197, 71, 0.08), transparent 70%);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+}
+
+.wiki-canvas-wrap:active { cursor: grabbing; }
+
+.wiki-canvas-wide {
+    aspect-ratio: 16 / 9;
+    cursor: default;
+}
+
+.wiki-canvas-wrap canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.wiki-hint {
+    font-size: 0.75rem;
+    opacity: 0.5;
+    text-align: center;
+    margin: 0;
+}
+
+/* ── Mini chess board ── */
+.wiki-board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    border: 2px solid rgba(232, 197, 71, 0.4);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.wiki-board-cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(10px, 2vmin, 22px);
+    font-family: "Segoe UI Symbol", serif;
+    line-height: 1;
+    transition: background 0.2s;
+}
+
+.wiki-board-cell.light { background: #d4b896; }
+.wiki-board-cell.dark  { background: #8b5e3c; }
+
+.wiki-board-cell.caster::after {
+    content: '';
+    position: absolute;
+    inset: 12%;
+    border-radius: 50%;
+    background: rgba(46, 204, 113, 0.55);
+    box-shadow: 0 0 10px rgba(46, 204, 113, 0.9);
+}
+
+.wiki-board-cell.damage::before {
+    content: '';
+    position: absolute;
+    inset: 6%;
+    border-radius: 8px;
+    background: rgba(231, 76, 60, 0.6);
+    box-shadow: inset 0 0 10px rgba(255, 80, 60, 0.8);
+}
+
+.wiki-board-cell.path::before {
+    content: '';
+    position: absolute;
+    inset: 20%;
+    border-radius: 50%;
+    background: rgba(241, 196, 15, 0.55);
+}
+
+.wiki-board-cell.landing::after {
+    content: '';
+    position: absolute;
+    inset: 18%;
+    border-radius: 50%;
+    border: 3px solid #e8c547;
+    box-shadow: 0 0 12px rgba(232, 197, 71, 0.9);
+    animation: wikiLandPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes wikiLandPulse {
+    0%, 100% { transform: scale(1);   opacity: 1;   }
+    50%      { transform: scale(1.15); opacity: 0.65; }
+}
+
+.wiki-board-cell .piece-icon {
+    position: relative;
+    z-index: 2;
+    font-size: clamp(14px, 2.6vmin, 28px);
+    text-shadow: 0 0 6px rgba(0,0,0,0.6);
+    pointer-events: none;
+}
+
+.wiki-board-cell .piece-icon.white { color: #f5f0e1; }
+.wiki-board-cell .piece-icon.black { color: #1a1a1a; }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+    .wiki-layout { flex-direction: column; max-height: 95vh; }
+    .wiki-sidebar {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding: 10px;
+        gap: 8px;
+        border-right: none;
+        border-bottom: 1px solid rgba(232, 197, 71, 0.2);
+    }
+    .wiki-sidebar h2, .wiki-subtitle, .wiki-back-btn { display: none; }
+    .wiki-tabs { flex-direction: row; flex: 0 0 auto; }
+    .wiki-tab { padding: 6px 10px; font-size: 0.8rem; }
+    .wiki-tab-glyph { font-size: 1.2rem; }
+    .wiki-main { padding: 14px; }
+    .wiki-header h1 { font-size: 1.3rem; }
+}

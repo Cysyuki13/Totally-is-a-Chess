@@ -7,6 +7,7 @@
     <title>TotallyIsAChess</title>
     <link rel="icon" type="image/png" href="Chess_icon.png" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="wiki.css" />
 </head>
 
 <body>
@@ -97,6 +98,9 @@
                 <button class="btn" onclick="showAIDifficulty()">🤖 單人遊戲</button>
                 <button class="btn" onclick="showMultiplayerSetup()">👥 雙人遊戲</button>
             </div>
+            <div class="btn-row" style="margin-top:8px;">
+                <button class="btn btn-secondary" onclick="openWiki()">📖 技能圖鑑</button>
+            </div>
         </div>
     </div>
 
@@ -125,6 +129,20 @@
                 <button class="btn difficulty-btn" onclick="startAIGame('easy')">🙂 悠閒</button>
                 <button class="btn difficulty-btn" onclick="startAIGame('hard')">🔥 困難</button>
             </div>
+
+            <!-- ★ 遊戲模式切換開關 -->
+            <div class="game-mode-toggle-row">
+                <span class="mode-label" id="aiModeLabelLeft">♟ 一般模式</span>
+                <label class="toggle-switch" for="aiGameModeToggle">
+                    <input type="checkbox" id="aiGameModeToggle" checked onchange="onAIModeToggleChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="mode-label" id="aiModeLabelRight">⚡ 技能模式</span>
+            </div>
+            <div class="mode-hint" id="aiModeHint">
+                目前：<strong>技能模式</strong> — 棋子可使用特殊技能
+            </div>
+
             <button class="btn btn-secondary" style="margin-top:16px;" onclick="backToMenu()">← 返回</button>
         </div>
     </div>
@@ -261,7 +279,57 @@
     </div>
 
     <!-- ============================================================ -->
-    <!--  PROMOTION                                                    -->
+    <!--  WIKI / 技能圖鑑                                              -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="wikiOverlay">
+        <div class="wiki-layout">
+            <aside class="wiki-sidebar">
+                <h2>📖 技能圖鑑</h2>
+                <p class="wiki-subtitle">選擇棋子查看技能</p>
+                <div class="wiki-tabs">
+                    <button class="wiki-tab" data-piece="pawn"><span class="wiki-tab-glyph">♟</span> 兵</button>
+                    <button class="wiki-tab" data-piece="rook"><span class="wiki-tab-glyph">♜</span> 城堡</button>
+                    <button class="wiki-tab" data-piece="knight"><span class="wiki-tab-glyph">♞</span> 騎士</button>
+                    <button class="wiki-tab" data-piece="bishop"><span class="wiki-tab-glyph">♝</span> 主教</button>
+                    <button class="wiki-tab" data-piece="queen"><span class="wiki-tab-glyph">♛</span> 皇后</button>
+                    <button class="wiki-tab" data-piece="king"><span class="wiki-tab-glyph">♚</span> 國王</button>
+                </div>
+                <button class="btn btn-secondary wiki-back-btn" onclick="closeWiki()">← 返回主選單</button>
+            </aside>
+            <main class="wiki-main">
+                <header class="wiki-header">
+                    <h1 id="wikiPieceName">兵</h1>
+                    <div class="wiki-badges">
+                        <span class="wiki-badge damage">💥 傷害 <b id="wikiDamage">-</b></span>
+                        <span class="wiki-badge selfdamage hidden" id="wikiSelfDamageBadge">💔 自身 <b
+                                id="wikiSelfDamage">-</b></span>
+                        <span class="wiki-badge cooldown">⏳ 冷卻 <b id="wikiCooldown">-</b></span>
+                    </div>
+                </header>
+                <h2 class="wiki-skill-name" id="wikiSkillName">技能名稱</h2>
+                <p class="wiki-description" id="wikiDescription">技能說明</p>
+                <div class="wiki-visual-row">
+                    <section class="wiki-card">
+                        <h3>🧊 3D 模型</h3>
+                        <div class="wiki-canvas-wrap" id="wikiModel3D"></div>
+                        <p class="wiki-hint">🖱 拖動旋轉模型</p>
+                    </section>
+                    <section class="wiki-card">
+                        <h3>🎯 攻擊範圍</h3>
+                        <div class="wiki-board" id="wikiBoard"></div>
+                        <p class="wiki-hint">🔴 傷害　🟡 落點　⚪ 施放者</p>
+                    </section>
+                </div>
+                <section class="wiki-card wiki-card-wide">
+                    <h3>🎬 效果展示</h3>
+                    <div class="wiki-canvas-wrap wiki-canvas-wide" id="wikiEffect"></div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ============ PROMOTION ============ -->
     <!-- ============================================================ -->
     <div class="overlay hidden" id="promotionOverlay">
         <div class="panel">
@@ -323,6 +391,7 @@
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
     <script src="main.js"></script>
     <script src="ai.js"></script>
+    <script src="wiki.js"></script>
 </body>
 
 </html>

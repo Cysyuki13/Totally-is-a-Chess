@@ -177,7 +177,9 @@ function applyMoveToClone(game, action) {
         : null;
 
     // Knight push — only when the knockback skill is off cooldown
-    if (piece.type === 'knight' && (piece.skillCooldown || 0) === 0) {
+    if (piece.type === 'knight' &&
+        isAbilityEnabledForColor(piece.color) &&
+        (piece.skillCooldown || 0) === 0) {
         const pushed = applyKnightPushSim(game, action.fromR, action.fromC, toR, toC, piece.color);
         if (pushed) {
             const movedKnight = game.board[toR][toC];
@@ -235,6 +237,41 @@ function applyAbilityToClone(game, action) {
         game.moveHistory.push({
             type: 'ability', abilityName: ability.name,
             fromR: action.fromR, fromC: action.fromC, targetR: toR, targetC: toC,
+        });
+        return;
+    }
+
+    // ── Bishop "Cannon Leap": jump past the first piece, damage path ──
+    if (piece.type === 'bishop' && ability.name === '炮躍 (Cannon Leap)') {
+        const toR = action.r, toC = action.c;
+        const dr = Math.sign(toR - action.fromR);
+        const dc = Math.sign(toC - action.fromC);
+        const steps = Math.abs(toR - action.fromR);
+
+        // Damage every piece on the path (exclusive of start & landing)
+        for (let i = 1; i < steps; i++) {
+            const r = action.fromR + dr * i;
+            const c = action.fromC + dc * i;
+            if (!game.isInBounds(r, c)) continue;
+            const t = game.board[r][c];
+            if (t) {
+                t.hp -= ability.damage;
+                if (t.hp <= 0) game.board[r][c] = null;
+            }
+        }
+
+        // Move the bishop
+        game.board[action.fromR][action.fromC] = null;
+        game.board[toR][toC] = { ...piece, hasMoved: true };
+        const landed = game.board[toR][toC];
+        game.putOnSkillCooldown(landed);
+
+        game.halfMoveClock++;
+        game.flipTurn();
+        game.moveHistory.push({
+            type: 'bishop_leap',
+            fromR: action.fromR, fromC: action.fromC,
+            toR, toC, damageDealt: ability.damage
         });
         return;
     }
@@ -383,8 +420,10 @@ function scoreActionImmediate(game, action, side, cfg) {
             if (cap.type === 'king') score += cfg.kingCaptureBonus;
         }
         // Knight push value (best case)
+        // Knight push value (best case)
         const piece = game.getPiece(action.fromR, action.fromC);
-        if (piece && piece.type === 'knight') {
+        if (piece && piece.type === 'knight' &&
+            isAbilityEnabledForColor(piece.color)) {
             const canPush = (piece.skillCooldown || 0) === 0;
             const victims = getPushableVictims(game, action.toR, action.toC, action.fromR, action.fromC, piece.color);
             for (const v of victims) {
@@ -398,6 +437,30 @@ function scoreActionImmediate(game, action, side, cfg) {
         const target = game.getPiece(action.r, action.c);
         const movingPiece = game.getPiece(action.fromR, action.fromC);
         const ab = action.ability;
+
+        // ★ Bishop leap: sum path damage; penalise friendly fire
+        if (movingPiece && movingPiece.type === 'bishop' &&
+            ab.name === '炮躍 (Cannon Leap)') {
+            const dr = Math.sign(action.r - action.fromR);
+            const dc = Math.sign(action.c - action.fromC);
+            const steps = Math.abs(action.r - action.fromR);
+            for (let i = 1; i < steps; i++) {
+                const pr = action.fromR + dr * i;
+                const pc = action.fromC + dc * i;
+                if (!game.isInBounds(pr, pc)) continue;
+                const p = game.getPiece(pr, pc);
+                if (!p) continue;
+                const ratio = Math.min(1, ab.damage / p.hp);
+                if (p.color === enemy) {
+                    score += PIECE_VALUES[p.type] * ratio * cfg.damageWeight;
+                    if (p.type === 'king') score += cfg.kingCaptureBonus * ratio;
+                } else if (p !== movingPiece) {
+                    // Friendly fire — heavy penalty (same as existing)
+                    score -= PIECE_VALUES[p.type] * ratio * 10.0;
+                }
+            }
+            return score;
+        }
 
         if (target && target.color === enemy) {
             // Enemy hit — reward
@@ -623,7 +686,8 @@ function executeChosenAction(action) {
 
         // ★ Knockback is the knight's special skill → if it's cooling down,
         //   treat this as a plain move (no victims, no push, no cooldown reset).
-        const canPush = (movingPiece.skillCooldown || 0) === 0;
+        const canPush = isAbilityEnabledForColor(movingPiece.color) &&
+            (movingPiece.skillCooldown || 0) === 0;
         const victims = canPush
             ? getPushableVictims(gameState, landR, landC, action.fromR, action.fromC, movingPiece.color)
             : [];
