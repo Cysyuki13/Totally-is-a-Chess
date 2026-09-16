@@ -23,6 +23,7 @@ body {
     color: var(--text);
     overflow: hidden;
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
     user-select: none;
     -webkit-user-select: none;
@@ -41,6 +42,11 @@ body {
 
 .overlay {
     position: fixed;
+    /* explicit fallback for browsers that don't support `inset` */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 10;
     display: flex;
     flex-direction: column;
@@ -49,12 +55,18 @@ body {
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    transition: opacity 0.3s ease;
+    overflow: hidden;
+    visibility: visible;
+    /* when showing: fade in + reveal instantly */
+    transition: opacity 0.3s ease, visibility 0s linear 0s;
 }
 
 .overlay.hidden {
     opacity: 0;
     pointer-events: none;
+    visibility: hidden;
+    /* when hiding: fade out first, then hide (kills backdrop-filter) */
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
 }
 
 /* Restart modal: subtle pop-in when appearing */
@@ -63,8 +75,15 @@ body {
 }
 
 @keyframes modalPop {
-    from { transform: scale(0.92); opacity: 0; }
-    to   { transform: scale(1);    opacity: 1; }
+    from {
+        transform: scale(0.92);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .check-warning.hidden,
@@ -84,6 +103,7 @@ body {
     text-align: center;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     max-height: 90vh;
+    max-height: 90dvh;
     overflow-y: auto;
 }
 
@@ -767,6 +787,10 @@ body {
 
 #mobileCannonControls {
     position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     inset: 0;
     z-index: 250;
     pointer-events: none;
@@ -985,9 +1009,16 @@ body {
 .chess-bg {
     position: absolute;
     inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* fallback */
     overflow: hidden;
     pointer-events: none;
     z-index: 0;
+    transform: translateZ(0);
+    /* single shared layer */
 }
 
 /* ── Slow-drifting checkerboard ── */
@@ -1157,5 +1188,49 @@ body {
     .piece {
         opacity: 0.08;
         transform: translateY(50vh);
+    }
+}
+
+/* ============================================================
+   Mobile performance / stability overrides
+   ============================================================ */
+@media (pointer: coarse),
+(max-width: 900px) {
+
+    /* The blur is the main cause of glitching on mobile GPUs.
+       Fall back to a solid dark layer — visually similar, far cheaper. */
+    .overlay {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(0, 0, 0, 0.88);
+    }
+
+    /* Shrink the giant glow disc (was 140vmax → huge GPU layer) */
+    .bg-glow {
+        width: 90vmax;
+        height: 90vmax;
+        animation: none;
+    }
+
+    /* Stop the drifting checkerboard animation */
+    .bg-grid {
+        animation: none;
+    }
+
+    /* Park the floating glyphs (removes 8 compositor layers).
+       Keep a subtle static presence so menus don't look empty. */
+    .piece {
+        animation: none !important;
+        opacity: 0.06;
+        transform: translateY(40vh) rotate(0deg);
+        will-change: auto;
+        filter: none;
+        text-shadow: none;
+    }
+
+    /* Belt-and-braces: cap canvas pixel ratio on phones */
+    #gameCanvas canvas {
+        max-width: 100%;
+        max-height: 100%;
     }
 }
