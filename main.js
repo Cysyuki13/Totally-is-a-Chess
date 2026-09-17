@@ -5396,6 +5396,215 @@ function initNewGame() {
 }
 
 // ============================================================
+//  ★ Developer Console Tool — open chess editor in a new tab
+//  Usage (in DevTools console):
+//      openChessEditor()
+//      openChessEditor('someOtherEditor.html')
+// ============================================================
+window.openChessEditor = function (filename = 'chessEditor.html') {
+    const url = new URL(filename, window.location.href);
+
+    // If a game is currently in progress, carry the board state over
+    // so the editor can pre-load the exact position.
+    if (typeof gameState !== 'undefined' && gameState && Array.isArray(gameState.board)) {
+        try {
+            url.hash = 'board=' + encodeBoardStateForEditor(gameState.board) +
+                '&turn=' + (gameState.turn || 'white');
+        } catch (err) {
+            console.warn('⚠️ 無法序列化棋盤狀態:', err);
+        }
+    }
+
+    const win = window.open(url.href, '_blank', 'noopener');
+    if (!win) {
+        console.warn('⚠️ 瀏覽器阻擋了彈出視窗，請允許本站彈出視窗後再試一次。');
+    }
+    return win;
+};
+
+/**
+ * Encode the 8x8 board array into a compact FEN-style string.
+ * Example: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+ *   - lowercase = black piece
+ *   - UPPERCASE = white piece
+ *   - digits    = consecutive empty squares
+ *
+ * This is the board portion of FEN — the editor can parse it
+ * and reconstruct the position. Read it back with:
+ *     new URLSearchParams(location.hash.slice(1)).get('board')
+ */
+function encodeBoardStateForEditor(board) {
+    const LETTER = {
+        king: 'k',
+        queen: 'q',
+        rook: 'r',
+        bishop: 'b',
+        knight: 'n',
+        pawn: 'p',
+    };
+
+    const rows = [];
+    for (let r = 0; r < 8; r++) {
+        let row = '';
+        let emptyRun = 0;
+
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (!p) {
+                emptyRun++;
+                continue;
+            }
+            if (emptyRun > 0) { row += emptyRun; emptyRun = 0; }
+            const ch = LETTER[p.type] || '?';
+            row += (p.color === 'white') ? ch.toUpperCase() : ch;
+        }
+
+        if (emptyRun > 0) row += emptyRun;
+        rows.push(row);
+    }
+    return rows.join('/');
+}
+
+// ============================================================
+//  ★ Console Help Banner
+//  Lists every developer console command available.
+// ============================================================
+window.chessHelp = function () {
+    const gold = 'color:#e8c547; font-weight:bold; font-size:13px;';
+    const title = 'color:#e8c547; font-weight:bold; font-size:16px;';
+    const cmd = 'color:#7ac8ff; font-weight:bold; font-family:monospace;';
+    const desc = 'color:#f0e6d3; font-family:monospace;';
+    const dim = 'color:#888; font-style:italic; font-family:monospace;';
+
+    console.log('%c♞ 西洋棋 — 開發者指令列表', title);
+    console.log('%c─────────────────────────────────────────', gold);
+
+    // ── Editor / Tools ──
+    console.log('%c📝 編輯器 / 工具', gold);
+    console.log('  %copenChessEditor(filename?)%c  → 在新分頁開啟棋盤編輯器', cmd, desc);
+    console.log('  %c                              %c     預設檔名: chessEditor.html', dim, desc);
+    console.log('  %c                              %c     會附帶當前棋盤狀態 (board=…&turn=…)', dim, desc);
+
+    // ── Game State ──
+    console.log('%c🎮 遊戲狀態', gold);
+    console.log('  %cgameState%c                   → 當前 ChessGame 物件 (棋盤、回合、歷史…)', cmd, desc);
+    console.log('  %ccurrentMode%c                 → 目前模式: "ai" | "multiplayer" | null', cmd, desc);
+    console.log('  %cplayerColor%c                 → 你的顏色: "white" | "black"', cmd, desc);
+    console.log('  %caiDifficulty%c                → AI 難度: "noob" | "easy" | "hard"', cmd, desc);
+    console.log('  %croomSettings%c                → 房間設定 (模式、時間、技能權限)', cmd, desc);
+
+    // ── Debug ──
+    console.log('%c🐞 除錯 / 除錯用', gold);
+    console.log('  %cprintBoard()%c                → 在 console 以文字印出棋盤', cmd, desc);
+    console.log('  %ctoggleShadows()%c             → 開關陰影 (效能測試用)', cmd, desc);
+    console.log('  %cgetFPS()%c                    → 顯示目前 FPS', cmd, desc);
+
+    // ── Modifiers (dangerous) ──
+    console.log('%c⚠️  危險指令 (會改變遊戲狀態)', '#e74c3c');
+    console.log('  %csetTurn("white"|"black")%c    → 強制切換回合', cmd, desc);
+    console.log('  %chealAll()%c                   → 將所有棋子補滿 HP', cmd, desc);
+    console.log('  %cclearBoard()%c                → 清空棋盤 (慎用)', cmd, desc);
+
+    console.log('%c─────────────────────────────────────────', gold);
+    console.log('%c輸入 chessHelp() 可再次顯示此列表', dim);
+};
+
+// Auto-print the banner once on page load
+window.addEventListener('load', () => {
+    // Slight delay so it prints after Three.js init logs
+    setTimeout(() => window.chessHelp(), 200);
+});
+
+// ============================================================
+//  ★ Optional Debug Helpers
+// ============================================================
+
+// Pretty-print the board in the console
+window.printBoard = function () {
+    if (!gameState) return console.warn('⚠️ 沒有進行中的遊戲');
+    const GLYPH = {
+        white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' },
+        black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' },
+    };
+    let out = '\n   A B C D E F G H\n';
+    for (let r = 0; r < 8; r++) {
+        out += (8 - r) + '  ';
+        for (let c = 0; c < 8; c++) {
+            const p = gameState.board[r][c];
+            out += (p ? GLYPH[p.color][p.type] : '·') + ' ';
+        }
+        out += ' ' + (8 - r) + '\n';
+    }
+    out += '   A B C D E F G H\n';
+    console.log('%c' + out, 'font-family:monospace; font-size:14px; color:#e8c547;');
+    console.log(`  回合: %c${gameState.turn}%c  |  歷史步數: ${gameState.moveHistory.length}`,
+        'color:#7ac8ff; font-weight:bold;', 'color:#f0e6d3;');
+};
+
+// Toggle shadows for perf testing
+window.toggleShadows = function () {
+    if (!renderer) return;
+    const on = !renderer.shadowMap.enabled;
+    renderer.shadowMap.enabled = on;
+    renderer.shadowMap.needsUpdate = true;
+    scene.traverse(n => { if (n.material) n.material.needsUpdate = true; });
+    console.log(`陰影: %c${on ? '開啟' : '關閉'}`,
+        on ? 'color:#2ecc71;font-weight:bold;' : 'color:#e74c3c;font-weight:bold;');
+};
+
+// Simple FPS meter
+window.getFPS = function (samples = 60) {
+    let frames = 0;
+    const start = performance.now();
+    let raf;
+    const tick = () => {
+        frames++;
+        const elapsed = performance.now() - start;
+        if (frames >= samples) {
+            const fps = (frames / elapsed) * 1000;
+            console.log(`FPS: %c${fps.toFixed(1)}`,
+                'color:#7ac8ff;font-weight:bold;font-size:14px;');
+            return;
+        }
+        raf = requestAnimationFrame(tick);
+    };
+    tick();
+};
+
+// Force turn switch
+window.setTurn = function (color) {
+    if (!gameState) return console.warn('⚠️ 沒有進行中的遊戲');
+    if (color !== 'white' && color !== 'black')
+        return console.warn('⚠️ 用法: setTurn("white") 或 setTurn("black")');
+    gameState.turn = color;
+    updateTurnIndicator();
+    console.log(`回合已切換為: %c${color}`, 'color:#e8c547;font-weight:bold;');
+};
+
+// Heal everything
+window.healAll = function () {
+    if (!gameState) return console.warn('⚠️ 沒有進行中的遊戲');
+    let count = 0;
+    for (let r = 0; r < 8; r++)
+        for (let c = 0; c < 8; c++) {
+            const p = gameState.board[r][c];
+            if (p) { p.hp = p.maxHp; count++; }
+        }
+    syncPiecesAfterMove();
+    console.log(`已補滿 %c${count}%c 個棋子`, 'color:#2ecc71;font-weight:bold;', 'color:#f0e6d3;');
+};
+
+// Empty the board (very destructive)
+window.clearBoard = function () {
+    if (!gameState) return console.warn('⚠️ 沒有進行中的遊戲');
+    if (!confirm('⚠️ 確定要清空整個棋盤嗎？此操作無法復原。')) return;
+    for (let r = 0; r < 8; r++)
+        for (let c = 0; c < 8; c++) gameState.board[r][c] = null;
+    syncPiecesAfterMove();
+    console.log('棋盤已清空。');
+};
+
+// ============================================================
 //  BOOT
 // ============================================================
 window.onload = () => {

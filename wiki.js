@@ -474,8 +474,9 @@ function playPieceEffect(type) {
 }
 
 // ── Individual effect players ──
+// ── Pawn effect ───────────────────────────────────────────────
 function setupPawnEffect() {
-    const CYCLE = 3000;
+    const CYCLE = 2800;
     wikiLoop(CYCLE, () => {
         clearEffectScene();
         wikiEffectRoot.add(makeWikiGround());
@@ -491,7 +492,7 @@ function setupPawnEffect() {
             pawn.position.z = 1.2 * (1 - t);
 
             if (t >= 1) {
-                // Cross explosion at pawn position
+                // ★ Full cross-explosion showcase
                 spawnCrossBurst(pawn.position.x, pawn.position.z);
                 return;
             }
@@ -501,39 +502,145 @@ function setupPawnEffect() {
     });
 }
 
+// ★ Enhanced cross burst — 4-direction explosion grid
+//   matches the in-game "charge explosion" cross AoE
 function spawnCrossBurst(x, z) {
     const burstStart = performance.now();
-    const DURATION = 700;
-    const beams = [];
+    const DURATION = 1100;
+    const SQ = 0.6;                       // wiki-grid square size
     const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    // ── 1. Four beams extending one square out from the centre ──
+    const beams = [];
     for (const [dr, dc] of dirs) {
-        const geo = new THREE.BoxGeometry(0.06, 0.06, 0.9);
-        const mat = new THREE.MeshBasicMaterial({
+        const beamGeo = new THREE.BoxGeometry(
+            dr !== 0 ? SQ * 1.05 : 0.16,
+            0.10,
+            dc !== 0 ? SQ * 1.05 : 0.16
+        );
+        const beamMat = new THREE.MeshBasicMaterial({
             color: 0xff6622, transparent: true, opacity: 0.95,
             depthWrite: false, blending: THREE.AdditiveBlending,
         });
-        const beam = new THREE.Mesh(geo, mat);
-        beam.position.set(x + dr * 0.45, 0.15, z + dc * 0.45);
-        if (dr === 0) beam.rotation.y = Math.PI / 2;
+        const beam = new THREE.Mesh(beamGeo, beamMat);
+        beam.position.set(x + dr * SQ * 0.5, 0.10, z + dc * SQ * 0.5);
+        beam.renderOrder = 15;
         wikiEffectRoot.add(beam);
         beams.push(beam);
     }
-    // Flash
-    const flashGeo = new THREE.SphereGeometry(0.35, 14, 14);
+
+    // ── 2. Hot "hit plates" on the 4 outer cells (shows the AoE) ──
+    const plates = [];
+    for (const [dr, dc] of dirs) {
+        // Fill plate
+        const plateGeo = new THREE.PlaneGeometry(SQ * 0.95, SQ * 0.95);
+        const plateMat = new THREE.MeshBasicMaterial({
+            color: 0xff2200, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, depthWrite: false,
+        });
+        const plate = new THREE.Mesh(plateGeo, plateMat);
+        plate.rotation.x = -Math.PI / 2;
+        plate.position.set(x + dr * SQ, 0.05, z + dc * SQ);
+        plate.renderOrder = 16;
+        wikiEffectRoot.add(plate);
+        plates.push(plate);
+
+        // Pulsing ring outline on each hit cell
+        const ringGeo = new THREE.RingGeometry(SQ * 0.28, SQ * 0.42, 24);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xffaa00, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(x + dr * SQ, 0.06, z + dc * SQ);
+        ring.renderOrder = 17;
+        wikiEffectRoot.add(ring);
+        plates.push(ring);
+    }
+
+    // ── 3. Center hotspot ──
+    const centerGeo = new THREE.CircleGeometry(SQ * 0.5, 24);
+    const centerMat = new THREE.MeshBasicMaterial({
+        color: 0xffcc44, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const centerDisc = new THREE.Mesh(centerGeo, centerMat);
+    centerDisc.rotation.x = -Math.PI / 2;
+    centerDisc.position.set(x, 0.045, z);
+    centerDisc.renderOrder = 17;
+    wikiEffectRoot.add(centerDisc);
+
+    // ── 4. Bright flash sphere ──
+    const flashGeo = new THREE.SphereGeometry(0.42, 16, 16);
     const flashMat = new THREE.MeshBasicMaterial({
         color: 0xffffaa, transparent: true, opacity: 1,
         depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const flash = new THREE.Mesh(flashGeo, flashMat);
-    flash.position.set(x, 0.3, z);
+    flash.position.set(x, 0.4, z);
     wikiEffectRoot.add(flash);
 
+    // ── 5. Particles flying along each arm ──
+    const particles = [];
+    for (const [dr, dc] of dirs) {
+        for (let i = 0; i < 12; i++) {
+            const pg = new THREE.SphereGeometry(0.035 + Math.random() * 0.03, 5, 5);
+            const pm = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(0.05 + Math.random() * 0.08, 1, 0.55 + Math.random() * 0.25),
+                transparent: true, opacity: 1, depthWrite: false,
+                blending: THREE.AdditiveBlending,
+            });
+            const p = new THREE.Mesh(pg, pm);
+            p.position.set(x + dr * 0.08, 0.1, z + dc * 0.08);
+            const lateral = (Math.random() - 0.5) * 0.4;
+            p.userData.vel = new THREE.Vector3(
+                dr * (2.5 + Math.random() * 2.5) + (dc !== 0 ? lateral : 0),
+                1.6 + Math.random() * 2.5,
+                dc * (2.5 + Math.random() * 2.5) + (dr !== 0 ? lateral : 0)
+            );
+            p.renderOrder = 20;
+            wikiEffectRoot.add(p);
+            particles.push(p);
+        }
+    }
+
+    // ── Animation ──
     const loop = () => {
         const t = (performance.now() - burstStart) / DURATION;
         if (t >= 1) return;
-        for (const b of beams) b.material.opacity = 0.95 * (1 - t);
-        flash.scale.setScalar(1 + t * 4);
-        flash.material.opacity = 1 - t * 1.2;
+
+        // Beams: quick flash then fade
+        const beamAlpha = Math.max(0, 1 - t * 2.2);
+        for (const b of beams) {
+            b.material.opacity = 0.95 * beamAlpha;
+            b.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15);
+        }
+
+        // Plates: bloom in then fade, with a slow pulse
+        const bloom = Math.min(t * 6, 1) * Math.max(0, 1 - t * 1.4);
+        for (let i = 0; i < 4; i++) {
+            plates[i * 2].material.opacity = bloom * 0.55;
+            plates[i * 2 + 1].material.opacity = bloom * (0.7 + 0.3 * Math.sin(t * 30));
+            plates[i * 2 + 1].scale.setScalar(1 + t * 1.2);
+        }
+        centerDisc.material.opacity = bloom * (0.6 + 0.4 * Math.sin(t * 24));
+        centerDisc.scale.setScalar(1 + t * 1.6);
+
+        // Flash
+        flash.scale.setScalar(1 + t * 5.5);
+        flash.material.opacity = Math.max(0, 1 - t * 2.6);
+
+        // Particles
+        for (const p of particles) {
+            p.position.addScaledVector(p.userData.vel, 0.02);
+            p.userData.vel.y -= 0.14;
+            p.material.opacity = Math.max(0, 1 - t * 1.2);
+            p.scale.setScalar(1 - t * 0.3);
+        }
+
         requestAnimationFrame(loop);
     };
     loop();
@@ -724,8 +831,9 @@ function setupKnightEffect() {
     });
 }
 
+// ── Bishop effect ─────────────────────────────────────────────
 function setupBishopEffect() {
-    const CYCLE = 3400;
+    const CYCLE = 4200;
     wikiLoop(CYCLE, () => {
         clearEffectScene();
         wikiEffectRoot.add(makeWikiGround());
@@ -742,9 +850,11 @@ function setupBishopEffect() {
         const start = new THREE.Vector3(-1.5, 0, 1.5);
         const end = new THREE.Vector3(1.5, 0, -1.5);
 
-        // Ground crack trail
         const startT = performance.now();
-        const DURATION = 700;
+        const DURATION = 750;
+
+        // ★ Fire up the full lava-crack trail along the leap path
+        spawnBishopLeapTrail(start, end, DURATION / 1000);
 
         const jump = () => {
             const t = Math.min((performance.now() - startT) / DURATION, 1);
@@ -754,7 +864,6 @@ function setupBishopEffect() {
 
             if (t >= 0.5 && !jump._hitScreen) {
                 jump._hitScreen = true;
-                // Flash the screen piece and fade it (it "took damage")
                 screen.traverse(n => {
                     if (n.isMesh && n.material) {
                         n.material.color.setHex(0xff2200);
@@ -766,9 +875,7 @@ function setupBishopEffect() {
 
             if (t < 1) requestAnimationFrame(jump);
             else {
-                spawnBishopLava(end.x, end.z);
-                // Fade back in for the next cycle
-                setTimeout(() => { screen.visible = true; }, 800);
+                setTimeout(() => { screen.visible = true; }, 1000);
             }
         };
         jump._hitScreen = false;
@@ -776,48 +883,318 @@ function setupBishopEffect() {
     });
 }
 
-function spawnBishopLava(x, z) {
+// ★ Full "lava-crack trail" for the bishop leap — matches in-game effect
+function spawnBishopLeapTrail(start, end, leapDurationSec) {
     const startT = performance.now();
-    const DURATION = 1200;
-    const cracks = [];
-    for (let i = 0; i < 5; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const len = 0.5 + Math.random() * 0.6;
-        const geo = new THREE.PlaneGeometry(len, 0.08);
-        const mat = new THREE.MeshBasicMaterial({
-            color: 0xff7700, transparent: true, opacity: 0.9,
-            depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-        });
-        const m = new THREE.Mesh(geo, mat);
-        m.rotation.x = -Math.PI / 2;
-        m.rotation.z = angle;
-        m.position.set(x + Math.cos(angle) * len * 0.5, 0.03, z + Math.sin(angle) * len * 0.5);
-        wikiEffectRoot.add(m);
-        cracks.push(m);
-    }
-    const ringGeo = new THREE.RingGeometry(0.25, 0.4, 32);
-    const ringMat = new THREE.MeshBasicMaterial({
-        color: 0xffcc44, transparent: true, opacity: 1,
-        depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(x, 0.04, z);
-    wikiEffectRoot.add(ring);
+    const TOTAL = 3.2;   // total lifetime (seconds)
 
+    const state = {
+        cracks: [], lava: [], embers: [], rings: [], glows: [],
+        disposed: false,
+    };
+
+    // Compute path nodes
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const len = Math.hypot(dx, dz);
+    const steps = Math.max(3, Math.round(len / 0.5));
+    const nodes = [];
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        nodes.push({
+            x: start.x + dx * t,
+            z: start.z + dz * t,
+            delay: t * leapDurationSec,
+            isLanding: i === steps,
+        });
+    }
+
+    // Helper: ground-aligned segment
+    const makeGroundSegment = (p1, p2, width, mat, y) => {
+        const ddx = p2.x - p1.x, ddz = p2.z - p1.z;
+        const L = Math.hypot(ddx, ddz);
+        if (L < 1e-4) return null;
+        const geo = new THREE.PlaneGeometry(L, width);
+        const mesh = new THREE.Mesh(geo, mat);
+        const dirV = new THREE.Vector3(ddx, 0, ddz).normalize();
+        const perp = new THREE.Vector3(-dirV.z, 0, dirV.x);
+        const up = new THREE.Vector3(0, 1, 0);
+        const mtx = new THREE.Matrix4().makeBasis(dirV, perp, up);
+        mesh.quaternion.setFromRotationMatrix(mtx);
+        mesh.position.set((p1.x + p2.x) / 2, y, (p1.z + p2.z) / 2);
+        return mesh;
+    };
+
+    const buildCrackCluster = (cx, cz, delay, sizeMul) => {
+        const baseAngle = Math.random() * Math.PI * 2;
+        const mainLen = (0.5 + Math.random() * 0.25) * sizeMul;
+        const segs = 5;
+        const mainPts = [];
+        for (let s = 0; s <= segs; s++) {
+            const tt = s / segs - 0.5;
+            const jitter = (Math.random() - 0.5) * 0.10;
+            mainPts.push(new THREE.Vector3(
+                cx + Math.cos(baseAngle) * mainLen * tt + Math.cos(baseAngle + Math.PI / 2) * jitter,
+                0,
+                cz + Math.sin(baseAngle) * mainLen * tt + Math.sin(baseAngle + Math.PI / 2) * jitter
+            ));
+        }
+
+        const meshes = [];
+        const darkMat = new THREE.MeshBasicMaterial({
+            color: 0x080200, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+        const lavaMat = new THREE.MeshBasicMaterial({
+            color: 0xff8822, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        });
+
+        for (let s = 0; s < mainPts.length - 1; s++) {
+            const p1 = mainPts[s], p2 = mainPts[s + 1];
+            const dm = makeGroundSegment(p1, p2, 0.075, darkMat, 0.018);
+            if (dm) { dm.renderOrder = 10; wikiEffectRoot.add(dm); meshes.push({ mesh: dm, kind: 'dark' }); }
+            const lm = makeGroundSegment(p1, p2, 0.045, lavaMat, 0.030);
+            if (lm) { lm.renderOrder = 11; wikiEffectRoot.add(lm); meshes.push({ mesh: lm, kind: 'lava' }); }
+        }
+
+        // Branches
+        for (let b = 0; b < 3; b++) {
+            const startIdx = 1 + Math.floor(Math.random() * (mainPts.length - 2));
+            const sp = mainPts[startIdx];
+            const branchAngle = baseAngle + (Math.random() < 0.5 ? 1 : -1) * (0.5 + Math.random() * 1.1);
+            const branchLen = (0.15 + Math.random() * 0.2) * sizeMul;
+            const bPts = [sp.clone()];
+            for (let s = 1; s <= 3; s++) {
+                const tt = s / 3;
+                const j = (Math.random() - 0.5) * 0.05;
+                bPts.push(new THREE.Vector3(
+                    sp.x + Math.cos(branchAngle) * branchLen * tt + j,
+                    0,
+                    sp.z + Math.sin(branchAngle) * branchLen * tt + j
+                ));
+            }
+
+            const darkBMat = new THREE.MeshBasicMaterial({
+                color: 0x080200, transparent: true, opacity: 0,
+                depthWrite: false, side: THREE.DoubleSide,
+            });
+            const lavaBMat = new THREE.MeshBasicMaterial({
+                color: 0xff6611, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+            });
+            for (let s = 0; s < bPts.length - 1; s++) {
+                const p1 = bPts[s], p2 = bPts[s + 1];
+                const dm = makeGroundSegment(p1, p2, 0.05, darkBMat, 0.018);
+                if (dm) { dm.renderOrder = 10; wikiEffectRoot.add(dm); meshes.push({ mesh: dm, kind: 'dark' }); }
+                const lm = makeGroundSegment(p1, p2, 0.03, lavaBMat, 0.030);
+                if (lm) { lm.renderOrder = 11; wikiEffectRoot.add(lm); meshes.push({ mesh: lm, kind: 'lava' }); }
+            }
+        }
+
+        state.cracks.push({
+            meshes, bornAt: delay,
+            pulsePhase: Math.random() * Math.PI * 2,
+            lifeStart: delay + 0.4,
+            fadeDuration: TOTAL - delay - 0.4,
+        });
+    };
+
+    // ---- Build cracks along every node ----
+    for (const node of nodes) {
+        buildCrackCluster(node.x, node.z, node.delay, node.isLanding ? 1.25 : 1.0);
+    }
+
+    // ---- Lava, embers, rings, heat per node ----
+    for (const node of nodes) {
+        // Lava particles
+        const lavaCount = node.isLanding ? 26 : 12;
+        for (let i = 0; i < lavaCount; i++) {
+            const pg = new THREE.SphereGeometry(0.035 + Math.random() * 0.04, 5, 5);
+            const pm = new THREE.MeshBasicMaterial({
+                color: 0xffcc44, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const mesh = new THREE.Mesh(pg, pm);
+            mesh.renderOrder = 20;
+            mesh.position.set(
+                node.x + (Math.random() - 0.5) * 0.3,
+                0.08,
+                node.z + (Math.random() - 0.5) * 0.3
+            );
+            wikiEffectRoot.add(mesh);
+            const a = Math.random() * Math.PI * 2;
+            const spread = 0.6 + Math.random() * 1.2;
+            const upSpeed = node.isLanding ? (3.0 + Math.random() * 2.5) : (2.0 + Math.random() * 1.8);
+            state.lava.push({
+                mesh,
+                vel: new THREE.Vector3(Math.cos(a) * spread * 0.7, upSpeed, Math.sin(a) * spread * 0.7),
+                bornAt: node.delay + Math.random() * 0.12,
+                life: 0.9 + Math.random() * 0.7,
+            });
+        }
+
+        // Embers
+        for (let i = 0; i < 6; i++) {
+            const pg = new THREE.SphereGeometry(0.018 + Math.random() * 0.02, 4, 4);
+            const pm = new THREE.MeshBasicMaterial({
+                color: 0xffaa33, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const mesh = new THREE.Mesh(pg, pm);
+            mesh.renderOrder = 20;
+            mesh.position.set(
+                node.x + (Math.random() - 0.5) * 0.3,
+                0.06,
+                node.z + (Math.random() - 0.5) * 0.3
+            );
+            wikiEffectRoot.add(mesh);
+            state.embers.push({
+                mesh,
+                velY: 0.6 + Math.random() * 1.2,
+                driftX: (Math.random() - 0.5) * 0.5,
+                driftZ: (Math.random() - 0.5) * 0.5,
+                bornAt: node.delay + Math.random() * 0.15,
+                life: 1.4 + Math.random() * 0.8,
+            });
+        }
+
+        // Shock ring per non-landing node
+        if (!node.isLanding) {
+            const rg = new THREE.RingGeometry(0.08, 0.2, 20);
+            const rm = new THREE.MeshBasicMaterial({
+                color: 0xff7700, transparent: true, opacity: 0,
+                side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const ring = new THREE.Mesh(rg, rm);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(node.x, 0.035, node.z);
+            ring.renderOrder = 12;
+            wikiEffectRoot.add(ring);
+            state.rings.push({
+                mesh: ring, bornAt: node.delay, duration: 0.4,
+                startScale: 1, endScale: 3, maxOpacity: 0.6,
+            });
+        }
+
+        // Ground heat disc
+        const hg = new THREE.CircleGeometry(0.4, 18);
+        const hm = new THREE.MeshBasicMaterial({
+            color: 0xff5500, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const heat = new THREE.Mesh(hg, hm);
+        heat.rotation.x = -Math.PI / 2;
+        heat.position.set(node.x, 0.022, node.z);
+        heat.renderOrder = 8;
+        wikiEffectRoot.add(heat);
+        state.glows.push({
+            mesh: heat, bornAt: node.delay,
+            duration: TOTAL - node.delay,
+            maxOpacity: node.isLanding ? 0.85 : 0.5,
+            pulsePhase: Math.random() * Math.PI * 2,
+        });
+    }
+
+    // ---- Landing big shock ring ----
+    {
+        const lrg = new THREE.RingGeometry(0.14, 0.3, 36);
+        const lrm = new THREE.MeshBasicMaterial({
+            color: 0xffcc66, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const lr = new THREE.Mesh(lrg, lrm);
+        lr.rotation.x = -Math.PI / 2;
+        lr.position.set(end.x, 0.045, end.z);
+        lr.renderOrder = 12;
+        wikiEffectRoot.add(lr);
+        state.rings.push({
+            mesh: lr, bornAt: leapDurationSec, duration: 0.7,
+            startScale: 1, endScale: 4.5, maxOpacity: 0.85,
+        });
+    }
+
+    // ---- Animation ----
     const loop = () => {
-        const t = (performance.now() - startT) / DURATION;
-        if (t >= 1) {
-            cracks.forEach(c => { wikiEffectRoot.remove(c); c.geometry.dispose(); c.material.dispose(); });
-            wikiEffectRoot.remove(ring); ring.geometry.dispose(); ring.material.dispose();
+        if (state.disposed) return;
+        const elapsed = (performance.now() - startT) / 1000;
+        if (elapsed >= TOTAL) {
+            state.disposed = true;
             return;
         }
-        for (const c of cracks) c.material.opacity = 0.9 * (1 - t);
-        ring.scale.setScalar(1 + t * 3);
-        ring.material.opacity = 1 - t;
+
+        // Cracks
+        for (const c of state.cracks) {
+            const t = elapsed - c.bornAt;
+            if (t < 0) {
+                for (const e of c.meshes) e.mesh.material.opacity = 0;
+                continue;
+            }
+            const growT = Math.min(t / 0.2, 1);
+            const fadeStart = c.lifeStart - c.bornAt;
+            const fadeT = t < fadeStart ? 1 : Math.max(0, 1 - (t - fadeStart) / c.fadeDuration);
+            const pulse = 0.72 + 0.28 * Math.sin(elapsed * 20 + c.pulsePhase);
+            for (const e of c.meshes) {
+                if (e.kind === 'dark') e.mesh.material.opacity = growT * fadeT * 0.95;
+                else e.mesh.material.opacity = growT * fadeT * pulse;
+            }
+        }
+
+        // Lava
+        for (const p of state.lava) {
+            const t = elapsed - p.bornAt;
+            if (t < 0 || t > p.life) { p.mesh.visible = false; continue; }
+            p.mesh.visible = true;
+            p.mesh.position.x += p.vel.x * 0.016;
+            p.mesh.position.y += p.vel.y * 0.016;
+            p.mesh.position.z += p.vel.z * 0.016;
+            p.vel.y -= 0.2;
+            const lt = t / p.life;
+            p.mesh.material.opacity = 1 - lt;
+            p.mesh.material.color.setHSL(0.135 - lt * 0.085, 1, 0.78 - lt * 0.34);
+            p.mesh.scale.setScalar(1 - lt * 0.35);
+        }
+
+        // Embers
+        for (const e of state.embers) {
+            const t = elapsed - e.bornAt;
+            if (t < 0 || t > e.life) { e.mesh.visible = false; continue; }
+            e.mesh.visible = true;
+            e.mesh.position.y += e.velY * 0.016;
+            e.mesh.position.x += e.driftX * 0.016;
+            e.mesh.position.z += e.driftZ * 0.016;
+            const lt = t / e.life;
+            e.mesh.material.opacity = (1 - lt) * 0.85;
+            e.mesh.material.color.setHSL(0.08 - lt * 0.03, 1, 0.7 - lt * 0.25);
+            e.mesh.scale.setScalar(0.9 + Math.sin(t * 24) * 0.25);
+        }
+
+        // Rings
+        for (const r of state.rings) {
+            const t = elapsed - r.bornAt;
+            if (t < 0 || t > r.duration) { r.mesh.material.opacity = 0; continue; }
+            const progress = t / r.duration;
+            const eased = 1 - Math.pow(1 - progress, 3);
+            r.mesh.scale.setScalar(r.startScale + (r.endScale - r.startScale) * eased);
+            r.mesh.material.opacity = r.maxOpacity * (1 - progress);
+        }
+
+        // Ground heat
+        for (const g of state.glows) {
+            const t = elapsed - g.bornAt;
+            if (t < 0) continue;
+            const progress = Math.min(t / g.duration, 1);
+            const fadeIn = Math.min(t / 0.2, 1);
+            const pulse = 0.75 + 0.25 * Math.sin(elapsed * 14 + g.pulsePhase);
+            g.mesh.material.opacity = g.maxOpacity * fadeIn * (1 - progress) * pulse;
+            g.mesh.scale.setScalar(1 + progress * 0.8);
+        }
+
         requestAnimationFrame(loop);
     };
     loop();
+
+    return state;
 }
 
 // ============================================================
