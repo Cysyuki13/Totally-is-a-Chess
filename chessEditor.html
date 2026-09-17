@@ -504,6 +504,19 @@
             opacity: 1;
         }
 
+        /* ★ 重新命名按鈕 */
+        .parts-list .part-tag .rename-part {
+            margin-left: 6px;
+            color: #4fc3f7;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.15s;
+        }
+
+        .parts-list .part-tag .rename-part:hover {
+            opacity: 1;
+        }
+
         /* 添加部件 */
         .add-part-row {
             display: flex;
@@ -987,6 +1000,9 @@
         const PIECE_NAMES = { pawn: '兵', rook: '車', knight: '馬', bishop: '象', queen: '后', king: '王' };
         const PIECE_ICONS = { pawn: '♟', rook: '♜', knight: '♞', bishop: '♝', queen: '♛', king: '♚' };
 
+        // ★ 內建部件 ID 清單（共用）
+        const BUILTIN_PART_IDS = ['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'];
+
         // ============================================================
         //  2. Three.js 場景
         // ============================================================
@@ -1206,18 +1222,25 @@
             });
 
             const addPart = (geo, mat, x, y, z, rot, partKey, displayName) => {
+                const stored = (params.parts && params.parts[partKey]) || null;
+
+                // ★ 已被刪除的內建部件：不再生成
+                if (stored && stored.deleted) return null;
+
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.position.set(x, y, z);
                 if (rot) mesh.rotation.copy(rot);
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
                 mesh.userData.partKey = partKey;
-                mesh.userData.partName = displayName || partKey;
-                if (params.parts && params.parts[partKey]) {
-                    const trans = params.parts[partKey];
-                    if (trans.position) mesh.position.set(trans.position.x || 0, trans.position.y || 0, trans.position.z || 0);
-                    if (trans.rotation) mesh.rotation.set(trans.rotation.x || 0, trans.rotation.y || 0, trans.rotation.z || 0);
-                    if (trans.scale) mesh.scale.set(trans.scale.x || 1, trans.scale.y || 1, trans.scale.z || 1);
+                // ★ 自訂名稱優先於預設名稱
+                mesh.userData.partName = (stored && stored.name) || displayName || partKey;
+                mesh.userData.isBuiltin = true;
+
+                if (stored) {
+                    if (stored.position) mesh.position.set(stored.position.x || 0, stored.position.y || 0, stored.position.z || 0);
+                    if (stored.rotation) mesh.rotation.set(stored.rotation.x || 0, stored.rotation.y || 0, stored.rotation.z || 0);
+                    if (stored.scale) mesh.scale.set(stored.scale.x || 1, stored.scale.y || 1, stored.scale.z || 1);
                 }
                 group.add(mesh);
                 group.userData.parts[partKey] = mesh;
@@ -1288,7 +1311,8 @@
 
             if (customParts) {
                 for (const [id, partData] of Object.entries(customParts)) {
-                    if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id)) continue;
+                    if (BUILTIN_PART_IDS.includes(id)) continue;
+                    if (partData.deleted) continue;   // ★ 跳過已刪除
                     const geo = createGeometry(partData.type, partData.geometryParams || {});
                     const mat = createCustomPartMaterial(partData, params);
                     const mesh = new THREE.Mesh(geo, mat);
@@ -1699,8 +1723,19 @@
                     const name = mesh.userData.partName || id;
                     tag.textContent = name;
                     tag.title = id;
-                    const isCustom = mesh.userData.isCustom || false;
 
+                    // ✎ 重新命名（內建 + 自定義都可用）
+                    const renameBtn = document.createElement('span');
+                    renameBtn.className = 'rename-part';
+                    renameBtn.textContent = '✎';
+                    renameBtn.title = '重新命名';
+                    renameBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        renamePart(type, id);
+                    });
+                    tag.appendChild(renameBtn);
+
+                    // 📋 複製部件
                     const cloneBtn = document.createElement('span');
                     cloneBtn.className = 'clone-part';
                     cloneBtn.textContent = '📋';
@@ -1711,16 +1746,16 @@
                     });
                     tag.appendChild(cloneBtn);
 
-                    if (isCustom) {
-                        const del = document.createElement('span');
-                        del.className = 'del-part';
-                        del.textContent = '✕';
-                        del.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            deletePart(type, id);
-                        });
-                        tag.appendChild(del);
-                    }
+                    // ✕ 刪除部件（★ 現在所有部件都可刪除）
+                    const del = document.createElement('span');
+                    del.className = 'del-part';
+                    del.textContent = '✕';
+                    del.title = '刪除部件';
+                    del.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deletePart(type, id);
+                    });
+                    tag.appendChild(del);
 
                     tag.addEventListener('click', () => {
                         selectPart(type, id);
@@ -1798,7 +1833,7 @@
         }
 
         // ============================================================
-        //  8. 添加/複製/刪除部件
+        //  8. 添加/複製/刪除/重命名 部件
         // ============================================================
         function addPartToPiece(type) {
             const select = document.getElementById(`addPartType_${type}`);
@@ -1935,6 +1970,8 @@
                 };
             }
 
+            delete newData.deleted;   // ★ 複製體一定不會是「已刪除」
+
             newData.position = { x: sourceMesh.position.x, y: sourceMesh.position.y, z: sourceMesh.position.z };
             newData.rotation = { x: sourceMesh.rotation.x, y: sourceMesh.rotation.y, z: sourceMesh.rotation.z };
             newData.scale = { x: sourceMesh.scale.x, y: sourceMesh.scale.y, z: sourceMesh.scale.z };
@@ -1949,22 +1986,34 @@
             showToast('📋 已複製 ' + (sourceMesh.userData.partName || '部件') + `（共 ${total} 個部件）`);
         }
 
+        // ★ 刪除部件（內建部件以 deleted 標記處理）
         function deletePart(type, partId) {
-            if (!confirm('確定刪除該部件嗎？')) return;
             const mesh = getPartMesh(type, partId);
-            if (!mesh || !mesh.userData.isCustom) {
-                showToast('只能刪除自定義部件');
+            if (!mesh) {
+                showToast('⚠️ 找不到該部件');
                 return;
             }
+            const displayName = mesh.userData.partName || partId;
+            if (!confirm(`確定刪除部件「${displayName}」嗎？`)) return;
+
             const params = currentParams[type];
-            if (params.parts && params.parts[partId]) {
+            if (!params.parts) params.parts = {};
+
+            const isCustom = mesh.userData.isCustom === true;
+            if (isCustom) {
+                // 自定義部件：直接從參數移除
                 delete params.parts[partId];
+            } else {
+                // ★ 內建部件：留下 deleted 標記，重建時就不再生成
+                params.parts[partId] = { deleted: true };
             }
+
             const group = pieceGroups[type];
-            if (group && mesh) {
+            if (group) {
                 group.remove(mesh);
                 delete group.userData.parts[partId];
             }
+
             if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
@@ -1972,7 +2021,41 @@
             updatePartsListUI();
             updatePartControls();
             pushHistory(true);   // ★ 刪除部件 → 記錄歷史
-            showToast('🗑 已刪除部件');
+            showToast('🗑 已刪除部件「' + displayName + '」');
+        }
+
+        // ★ 重新命名部件（內建 / 自定義皆可）
+        function renamePart(type, partId) {
+            const mesh = getPartMesh(type, partId);
+            if (!mesh) {
+                showToast('⚠️ 找不到該部件');
+                return;
+            }
+            const currentName = mesh.userData.partName || partId;
+            const input = prompt('請輸入新的部件名稱：', currentName);
+            if (input === null) return;               // 使用者取消
+            const newName = input.trim();
+            if (!newName) {
+                showToast('⚠️ 名稱不能為空');
+                return;
+            }
+            if (newName === currentName) return;
+
+            const params = currentParams[type];
+            if (!params.parts) params.parts = {};
+            if (!params.parts[partId]) params.parts[partId] = {};
+            params.parts[partId].name = newName;
+
+            mesh.userData.partName = newName;
+
+            if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
+                const nameSpan = document.getElementById(`selectedPartName_${type}`);
+                if (nameSpan) nameSpan.textContent = newName;
+            }
+
+            updatePartsListUI();
+            pushHistory(true);   // ★ 重命名 → 記錄歷史
+            showToast('✏️ 已重新命名為「' + newName + '」');
         }
 
         // ============================================================
@@ -2253,16 +2336,14 @@
             currentParams = JSON.parse(JSON.stringify(snap.params));
             selectedPart = snap.selectedPart ? { ...snap.selectedPart } : null;
 
-            // 若選中的部件已不存在，清空選擇
-            if (selectedPart && !snap.params[selectedPart.type]?.parts?.[selectedPart.partId] &&
-                !['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH']
-                .some(k => k === selectedPart.partId && snap.params[selectedPart.type])) {
-                // 內建部件名稱特殊處理：只要該棋子存在就允許
-                if (!snap.params[selectedPart.type]) selectedPart = null;
-            }
-
             buildPanel();
             rebuildAllPieces();
+
+            // ★ 若選中的部件在重建後不存在（例如被刪除），清空選擇
+            if (selectedPart && !getPartMesh(selectedPart.type, selectedPart.partId)) {
+                selectedPart = null;
+                if (transformControls) transformControls.detach();
+            }
 
             // 展開對應的棋子手風琴
             const typeToOpen = selectedPart ? selectedPart.type : 'pawn';
@@ -2371,6 +2452,7 @@
         window.addPartToPiece = addPartToPiece;
         window.clonePart = clonePart;
         window.deletePart = deletePart;
+        window.renamePart = renamePart;
         window.selectPart = selectPart;
         window.setGizmoMode = setGizmoMode;
         window.toggleGizmoSpace = toggleGizmoSpace;
