@@ -6,735 +6,317 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>♟ 棋子模型編輯器（部件級 + 3D 拖曳 + 撤銷/重做）</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-            background: #1a1a2e;
-            color: #f0e6d3;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            background: #1a1a2e; color: #f0e6d3;
+            height: 100vh; overflow: hidden;
+            display: flex; flex-direction: column;
         }
-
-        ::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #1a1a2e;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #e8c547;
-            border-radius: 4px;
-        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #e8c547; border-radius: 4px; }
 
         #topBar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 24px;
-            background: rgba(22, 33, 62, 0.92);
-            backdrop-filter: blur(6px);
-            border-bottom: 2px solid #e8c547;
-            z-index: 20;
-            flex-shrink: 0;
-            flex-wrap: wrap;
-            gap: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 24px; background: rgba(22, 33, 62, 0.92);
+            backdrop-filter: blur(6px); border-bottom: 2px solid #e8c547;
+            z-index: 20; flex-shrink: 0; flex-wrap: wrap; gap: 8px;
         }
-
         #topBar h1 {
-            font-size: 1.3rem;
-            color: #e8c547;
-            letter-spacing: 2px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            font-size: 1.3rem; color: #e8c547; letter-spacing: 2px;
+            display: flex; align-items: center; gap: 10px;
         }
-
         #topBar h1 small {
-            font-size: 0.7rem;
-            opacity: 0.6;
-            font-weight: 400;
-            letter-spacing: 0;
+            font-size: 0.7rem; opacity: 0.6; font-weight: 400; letter-spacing: 0;
         }
-
-        .top-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
+        .top-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
         .btn {
-            padding: 8px 18px;
-            border: none;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: inherit;
-            background: #e8c547;
-            color: #1a1a2e;
+            padding: 8px 18px; border: none; border-radius: 8px;
+            font-size: 0.85rem; font-weight: 700; cursor: pointer;
+            transition: all 0.2s; font-family: inherit;
+            background: #e8c547; color: #1a1a2e;
             box-shadow: 0 2px 10px rgba(232, 197, 71, 0.25);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            display: inline-flex; align-items: center; gap: 6px;
         }
-
         .btn:hover:not(:disabled) {
             transform: translateY(-1px);
             box-shadow: 0 4px 18px rgba(232, 197, 71, 0.4);
         }
-
         .btn:disabled {
-            opacity: 0.32;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
+            opacity: 0.32; cursor: not-allowed;
+            transform: none; box-shadow: none;
         }
+        .btn-secondary { background: #3a3a5c; color: #f0e6d3; box-shadow: none; }
+        .btn-secondary:hover:not(:disabled) { background: #4a4a6c; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3); }
+        .btn-danger { background: #e74c3c; color: #fff; box-shadow: 0 2px 10px rgba(231, 76, 60, 0.25); }
+        .btn-danger:hover:not(:disabled) { background: #ff6b5e; }
+        .btn-success { background: #2ecc71; color: #1a1a2e; box-shadow: 0 2px 10px rgba(46, 204, 113, 0.25); }
+        .btn-success:hover:not(:disabled) { background: #55ef9a; }
+        .btn-warning { background: #f39c12; color: #1a1a2e; box-shadow: 0 2px 10px rgba(243, 156, 18, 0.25); }
+        .btn-warning:hover:not(:disabled) { background: #f1c40f; }
+        .btn-sm { padding: 4px 12px; font-size: 0.7rem; }
 
-        .btn-secondary {
-            background: #3a3a5c;
-            color: #f0e6d3;
-            box-shadow: none;
-        }
-
-        .btn-secondary:hover:not(:disabled) {
-            background: #4a4a6c;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
-        }
-
-        .btn-danger {
-            background: #e74c3c;
-            color: #fff;
-            box-shadow: 0 2px 10px rgba(231, 76, 60, 0.25);
-        }
-
-        .btn-danger:hover:not(:disabled) {
-            background: #ff6b5e;
-        }
-
-        .btn-success {
-            background: #2ecc71;
-            color: #1a1a2e;
-            box-shadow: 0 2px 10px rgba(46, 204, 113, 0.25);
-        }
-
-        .btn-success:hover:not(:disabled) {
-            background: #55ef9a;
-        }
-
-        .btn-warning {
-            background: #f39c12;
-            color: #1a1a2e;
-            box-shadow: 0 2px 10px rgba(243, 156, 18, 0.25);
-        }
-
-        .btn-warning:hover:not(:disabled) {
-            background: #f1c40f;
-        }
-
-        .btn-sm {
-            padding: 4px 12px;
-            font-size: 0.7rem;
-        }
-
-        #main {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
+        #main { display: flex; flex: 1; overflow: hidden; }
         #sceneContainer {
-            flex: 1;
-            position: relative;
-            background: #12121f;
-            overflow: hidden;
-            min-width: 0;
+            flex: 1; position: relative; background: #12121f;
+            overflow: hidden; min-width: 0;
         }
-
-        #sceneContainer canvas {
-            display: block;
-            width: 100% !important;
-            height: 100% !important;
-        }
-
+        #sceneContainer canvas { display: block; width: 100% !important; height: 100% !important; }
         #sceneHint {
-            position: absolute;
-            bottom: 16px;
-            left: 50%;
+            position: absolute; bottom: 16px; left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            color: #aaa;
-            pointer-events: none;
-            white-space: nowrap;
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(0, 0, 0, 0.7); padding: 6px 16px;
+            border-radius: 20px; font-size: 0.75rem; color: #aaa;
+            pointer-events: none; white-space: nowrap;
+            backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.06);
         }
 
         #panel {
-            width: 430px;
-            min-width: 340px;
-            max-width: 520px;
-            background: rgba(22, 33, 62, 0.95);
-            backdrop-filter: blur(6px);
+            width: 430px; min-width: 340px; max-width: 520px;
+            background: rgba(22, 33, 62, 0.95); backdrop-filter: blur(6px);
             border-left: 2px solid #e8c547;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            flex-shrink: 0;
+            display: flex; flex-direction: column;
+            overflow: hidden; flex-shrink: 0;
         }
-
         #panelHeader {
             padding: 14px 20px 10px;
             border-bottom: 1px solid rgba(232, 197, 71, 0.2);
-            flex-shrink: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-shrink: 0; display: flex; justify-content: space-between; align-items: center;
         }
-
-        #panelHeader h2 {
-            font-size: 1rem;
-            color: #e8c547;
-            letter-spacing: 1px;
-        }
-
+        #panelHeader h2 { font-size: 1rem; color: #e8c547; letter-spacing: 1px; }
         #panelHeader .badge {
-            font-size: 0.65rem;
-            background: rgba(232, 197, 71, 0.15);
-            padding: 2px 12px;
-            border-radius: 12px;
-            color: #e8c547;
+            font-size: 0.65rem; background: rgba(232, 197, 71, 0.15);
+            padding: 2px 12px; border-radius: 12px; color: #e8c547;
         }
+        #panelBody { flex: 1; overflow-y: auto; padding: 8px 16px 24px; }
 
-        #panelBody {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px 16px 24px;
-        }
-
-        /* 摺疊面板 */
         .accordion-item {
-            margin: 6px 0;
-            border-radius: 10px;
+            margin: 6px 0; border-radius: 10px;
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(255, 255, 255, 0.06);
-            overflow: hidden;
-            transition: border-color 0.2s;
+            overflow: hidden; transition: border-color 0.2s;
         }
-
         .accordion-item.active {
             border-color: rgba(232, 197, 71, 0.5);
             box-shadow: 0 0 20px rgba(232, 197, 71, 0.05);
         }
-
         .accordion-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 16px;
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.15s;
-            gap: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 16px; cursor: pointer; user-select: none;
+            transition: background 0.15s; gap: 12px;
         }
-
-        .accordion-header:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .accordion-header .piece-icon {
-            font-size: 1.4rem;
-            width: 32px;
-            text-align: center;
-        }
-
-        .accordion-header .piece-name {
-            font-weight: 700;
-            font-size: 0.95rem;
-            flex: 1;
-        }
-
+        .accordion-header:hover { background: rgba(255, 255, 255, 0.05); }
+        .accordion-header .piece-icon { font-size: 1.4rem; width: 32px; text-align: center; }
+        .accordion-header .piece-name { font-weight: 700; font-size: 0.95rem; flex: 1; }
         .accordion-header .piece-color-dot {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            flex-shrink: 0;
+            width: 14px; height: 14px; border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.2); flex-shrink: 0;
         }
-
-        .accordion-header .arrow {
-            transition: transform 0.25s;
-            font-size: 0.7rem;
-            opacity: 0.5;
-        }
-
-        .accordion-item.active .accordion-header .arrow {
-            transform: rotate(180deg);
-        }
-
+        .accordion-header .arrow { transition: transform 0.25s; font-size: 0.7rem; opacity: 0.5; }
+        .accordion-item.active .accordion-header .arrow { transform: rotate(180deg); }
         .accordion-body {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s ease;
-            padding: 0 16px;
+            max-height: 0; overflow: hidden;
+            transition: max-height 0.4s ease; padding: 0 16px;
         }
-
         .accordion-item.active .accordion-body {
-            max-height: 2400px;
-            padding: 0 16px 16px;
-            overflow-y: auto;
+            max-height: 2400px; padding: 0 16px 16px; overflow-y: auto;
         }
 
-        /* 參數控制 */
-        .param-group {
-            margin: 6px 0 2px;
-            min-width: 0;
-        }
-
+        .param-group { margin: 6px 0 2px; min-width: 0; }
         .param-group .param-label {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 4px;
-            font-size: 0.72rem;
-            opacity: 0.75;
-            margin-bottom: 2px;
-            white-space: nowrap;
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 4px; font-size: 0.72rem; opacity: 0.75;
+            margin-bottom: 2px; white-space: nowrap;
         }
-
-        .param-group .param-label>span:first-child {
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .param-group .param-label > span:first-child {
+            overflow: hidden; text-overflow: ellipsis;
         }
-
         .param-group input[type="range"] {
-            width: 100%;
-            height: 3px;
-            -webkit-appearance: none;
-            appearance: none;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 4px;
-            outline: none;
+            width: 100%; height: 3px; -webkit-appearance: none; appearance: none;
+            background: rgba(255, 255, 255, 0.15); border-radius: 4px; outline: none;
         }
-
         .param-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #e8c547;
-            cursor: pointer;
-            border: 2px solid #1a1a2e;
+            -webkit-appearance: none; appearance: none;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #e8c547; cursor: pointer; border: 2px solid #1a1a2e;
         }
-
         .param-group input[type="range"]::-moz-range-thumb {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #e8c547;
-            cursor: pointer;
-            border: 2px solid #1a1a2e;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #e8c547; cursor: pointer; border: 2px solid #1a1a2e;
         }
-
         .param-group input[type="color"] {
-            width: 100%;
-            height: 30px;
-            border: none;
-            border-radius: 6px;
-            background: transparent;
-            cursor: pointer;
-            padding: 0;
+            width: 100%; height: 30px; border: none; border-radius: 6px;
+            background: transparent; cursor: pointer; padding: 0;
         }
-
-        .param-group input[type="color"]::-webkit-color-swatch-wrapper {
-            padding: 2px;
-        }
-
+        .param-group input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
         .param-group input[type="color"]::-webkit-color-swatch {
-            border-radius: 6px;
-            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px; border: 2px solid rgba(255, 255, 255, 0.15);
         }
 
-        /* ★ 可輸入數值框 */
         .num-input {
-            width: 54px;
-            flex-shrink: 0;
-            background: #0f0f1a;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 4px;
-            color: #e8c547;
-            font-family: inherit;
-            font-size: 0.7rem;
-            font-weight: 700;
-            padding: 1px 4px;
-            text-align: right;
-            outline: none;
-            -moz-appearance: textfield;
-            appearance: textfield;
+            width: 54px; flex-shrink: 0;
+            background: #0f0f1a; border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 4px; color: #e8c547;
+            font-family: inherit; font-size: 0.7rem; font-weight: 700;
+            padding: 1px 4px; text-align: right; outline: none;
+            -moz-appearance: textfield; appearance: textfield;
         }
-
         .num-input::-webkit-outer-spin-button,
-        .num-input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
+        .num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .num-input:focus {
-            border-color: #e8c547;
-            background: #16162a;
+            border-color: #e8c547; background: #16162a;
             box-shadow: 0 0 0 2px rgba(232, 197, 71, 0.15);
         }
 
-        .param-row,
-        .pos-row {
-            display: flex;
-            gap: 8px;
-        }
-
-        .param-row .param-group,
-        .pos-row .param-group {
-            flex: 1;
-            min-width: 0;
-        }
-
+        .param-row, .pos-row { display: flex; gap: 8px; }
+        .param-row .param-group, .pos-row .param-group { flex: 1; min-width: 0; }
         .pos-title {
-            font-size: 0.7rem;
-            opacity: 0.5;
-            margin: 10px 0 2px;
-            letter-spacing: 1px;
+            font-size: 0.7rem; opacity: 0.5;
+            margin: 10px 0 2px; letter-spacing: 1px;
         }
 
-        /* ★ Gizmo 模式切換 */
-        .gizmo-modes {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 8px;
-        }
-
+        .gizmo-modes { display: flex; gap: 4px; margin-bottom: 8px; }
         .gizmo-btn {
-            flex: 1;
-            padding: 5px 2px;
-            font-size: 0.66rem;
-            font-family: inherit;
-            font-weight: 700;
-            background: rgba(255, 255, 255, 0.06);
-            color: #cfc7b5;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.15s;
-            white-space: nowrap;
+            flex: 1; padding: 5px 2px; font-size: 0.66rem;
+            font-family: inherit; font-weight: 700;
+            background: rgba(255, 255, 255, 0.06); color: #cfc7b5;
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px;
+            cursor: pointer; transition: all 0.15s; white-space: nowrap;
         }
-
-        .gizmo-btn:hover {
-            background: rgba(255, 255, 255, 0.13);
-        }
-
+        .gizmo-btn:hover { background: rgba(255, 255, 255, 0.13); }
         .gizmo-btn.active {
-            background: rgba(232, 197, 71, 0.2);
-            border-color: #e8c547;
-            color: #e8c547;
-            box-shadow: 0 0 10px rgba(232, 197, 71, 0.2);
+            background: rgba(232, 197, 71, 0.2); border-color: #e8c547;
+            color: #e8c547; box-shadow: 0 0 10px rgba(232, 197, 71, 0.2);
         }
 
-        /* 部件列表 */
-        .parts-list {
-            margin: 8px 0 4px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-        }
-
+        .parts-list { margin: 8px 0 4px; display: flex; flex-wrap: wrap; gap: 4px; }
         .parts-list .part-tag {
             background: rgba(255, 255, 255, 0.08);
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            cursor: pointer;
-            border: 1px solid transparent;
-            transition: all 0.15s;
-            display: inline-flex;
-            align-items: center;
+            padding: 2px 10px; border-radius: 12px;
+            font-size: 0.7rem; cursor: pointer;
+            border: 1px solid transparent; transition: all 0.15s;
+            display: inline-flex; align-items: center;
         }
-
-        .parts-list .part-tag:hover {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
+        .parts-list .part-tag:hover { background: rgba(255, 255, 255, 0.15); }
         .parts-list .part-tag.active {
-            border-color: #e8c547;
-            background: rgba(232, 197, 71, 0.15);
+            border-color: #e8c547; background: rgba(232, 197, 71, 0.15);
             color: #e8c547;
         }
-
+        .parts-list .part-tag.air-tag {
+            background: rgba(255, 60, 60, 0.12);
+            border-color: rgba(255, 80, 80, 0.35);
+        }
+        .parts-list .part-tag.air-tag.active {
+            background: rgba(255, 60, 60, 0.28);
+            border-color: #ff5555; color: #ff8888;
+        }
         .parts-list .part-tag .del-part {
-            margin-left: 6px;
-            color: #e74c3c;
-            cursor: pointer;
-            opacity: 0.6;
+            margin-left: 6px; color: #e74c3c;
+            cursor: pointer; opacity: 0.6;
         }
-
-        .parts-list .part-tag .del-part:hover {
-            opacity: 1;
-        }
-
+        .parts-list .part-tag .del-part:hover { opacity: 1; }
         .parts-list .part-tag .clone-part {
-            margin-left: 6px;
-            color: #e8c547;
-            cursor: pointer;
-            opacity: 0.6;
-            transition: opacity 0.15s;
+            margin-left: 6px; color: #e8c547;
+            cursor: pointer; opacity: 0.6; transition: opacity 0.15s;
         }
-
-        .parts-list .part-tag .clone-part:hover {
-            opacity: 1;
-        }
-
-        /* ★ 重新命名按鈕 */
+        .parts-list .part-tag .clone-part:hover { opacity: 1; }
         .parts-list .part-tag .rename-part {
-            margin-left: 6px;
-            color: #4fc3f7;
-            cursor: pointer;
-            opacity: 0.6;
-            transition: opacity 0.15s;
+            margin-left: 6px; color: #4fc3f7;
+            cursor: pointer; opacity: 0.6; transition: opacity 0.15s;
         }
+        .parts-list .part-tag .rename-part:hover { opacity: 1; }
 
-        .parts-list .part-tag .rename-part:hover {
-            opacity: 1;
-        }
-
-        /* 添加部件 */
         .add-part-row {
-            display: flex;
-            gap: 6px;
-            margin-top: 6px;
-            align-items: center;
-            flex-wrap: wrap;
+            display: flex; gap: 6px; margin-top: 6px;
+            align-items: center; flex-wrap: wrap;
         }
-
         .add-part-row select {
-            flex: 1;
-            min-width: 80px;
-            background: #0f0f1a;
-            color: #f0e6d3;
+            flex: 1; min-width: 80px;
+            background: #0f0f1a; color: #f0e6d3;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 0.75rem;
-            outline: none;
-            cursor: pointer;
+            border-radius: 6px; padding: 4px 8px;
+            font-size: 0.75rem; outline: none; cursor: pointer;
         }
+        .add-part-row select:focus { border-color: #e8c547; }
+        .add-part-row .btn { padding: 4px 12px; font-size: 0.7rem; }
 
-        .add-part-row select:focus {
-            border-color: #e8c547;
-        }
-
-        .add-part-row .btn {
-            padding: 4px 12px;
-            font-size: 0.7rem;
-        }
-
-        /* 響應式 */
         @media (max-width: 820px) {
-            #panel {
-                width: 320px;
-                min-width: 200px;
-            }
-
-            #topBar h1 {
-                font-size: 1rem;
-            }
-
-            .btn {
-                padding: 6px 12px;
-                font-size: 0.75rem;
-            }
-
-            .accordion-header .piece-icon {
-                font-size: 1.1rem;
-                width: 24px;
-            }
-
-            .accordion-header .piece-name {
-                font-size: 0.8rem;
-            }
-
-            .num-input {
-                width: 48px;
-                font-size: 0.65rem;
-            }
+            #panel { width: 320px; min-width: 200px; }
+            #topBar h1 { font-size: 1rem; }
+            .btn { padding: 6px 12px; font-size: 0.75rem; }
+            .accordion-header .piece-icon { font-size: 1.1rem; width: 24px; }
+            .accordion-header .piece-name { font-size: 0.8rem; }
+            .num-input { width: 48px; font-size: 0.65rem; }
         }
-
         @media (max-width: 640px) {
-            #main {
-                flex-direction: column;
-            }
-
+            #main { flex-direction: column; }
             #panel {
-                width: 100%;
-                max-width: 100%;
-                border-left: none;
-                border-top: 2px solid #e8c547;
-                height: 50vh;
-                min-height: 300px;
+                width: 100%; max-width: 100%;
+                border-left: none; border-top: 2px solid #e8c547;
+                height: 50vh; min-height: 300px;
             }
-
-            #sceneContainer {
-                height: 50vh;
-                min-height: 200px;
-            }
-
+            #sceneContainer { height: 50vh; min-height: 200px; }
             #sceneHint {
-                bottom: 8px;
-                font-size: 0.6rem;
-                padding: 4px 12px;
-                white-space: normal;
+                bottom: 8px; font-size: 0.6rem;
+                padding: 4px 12px; white-space: normal;
             }
         }
-
         @media (max-width: 480px) {
-            #topBar {
-                padding: 6px 12px;
-            }
-
-            #topBar h1 {
-                font-size: 0.85rem;
-            }
-
-            .btn {
-                padding: 4px 10px;
-                font-size: 0.7rem;
-            }
-
-            #panelBody {
-                padding: 4px 8px 12px;
-            }
-
-            .accordion-body {
-                padding: 0 8px;
-            }
-
-            .accordion-item.active .accordion-body {
-                padding: 0 8px 16px;
-            }
-
-            .param-group .param-label {
-                font-size: 0.63rem;
-            }
-
-            .num-input {
-                width: 42px;
-                font-size: 0.6rem;
-            }
-
-            .parts-list .part-tag {
-                font-size: 0.6rem;
-                padding: 1px 8px;
-            }
+            #topBar { padding: 6px 12px; }
+            #topBar h1 { font-size: 0.85rem; }
+            .btn { padding: 4px 10px; font-size: 0.7rem; }
+            #panelBody { padding: 4px 8px 12px; }
+            .accordion-body { padding: 0 8px; }
+            .accordion-item.active .accordion-body { padding: 0 8px 16px; }
+            .param-group .param-label { font-size: 0.63rem; }
+            .num-input { width: 42px; font-size: 0.6rem; }
+            .parts-list .part-tag { font-size: 0.6rem; padding: 1px 8px; }
         }
 
-        /* 匯出 / 匯入 模態框共用樣式 */
         .modal-box {
-            background: #1a1a2e;
-            border: 2px solid #e8c547;
-            border-radius: 16px;
-            padding: 28px 32px;
-            max-width: 720px;
-            width: 92%;
-            max-height: 80vh;
-            display: flex;
-            flex-direction: column;
+            background: #1a1a2e; border: 2px solid #e8c547;
+            border-radius: 16px; padding: 28px 32px;
+            max-width: 720px; width: 92%; max-height: 80vh;
+            display: flex; flex-direction: column;
         }
-
-        .modal-box h2 {
-            color: #e8c547;
-            margin-bottom: 12px;
-            font-size: 1.2rem;
-        }
-
+        .modal-box h2 { color: #e8c547; margin-bottom: 12px; font-size: 1.2rem; }
         .modal-box textarea {
-            flex: 1;
-            min-height: 280px;
-            background: #0f0f1a;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            color: #d4d4d4;
+            flex: 1; min-height: 280px;
+            background: #0f0f1a; border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px; color: #d4d4d4;
             font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-            padding: 14px;
-            resize: vertical;
-            outline: none;
-            tab-size: 2;
-            line-height: 1.5;
+            font-size: 0.8rem; padding: 14px;
+            resize: vertical; outline: none;
+            tab-size: 2; line-height: 1.5;
         }
-
-        .modal-box textarea:focus {
-            border-color: #e8c547;
-        }
-
+        .modal-box textarea:focus { border-color: #e8c547; }
         .modal-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 14px;
-            justify-content: flex-end;
-            flex-wrap: wrap;
+            display: flex; gap: 10px; margin-top: 14px;
+            justify-content: flex-end; flex-wrap: wrap;
         }
+        .modal-actions .btn { padding: 10px 24px; }
 
-        .modal-actions .btn {
-            padding: 10px 24px;
-        }
-
-        #exportModal,
-        #importModal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 999;
-            background: rgba(0, 0, 0, 0.8);
+        #exportModal, #importModal {
+            display: none; position: fixed; inset: 0;
+            z-index: 999; background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(8px);
-            align-items: center;
-            justify-content: center;
+            align-items: center; justify-content: center;
         }
-
-        #exportModal.open,
-        #importModal.open {
-            display: flex;
-        }
+        #exportModal.open, #importModal.open { display: flex; }
 
         .copy-toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
+            position: fixed; bottom: 30px; left: 50%;
             transform: translateX(-50%);
-            background: #2ecc71;
-            color: #1a1a2e;
-            padding: 10px 28px;
-            border-radius: 12px;
-            font-weight: 700;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s;
+            background: #2ecc71; color: #1a1a2e;
+            padding: 10px 28px; border-radius: 12px;
+            font-weight: 700; z-index: 1000;
+            opacity: 0; transition: opacity 0.3s;
             pointer-events: none;
             box-shadow: 0 8px 30px rgba(46, 204, 113, 0.3);
         }
-
-        .copy-toast.show {
-            opacity: 1;
-        }
+        .copy-toast.show { opacity: 1; }
     </style>
 </head>
 
@@ -767,7 +349,6 @@
         </div>
     </div>
 
-    <!-- 匯出模態框 -->
     <div id="exportModal">
         <div class="modal-box">
             <h2>📤 匯出棋子模型代碼</h2>
@@ -782,7 +363,6 @@
         </div>
     </div>
 
-    <!-- 匯入模態框 -->
     <div id="importModal">
         <div class="modal-box">
             <h2>📥 匯入棋子參數</h2>
@@ -804,343 +384,415 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
 
+    <!-- ============================================================ -->
+    <!--  CSG LIBRARY (for air blocks)                                 -->
+    <!-- ============================================================ -->
+    <script>
+        (function (global) {
+            const EPSILON = 1e-5;
+            const COPLANAR = 0, FRONT = 1, BACK = 2, SPANNING = 3;
+
+            class Vector {
+                constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+                clone() { return new Vector(this.x, this.y, this.z); }
+                negated() { return new Vector(-this.x, -this.y, -this.z); }
+                plus(a) { return new Vector(this.x + a.x, this.y + a.y, this.z + a.z); }
+                minus(a) { return new Vector(this.x - a.x, this.y - a.y, this.z - a.z); }
+                times(a) { return new Vector(this.x * a, this.y * a, this.z * a); }
+                dividedBy(a) { return new Vector(this.x / a, this.y / a, this.z / a); }
+                dot(a) { return this.x * a.x + this.y * a.y + this.z * a.z; }
+                lerp(a, t) { return this.plus(a.minus(this).times(t)); }
+                length() { return Math.sqrt(this.dot(this)); }
+                unit() { return this.dividedBy(this.length()); }
+                cross(a) {
+                    return new Vector(
+                        this.y * a.z - this.z * a.y,
+                        this.z * a.x - this.x * a.z,
+                        this.x * a.y - this.y * a.x
+                    );
+                }
+            }
+
+            class Vertex {
+                constructor(pos, normal) { this.pos = pos; this.normal = normal; }
+                clone() { return new Vertex(this.pos.clone(), this.normal.clone()); }
+                flip() { this.normal = this.normal.negated(); }
+                interpolate(other, t) {
+                    return new Vertex(
+                        this.pos.lerp(other.pos, t),
+                        this.normal.lerp(other.normal, t)
+                    );
+                }
+            }
+
+            class Plane {
+                constructor(normal, w) { this.normal = normal; this.w = w; }
+                static fromPoints(a, b, c) {
+                    const n = b.minus(a).cross(c.minus(a)).unit();
+                    return new Plane(n, n.dot(a));
+                }
+                clone() { return new Plane(this.normal.clone(), this.w); }
+                flip() { this.normal = this.normal.negated(); this.w = -this.w; }
+                splitPolygon(polygon, coplanarFront, coplanarBack, front, back) {
+                    let polygonType = 0;
+                    const types = [];
+                    for (const v of polygon.vertices) {
+                        const t = this.normal.dot(v.pos) - this.w;
+                        const type = t < -EPSILON ? BACK : (t > EPSILON ? FRONT : COPLANAR);
+                        polygonType |= type;
+                        types.push(type);
+                    }
+                    switch (polygonType) {
+                        case COPLANAR:
+                            (this.normal.dot(polygon.plane.normal) > 0 ? coplanarFront : coplanarBack).push(polygon);
+                            break;
+                        case FRONT: front.push(polygon); break;
+                        case BACK: back.push(polygon); break;
+                        case SPANNING: {
+                            const f = [], b = [];
+                            for (let i = 0; i < polygon.vertices.length; i++) {
+                                const j = (i + 1) % polygon.vertices.length;
+                                const ti = types[i], tj = types[j];
+                                const vi = polygon.vertices[i], vj = polygon.vertices[j];
+                                if (ti !== BACK) f.push(vi);
+                                if (ti !== FRONT) b.push(ti !== BACK ? vi.clone() : vi);
+                                if ((ti | tj) === SPANNING) {
+                                    const t = (this.w - this.normal.dot(vi.pos)) /
+                                        this.normal.dot(vj.pos.minus(vi.pos));
+                                    const v = vi.interpolate(vj, t);
+                                    f.push(v);
+                                    b.push(v.clone());
+                                }
+                            }
+                            if (f.length >= 3) front.push(new Polygon(f, polygon.shared));
+                            if (b.length >= 3) back.push(new Polygon(b, polygon.shared));
+                            break;
+                        }
+                    }
+                }
+            }
+
+            class Polygon {
+                constructor(vertices, shared) {
+                    this.vertices = vertices;
+                    this.shared = shared;
+                    this._plane = null;
+                }
+                clone() { return new Polygon(this.vertices.map(v => v.clone()), this.shared); }
+                flip() {
+                    this.vertices.reverse().forEach(v => v.flip());
+                    if (this._plane) this._plane.flip();
+                }
+                get plane() {
+                    if (!this._plane) {
+                        this._plane = Plane.fromPoints(
+                            this.vertices[0].pos,
+                            this.vertices[1].pos,
+                            this.vertices[2].pos
+                        );
+                    }
+                    return this._plane;
+                }
+            }
+
+            class Node {
+                constructor(polygons) {
+                    this.plane = null;
+                    this.front = null;
+                    this.back = null;
+                    this.polygons = [];
+                    if (polygons) this.build(polygons);
+                }
+                clone() {
+                    const n = new Node();
+                    n.plane = this.plane && this.plane.clone();
+                    n.front = this.front && this.front.clone();
+                    n.back = this.back && this.back.clone();
+                    n.polygons = this.polygons.map(p => p.clone());
+                    return n;
+                }
+                invert() {
+                    for (const p of this.polygons) p.flip();
+                    if (this.plane) this.plane.flip();
+                    if (this.front) this.front.invert();
+                    if (this.back) this.back.invert();
+                    const temp = this.front; this.front = this.back; this.back = temp;
+                }
+                clipPolygons(polygons) {
+                    if (!this.plane) return polygons.slice();
+                    let front = [], back = [];
+                    for (const p of polygons) this.plane.splitPolygon(p, front, back, front, back);
+                    if (this.front) front = this.front.clipPolygons(front);
+                    back = this.back ? this.back.clipPolygons(back) : [];
+                    return front.concat(back);
+                }
+                clipTo(bsp) {
+                    this.polygons = bsp.clipPolygons(this.polygons);
+                    if (this.front) this.front.clipTo(bsp);
+                    if (this.back) this.back.clipTo(bsp);
+                }
+                allPolygons() {
+                    let polygons = this.polygons.slice();
+                    if (this.front) polygons = polygons.concat(this.front.allPolygons());
+                    if (this.back) polygons = polygons.concat(this.back.allPolygons());
+                    return polygons;
+                }
+                build(polygons) {
+                    if (!polygons.length) return;
+                    if (!this.plane) this.plane = polygons[0].plane.clone();
+                    const front = [], back = [];
+                    for (const p of polygons) {
+                        this.plane.splitPolygon(p, this.polygons, this.polygons, front, back);
+                    }
+                    if (front.length) {
+                        if (!this.front) this.front = new Node();
+                        this.front.build(front);
+                    }
+                    if (back.length) {
+                        if (!this.back) this.back = new Node();
+                        this.back.build(back);
+                    }
+                }
+            }
+
+            function subtract(polysA, polysB) {
+                const A = new Node(polysA.map(p => p.clone()));
+                const B = new Node(polysB.map(p => p.clone()));
+                A.invert();
+                A.clipTo(B);
+                B.clipTo(A);
+                B.invert();
+                B.clipTo(A);
+                B.invert();
+                A.build(B.allPolygons());
+                A.invert();
+                return A.allPolygons();
+            }
+
+            global.CSG = { Vector, Vertex, Plane, Polygon, Node, subtract };
+        })(window);
+
+        // ── Three.js interop helpers ────────────────────────────────
+
+        function meshToCSGPolygons(mesh) {
+            mesh.updateMatrixWorld(true);
+            const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+            const posAttr = geo.attributes.position;
+            const normAttr = geo.attributes.normal;
+            const matrix = mesh.matrixWorld;
+            const nrmMatrix = new THREE.Matrix3().getNormalMatrix(matrix);
+
+            const polys = [];
+            for (let i = 0; i < posAttr.count; i += 3) {
+                const v = [0, 1, 2].map(k => new THREE.Vector3()
+                    .fromBufferAttribute(posAttr, i + k)
+                    .applyMatrix4(matrix));
+
+                const faceN = new THREE.Vector3()
+                    .subVectors(v[1], v[0])
+                    .cross(new THREE.Vector3().subVectors(v[2], v[0]))
+                    .normalize();
+
+                const verts = [0, 1, 2].map(k => {
+                    let n = faceN;
+                    if (normAttr) {
+                        n = new THREE.Vector3()
+                            .fromBufferAttribute(normAttr, i + k)
+                            .applyMatrix3(nrmMatrix)
+                            .normalize();
+                    }
+                    return new CSG.Vertex(
+                        new CSG.Vector(v[k].x, v[k].y, v[k].z),
+                        new CSG.Vector(n.x, n.y, n.z)
+                    );
+                });
+                polys.push(new CSG.Polygon(verts, mesh));
+            }
+            return polys;
+        }
+
+        function csgPolygonsToGeometry(polys, mesh) {
+            mesh.updateMatrixWorld(true);
+            const invMatrix = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+            const nrmMatrix = new THREE.Matrix3().getNormalMatrix(invMatrix);
+
+            const positions = [];
+            const normals = [];
+
+            for (const poly of polys) {
+                const vs = poly.vertices;
+                for (let i = 2; i < vs.length; i++) {
+                    const tri = [vs[0], vs[i - 1], vs[i]];
+                    for (const v of tri) {
+                        const p = new THREE.Vector3(v.pos.x, v.pos.y, v.pos.z)
+                            .applyMatrix4(invMatrix);
+                        const n = new THREE.Vector3(v.normal.x, v.normal.y, v.normal.z)
+                            .applyMatrix3(nrmMatrix).normalize();
+                        positions.push(p.x, p.y, p.z);
+                        normals.push(n.x, n.y, n.z);
+                    }
+                }
+            }
+
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+            g.computeBoundingBox();
+            g.computeBoundingSphere();
+            return g;
+        }
+
+        // ★ 幾何體是否為可做 CSG 的封閉實體
+        function isSolidGeometry(geo) {
+            if (!geo) return false;
+            const t = geo.type;
+            // 這些是開放曲面，沒有體積可以進行 CSG
+            if (t === 'RingGeometry' || t === 'PlaneGeometry' || t === 'CircleGeometry') return false;
+            return true;
+        }
+
+        function applyAirBlockCSG(group) {
+            const airMeshes = [];
+            const partMeshes = [];
+            for (const mesh of Object.values(group.userData.parts)) {
+                if (mesh.userData.isAir) airMeshes.push(mesh);
+                else partMeshes.push(mesh);
+            }
+            if (airMeshes.length === 0 || partMeshes.length === 0) return;
+
+            group.updateMatrixWorld(true);
+
+            // Precompute air-block polygons + world-space AABBs (with a
+            // generous epsilon so parts that merely *touch* the air block
+            // still get processed).
+            const airData = airMeshes.map(air => {
+                const bbox = new THREE.Box3().setFromObject(air);
+                bbox.expandByScalar(0.03);   // forgiving margin
+                return {
+                    polys: meshToCSGPolygons(air),
+                    bbox,
+                };
+            });
+
+            for (const part of partMeshes) {
+                if (!isSolidGeometry(part.geometry)) continue;
+
+                const partBox = new THREE.Box3().setFromObject(part);
+                partBox.expandByScalar(0.03);
+
+                // Collect all air blocks whose AABB might overlap
+                const overlapping = airData.filter(a => partBox.intersectsBox(a.bbox));
+                if (overlapping.length === 0) continue;
+
+                // Extract fresh polygons from the part and subtract each air block
+                let polys = meshToCSGPolygons(part);
+                for (const air of overlapping) {
+                    try {
+                        polys = CSG.subtract(polys, air.polys);
+                    } catch (e) {
+                        console.warn('CSG subtract failed on part', part.userData.partKey, e);
+                    }
+                }
+
+                if (polys && polys.length > 0) {
+                    const newGeo = csgPolygonsToGeometry(polys, part);
+                    if (part.geometry.dispose) part.geometry.dispose();
+                    part.geometry = newGeo;
+                } else {
+                    // Everything was carved away → collapse the mesh
+                    const empty = new THREE.BufferGeometry();
+                    empty.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+                    empty.setAttribute('normal', new THREE.Float32BufferAttribute([], 3));
+                    if (part.geometry.dispose) part.geometry.dispose();
+                    part.geometry = empty;
+                }
+            }
+        }
+
+        // Check if a given piece group contains any air block
+        function pieceHasAir(group) {
+            if (!group || !group.userData.parts) return false;
+            return Object.values(group.userData.parts).some(m => m.userData.isAir);
+        }
+    </script>
+
     <script>
         // ============================================================
         //  1. 參數定義 (預設值，包含部件)
         // ============================================================
         const DEFAULT_PARAMS = {
             "pawn": {
-                "baseRadius": 0.12,
-                "baseHeight": 0.28,
-                "topRadius": 0.185,
-                "topHeight": 0.04,
-                "sphereRadius": 0.18,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2,
+                "baseRadius": 0.12, "baseHeight": 0.28, "topRadius": 0.185, "topHeight": 0.04, "sphereRadius": 0.18,
+                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
                 "position": { "x": -4.2, "y": 0, "z": 0 }
             },
             "rook": {
-                "bodyRadius": 0.2,
-                "bodyHeight": 0.44,
-                "crownRadius": 0.285,
-                "crownHeight": 0.13,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2,
+                "bodyRadius": 0.2, "bodyHeight": 0.44, "crownRadius": 0.285, "crownHeight": 0.13,
+                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
                 "position": { "x": -2.52, "y": 0.02, "z": 0 },
                 "parts": {
-                    "custom_1002": {
-                        "type": "box",
-                        "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": -0.21, "y": 0.62, "z": 0 },
-                        "rotation": { "x": 0, "y": 1.56, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 0.4 },
-                        "name": "Box Copy Copy Copy"
-                    },
-                    "custom_1000": {
-                        "type": "box",
-                        "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.62, "z": 0.21 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 0.4 },
-                        "name": "Box Copy"
-                    },
-                    "custom_1001": {
-                        "type": "box",
-                        "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0.21, "y": 0.62, "z": 0 },
-                        "rotation": { "x": 0, "y": 1.56, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 0.4 },
-                        "name": "Box Copy Copy"
-                    },
-                    "custom_1003": {
-                        "type": "box",
-                        "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.62, "z": -0.21 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 0.4 },
-                        "name": "Box Copy Copy"
-                    }
+                    "custom_1002": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy Copy" },
+                    "custom_1000": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0.21 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy" },
+                    "custom_1001": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy" },
+                    "custom_1003": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": -0.21 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy" }
                 }
             },
             "knight": {
-                "bodyRadius": 0.26,
-                "bodyHeight": 0.38,
-                "neckWidth": 0.22,
-                "neckHeight": 0.3,
-                "neckDepth": 0.22,
-                "headWidth": 0.16,
-                "headHeight": 0.22,
-                "headDepth": 0.3,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2,
+                "bodyRadius": 0.26, "bodyHeight": 0.38, "neckWidth": 0.22, "neckHeight": 0.3, "neckDepth": 0.22,
+                "headWidth": 0.16, "headHeight": 0.22, "headDepth": 0.3,
+                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
                 "position": { "x": -0.84, "y": 0.02, "z": 0 },
                 "parts": {
-                    "body": {
-                        "position": { "x": 0, "y": 0.21, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.5, "y": 1.02, "z": 0.84 }
-                    },
-                    "neck": {
-                        "position": { "x": 0, "y": 0.54, "z": 0.13 },
-                        "rotation": { "x": 0.22, "y": 0, "z": 0 },
-                        "scale": { "x": 0.58, "y": 2.44, "z": 1.12 }
-                    },
-                    "head": {
-                        "position": { "x": 0, "y": 0.76, "z": 0.25 },
-                        "rotation": { "x": -0.08, "y": 0, "z": 0 },
-                        "scale": { "x": 0.98, "y": 1.2, "z": 1.76 }
-                    }
+                    "body": { "position": { "x": 0, "y": 0.21, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5, "y": 1.02, "z": 0.84 } },
+                    "neck": { "position": { "x": 0, "y": 0.54, "z": 0.13 }, "rotation": { "x": 0.22, "y": 0, "z": 0 }, "scale": { "x": 0.58, "y": 2.44, "z": 1.12 } },
+                    "head": { "position": { "x": 0, "y": 0.76, "z": 0.25 }, "rotation": { "x": -0.08, "y": 0, "z": 0 }, "scale": { "x": 0.98, "y": 1.2, "z": 1.76 } }
                 }
             },
             "bishop": {
-                "bodyRadius": 0.22,
-                "bodyHeight": 0.42,
-                "sphereRadius": 0.1,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2,
+                "bodyRadius": 0.22, "bodyHeight": 0.42, "sphereRadius": 0.1,
+                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
                 "position": { "x": 0.84, "y": 0.02, "z": 0 },
                 "parts": {
-                    "body": {
-                        "position": { "x": 0, "y": 0.31, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.5, "y": 1.2, "z": 0.5 }
-                    },
-                    "sphere": {
-                        "position": { "x": 0, "y": 0.93, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 1 }
-                    },
-                    "custom_1000": {
-                        "type": "torus",
-                        "geometryParams": { "radius": 0.15, "tube": 0.05 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.42, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1.08, "y": 2, "z": 1.2 },
-                        "name": "Torus"
-                    }
+                    "body": { "position": { "x": 0, "y": 0.31, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5, "y": 1.2, "z": 0.5 } },
+                    "sphere": { "position": { "x": 0, "y": 0.93, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
+                    "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.42, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.08, "y": 2, "z": 1.2 }, "name": "Torus" }
                 }
             },
             "queen": {
-                "bodyRadius": 0.22,
-                "bodyHeight": 0.52,
-                "crownRadius": 0.27,
-                "crownHeight": 0.2,
-                "spikeRadius": 0.13,
-                "color": "#f5f0e1",
-                "roughness": 0.25,
-                "metalness": 0.2,
+                "bodyRadius": 0.22, "bodyHeight": 0.52, "crownRadius": 0.27, "crownHeight": 0.2, "spikeRadius": 0.13,
+                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
                 "position": { "x": 2.52, "y": 0.03, "z": 0 },
                 "parts": {
-                    "custom_1000": {
-                        "type": "torus",
-                        "geometryParams": { "radius": 0.15, "tube": 0.05 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.57, "z": 0 },
-                        "rotation": { "x": -1.56, "y": 0, "z": 0 },
-                        "scale": { "x": 1.56, "y": 1.58, "z": 1.12 },
-                        "name": "Torus"
-                    },
-                    "custom_1001": {
-                        "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.62, "z": 0 },
-                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
-                        "scale": { "x": 2.12, "y": 0.5, "z": 1 },
-                        "name": "Cone"
-                    },
-                    "custom_1002": {
-                        "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
-                        "roughness": 0.5,
-                        "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.62, "z": 0 },
-                        "rotation": { "x": -3.14, "y": -1.58, "z": 0 },
-                        "scale": { "x": 2.16, "y": 0.5, "z": 1 },
-                        "name": "Cone"
-                    },
-                    "spike": {
-                        "position": { "x": 0, "y": 0.79, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 1 }
-                    },
-                    "crown": {
-                        "position": { "x": 0, "y": 0.52, "z": 0 },
-                        "rotation": { "x": -3.14, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 0.48, "z": 1 }
-                    },
-                    "body": {
-                        "position": { "x": 0, "y": 0.32, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.7, "y": 1, "z": 0.7 }
-                    }
+                    "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.57, "z": 0 }, "rotation": { "x": -1.56, "y": 0, "z": 0 }, "scale": { "x": 1.56, "y": 1.58, "z": 1.12 }, "name": "Torus" },
+                    "custom_1001": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0 }, "rotation": { "x": -3.14, "y": 0, "z": 0 }, "scale": { "x": 2.12, "y": 0.5, "z": 1 }, "name": "Cone" },
+                    "custom_1002": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0 }, "rotation": { "x": -3.14, "y": -1.58, "z": 0 }, "scale": { "x": 2.16, "y": 0.5, "z": 1 }, "name": "Cone" },
+                    "spike": { "position": { "x": 0, "y": 0.79, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
+                    "crown": { "position": { "x": 0, "y": 0.52, "z": 0 }, "rotation": { "x": -3.14, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 0.48, "z": 1 } },
+                    "body": { "position": { "x": 0, "y": 0.32, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.7, "y": 1, "z": 0.7 } }
                 }
             },
             "king": {
-                "bodyRadius": 0.235,
-                "bodyHeight": 0.5,
-                "crownRadius": 0.25,
-                "crownHeight": 0.12,
-                "crossWidth": 0.07,
-                "crossHeight": 0.28,
-                "crossDepth": 0.105,
-                "color": "#ffffff",
-                "roughness": 0.25,
-                "metalness": 0.2,
+                "bodyRadius": 0.235, "bodyHeight": 0.5, "crownRadius": 0.25, "crownHeight": 0.12,
+                "crossWidth": 0.07, "crossHeight": 0.28, "crossDepth": 0.105,
+                "color": "#ffffff", "roughness": 0.25, "metalness": 0.2,
                 "position": { "x": 4.2, "y": 0.04, "z": 0 },
                 "parts": {
-                    "base": {
-                        "position": { "x": 0, "y": 0.06, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": 1, "z": 1 }
-                    },
-                    "body": { "deleted": true },
-                    "crown": { "deleted": true },
-                    "crossV": { "deleted": true },
-                    "crossH": { "deleted": true },
-
-                    "custom_1000": {
-                        "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0.002, "y": 0.2539, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1.9999, "y": 0.9193, "z": 1.9931 },
-                        "name": "Cone"
-                    },
-                    "custom_1001": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.1491, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1.2957, "y": 1, "z": 1.2146 },
-                        "name": "Cylinder"
-                    },
-                    "custom_1003": {
-                        "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.4262, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1.0914, "y": 2.9097, "z": 1.2881 },
-                        "name": "Cone"
-                    },
-                    "custom_1004": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.5664, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.4607, "y": 1.5936, "z": 0.52 },
-                        "name": "Cylinder"
-                    },
-                    "custom_1005": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.736, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 1, "y": -0.0615, "z": 1 },
-                        "name": "Cylinder"
-                    },
-                    "custom_1006": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.7539, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 },
-                        "name": "Cylinder Copy"
-                    },
-                    "custom_1007": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.8041, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 },
-                        "name": "Cylinder"
-                    },
-                    "custom_1008": {
-                        "type": "cone",
-                        "geometryParams": { "radius": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.8217, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": -3.15 },
-                        "scale": { "x": 1, "y": 1, "z": 1 },
-                        "name": "Cone"
-                    },
-                    "custom_1009": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.9791, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.51, "y": 0.0552, "z": 0.5632 },
-                        "name": "Cylinder"
-                    },
-                    "custom_1010": {
-                        "type": "cylinder",
-                        "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.9859, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.3, "y": 0.0559, "z": 0.3 },
-                        "name": "Cylinder Copy"
-                    },
-                    "custom_1012": {
-                        "type": "box",
-                        "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 1.0719, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.9734, "y": 0.3662, "z": 0.2203 },
-                        "name": "Box"
-                    },
-                    "custom_1013": {
-                        "type": "box",
-                        "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 1.07, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": -1.58 },
-                        "scale": { "x": 0.8, "y": 0.37, "z": 0.22 },
-                        "name": "Box Copy"
-                    },
-                    "custom_1015": {
-                        "type": "frustum",
-                        "geometryParams": { "radiusTop": 0.08, "radiusBottom": 0.18, "height": 0.3, "segments": 16 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 1.17, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.25, "y": 0.14, "z": 0.15 },
-                        "name": "Frustum"
-                    },
-                    "custom_1016": {
-                        "type": "sphere",
-                        "geometryParams": { "radius": 0.15 },
-                        "roughness": 0.5, "metalness": 0.2,
-                        "position": { "x": 0, "y": 0.523, "z": 0 },
-                        "rotation": { "x": 0, "y": 0, "z": 0 },
-                        "scale": { "x": 0.5268, "y": 0.6517, "z": 0.6517 },
-                        "name": "Sphere"
-                    }
+                    "base": { "position": { "x": 0, "y": 0.06, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
+                    "body": { "deleted": true }, "crown": { "deleted": true }, "crossV": { "deleted": true }, "crossH": { "deleted": true },
+                    "custom_1000": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.002, "y": 0.2539, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.9999, "y": 0.9193, "z": 1.9931 }, "name": "Cone" },
+                    "custom_1001": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.1491, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.2957, "y": 1, "z": 1.2146 }, "name": "Cylinder" },
+                    "custom_1003": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.4262, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.0914, "y": 2.9097, "z": 1.2881 }, "name": "Cone" },
+                    "custom_1004": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.5664, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.4607, "y": 1.5936, "z": 0.52 }, "name": "Cylinder" },
+                    "custom_1005": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.736, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": -0.0615, "z": 1 }, "name": "Cylinder" },
+                    "custom_1006": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7539, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 }, "name": "Cylinder Copy" },
+                    "custom_1007": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8041, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 }, "name": "Cylinder" },
+                    "custom_1008": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8217, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": -3.15 }, "scale": { "x": 1, "y": 1, "z": 1 }, "name": "Cone" },
+                    "custom_1009": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9791, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.51, "y": 0.0552, "z": 0.5632 }, "name": "Cylinder" },
+                    "custom_1010": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9859, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.3, "y": 0.0559, "z": 0.3 }, "name": "Cylinder Copy" },
+                    "custom_1012": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.0719, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.9734, "y": 0.3662, "z": 0.2203 }, "name": "Box" },
+                    "custom_1013": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.07, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": -1.58 }, "scale": { "x": 0.8, "y": 0.37, "z": 0.22 }, "name": "Box Copy" },
+                    "custom_1015": { "type": "frustum", "geometryParams": { "radiusTop": 0.08, "radiusBottom": 0.18, "height": 0.3, "segments": 16 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.17, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.25, "y": 0.14, "z": 0.15 }, "name": "Frustum" },
+                    "custom_1016": { "type": "sphere", "geometryParams": { "radius": 0.15 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.523, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5268, "y": 0.6517, "z": 0.6517 }, "name": "Sphere" }
                 }
             }
         };
@@ -1149,8 +801,6 @@
         const PIECE_TYPES = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
         const PIECE_NAMES = { pawn: '兵', rook: '車', knight: '馬', bishop: '象', queen: '后', king: '王' };
         const PIECE_ICONS = { pawn: '♟', rook: '♜', knight: '♞', bishop: '♝', queen: '♛', king: '♚' };
-
-        // ★ 內建部件 ID 清單（共用）
         const BUILTIN_PART_IDS = ['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'];
 
         // ============================================================
@@ -1160,9 +810,8 @@
         let transformControls = null;
         let gizmoMode = 'translate';
         let pieceGroups = {};
-        let selectedPart = null; // { type, partId }
+        let selectedPart = null;
         let partIdCounter = 1000;
-        // ★ 高亮輔助（選中部件的金色外框 + 材質參考）
         let highlightBoxHelper = null;
         let highlightMeshRef = null;
 
@@ -1195,7 +844,6 @@
             controls.maxDistance = 18;
             controls.update();
 
-            // 燈光
             const ambient = new THREE.AmbientLight(0x404060, 0.6);
             scene.add(ambient);
             const hemi = new THREE.HemisphereLight(0xffeedd, 0x443322, 1.0);
@@ -1214,7 +862,6 @@
             rim.position.set(-2, 1, 8);
             scene.add(rim);
 
-            // 地面
             const gridHelper = new THREE.GridHelper(8, 8, 0xe8c547, 0x444466);
             gridHelper.position.y = -0.05;
             scene.add(gridHelper);
@@ -1232,9 +879,6 @@
             animate();
         }
 
-        // ============================================================
-        //  2b. 3D 拖曳控制器 (TransformControls)
-        // ============================================================
         function initTransformControls() {
             if (typeof THREE.TransformControls !== 'function') {
                 console.warn('TransformControls 未載入，3D 拖曳功能停用');
@@ -1245,12 +889,17 @@
             transformControls.setSpace('world');
             transformControls.setMode(gizmoMode);
 
+            // ★ Gizmo drag end → trigger CSG rebuild if the piece has any air block
             transformControls.addEventListener('dragging-changed', (e) => {
                 controls.enabled = !e.value;
                 if (!e.value && selectedPart) {
                     syncPartInputs(selectedPart.type);
-                    // ★ 拖曳結束後記錄一次歷史
                     pushHistory();
+                    // ★ 若該棋子含有 air 塊，滑鼠一放開就重算 CSG
+                    const group = pieceGroups[selectedPart.type];
+                    if (pieceHasAir(group)) {
+                        scheduleCSGRebuild();
+                    }
                 }
             });
             transformControls.addEventListener('objectChange', onGizmoChange);
@@ -1265,8 +914,9 @@
             if (!mesh) return;
             writePartTransform(type, selectedPart.partId, mesh);
             syncPartInputs(type);
-            // ★ 同步更新金色外框
             if (highlightBoxHelper && highlightMeshRef === mesh) highlightBoxHelper.update();
+            // NOTE: We deliberately don't rebuild CSG here — doing so would
+            //       detach the gizmo mid-drag. Rebuild is triggered on drag end.
         }
 
         function attachGizmo() {
@@ -1311,18 +961,19 @@
             requestAnimationFrame(animate);
             controls.update();
 
-            // ★ 選中部件的金色外框：脈動 + 追蹤部件位置
             if (highlightBoxHelper && highlightMeshRef) {
                 const t = performance.now() * 0.005;
-                const pulse = 0.55 + 0.45 * Math.sin(t);   // 0.1 .. 1.0
+                const pulse = 0.55 + 0.45 * Math.sin(t);
 
                 if (highlightMeshRef.material && highlightMeshRef.material.emissive) {
-                    highlightMeshRef.material.emissiveIntensity = 0.35 + 1.1 * pulse;
+                    if (!highlightMeshRef.userData.isAir) {
+                        highlightMeshRef.material.emissiveIntensity = 0.35 + 1.1 * pulse;
+                    }
                 }
                 if (highlightBoxHelper.material) {
                     highlightBoxHelper.material.opacity = 0.5 + 0.5 * pulse;
                 }
-                highlightBoxHelper.update();   // keep the box glued to the part
+                highlightBoxHelper.update();
             }
 
             renderer.render(scene, camera);
@@ -1362,10 +1013,7 @@
                 texture.needsUpdate = true;
 
                 const mat = new THREE.SpriteMaterial({
-                    map: texture,
-                    transparent: true,
-                    depthTest: false,
-                    sizeAttenuation: true
+                    map: texture, transparent: true, depthTest: false, sizeAttenuation: true
                 });
                 const sprite = new THREE.Sprite(mat);
                 sprite.scale.set(1.6, 0.4, 1);
@@ -1375,7 +1023,7 @@
         }
 
         // ============================================================
-        //  3. 棋子構建 (帶部件命名)
+        //  3. 棋子構建
         // ============================================================
         function buildPiece(type, params, customParts) {
             const group = new THREE.Group();
@@ -1393,8 +1041,6 @@
 
             const addPart = (geo, mat, x, y, z, rot, partKey, displayName) => {
                 const stored = (params.parts && params.parts[partKey]) || null;
-
-                // ★ 已被刪除的內建部件：不再生成
                 if (stored && stored.deleted) return null;
 
                 const mesh = new THREE.Mesh(geo, mat);
@@ -1403,7 +1049,6 @@
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
                 mesh.userData.partKey = partKey;
-                // ★ 自訂名稱優先於預設名稱
                 mesh.userData.partName = (stored && stored.name) || displayName || partKey;
                 mesh.userData.isBuiltin = true;
 
@@ -1438,20 +1083,8 @@
                     const { bodyRadius: br, bodyHeight: bh, neckWidth: nw, neckHeight: nh, neckDepth: nd,
                         headWidth: hw, headHeight: hh, headDepth: hd } = params;
                     addPart(new THREE.CylinderGeometry(br, br * 1.15, bh, 16), baseMat, 0, 0.06 + bh / 2, 0, null, 'body', '身體');
-                    addPart(
-                        new THREE.BoxGeometry(nw, nh, nd),
-                        baseMat,
-                        0.05, 0.06 + bh + nh / 2, -0.02,
-                        new THREE.Euler(-0.3, 0, 0),
-                        'neck', '頸部'
-                    );
-                    addPart(
-                        new THREE.BoxGeometry(hw, hh, hd),
-                        accentMat,
-                        0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08,
-                        new THREE.Euler(-0.15, 0, 0),
-                        'head', '頭部'
-                    );
+                    addPart(new THREE.BoxGeometry(nw, nh, nd), baseMat, 0.05, 0.06 + bh + nh / 2, -0.02, new THREE.Euler(-0.3, 0, 0), 'neck', '頸部');
+                    addPart(new THREE.BoxGeometry(hw, hh, hd), accentMat, 0.12, 0.06 + bh + nh + hh / 2 - 0.02, 0.08, new THREE.Euler(-0.15, 0, 0), 'head', '頭部');
                     break;
                 }
                 case 'bishop': {
@@ -1476,79 +1109,82 @@
                     addPart(new THREE.BoxGeometry(ch2 * 0.7, ch2 * 0.3, cd * 0.6), accentMat, 0, 0.06 + bh + ch + ch2 * 0.75, 0, null, 'crossH', '十字橫');
                     break;
                 }
-                default: break;
             }
 
             if (customParts) {
                 for (const [id, partData] of Object.entries(customParts)) {
                     if (BUILTIN_PART_IDS.includes(id)) continue;
-                    if (partData.deleted) continue;   // ★ 跳過已刪除
+                    if (partData.deleted) continue;
+
+                    const isAir = partData.type === 'air';
                     const geo = createGeometry(partData.type, partData.geometryParams || {});
-                    const mat = createCustomPartMaterial(partData, params);
+                    const mat = isAir
+                        ? new THREE.MeshStandardMaterial({
+                            color: 0xff3333, transparent: true, opacity: 0.15,
+                            emissive: 0x882222, emissiveIntensity: 0.4,
+                            depthWrite: false, side: THREE.DoubleSide,
+                        })
+                        : createCustomPartMaterial(partData, params);
+
                     const mesh = new THREE.Mesh(geo, mat);
-                    const trans = partData;
-                    mesh.position.set(trans.position?.x || 0, trans.position?.y || 0, trans.position?.z || 0);
-                    mesh.rotation.set(trans.rotation?.x || 0, trans.rotation?.y || 0, trans.rotation?.z || 0);
-                    mesh.scale.set(trans.scale?.x || 1, trans.scale?.y || 1, trans.scale?.z || 1);
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
+                    mesh.position.set(partData.position?.x || 0, partData.position?.y || 0, partData.position?.z || 0);
+                    mesh.rotation.set(partData.rotation?.x || 0, partData.rotation?.y || 0, partData.rotation?.z || 0);
+                    mesh.scale.set(partData.scale?.x || 1, partData.scale?.y || 1, partData.scale?.z || 1);
+
+                    mesh.castShadow = !isAir;
+                    mesh.receiveShadow = !isAir;
+
                     mesh.userData.partKey = id;
-                    mesh.userData.partName = partData.name || '自定義';
+                    mesh.userData.partName = partData.name || (isAir ? 'Air' : '自定義');
                     mesh.userData.isCustom = true;
+                    mesh.userData.isAir = isAir;
+
+                    if (isAir) {
+                        const edges = new THREE.EdgesGeometry(geo);
+                        const line = new THREE.LineSegments(
+                            edges,
+                            new THREE.LineBasicMaterial({
+                                color: 0xff5555, depthTest: false,
+                                transparent: true, opacity: 0.9,
+                            })
+                        );
+                        line.renderOrder = 998;
+                        mesh.add(line);
+                    }
+
                     group.add(mesh);
                     group.userData.parts[id] = mesh;
+                }
+            }
+
+            // ★ Apply CSG if any air block exists
+            if (Object.values(group.userData.parts).some(m => m.userData.isAir)) {
+                try {
+                    applyAirBlockCSG(group);
+                } catch (e) {
+                    console.warn('Air block CSG failed:', e);
                 }
             }
 
             return group;
         }
 
-        // ★ 建立部件幾何體（含新增形狀：圓錐台、多面體、環、平面）
         function createGeometry(type, params) {
             switch (type) {
-                case 'box':
-                    return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
-                case 'sphere':
-                    return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
-                case 'cylinder':
-                    return new THREE.CylinderGeometry(
-                        params.radiusTop || 0.15,
-                        params.radiusBottom || 0.15,
-                        params.height || 0.3,
-                        16
-                    );
-                case 'cone':
-                    return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
-                case 'torus':
-                    return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
-                // ★ 新增：圓錐台 —— 上下半徑不同的圓柱
-                case 'frustum':
-                    return new THREE.CylinderGeometry(
-                        params.radiusTop ?? 0.08,
-                        params.radiusBottom ?? 0.18,
-                        params.height || 0.3,
-                        params.segments || 16
-                    );
-                // ★ 新增：柏拉圖多面體
-                case 'tetrahedron':
-                    return new THREE.TetrahedronGeometry(params.radius || 0.2, params.detail || 0);
-                case 'octahedron':
-                    return new THREE.OctahedronGeometry(params.radius || 0.2, params.detail || 0);
-                case 'dodecahedron':
-                    return new THREE.DodecahedronGeometry(params.radius || 0.2, params.detail || 0);
-                case 'icosahedron':
-                    return new THREE.IcosahedronGeometry(params.radius || 0.2, params.detail || 0);
-                // ★ 新增：平面環 / 平面
-                case 'ring':
-                    return new THREE.RingGeometry(
-                        params.innerRadius ?? 0.1,
-                        params.outerRadius ?? 0.22,
-                        params.thetaSegments || 24
-                    );
-                case 'plane':
-                    return new THREE.PlaneGeometry(params.width || 0.3, params.height || 0.3);
-                default:
-                    return new THREE.BoxGeometry(0.2, 0.2, 0.2);
+                case 'box': return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
+                case 'sphere': return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
+                case 'cylinder': return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
+                case 'cone': return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
+                case 'torus': return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
+                case 'frustum': return new THREE.CylinderGeometry(params.radiusTop ?? 0.08, params.radiusBottom ?? 0.18, params.height || 0.3, params.segments || 16);
+                case 'tetrahedron': return new THREE.TetrahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'octahedron': return new THREE.OctahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'dodecahedron': return new THREE.DodecahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'icosahedron': return new THREE.IcosahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'ring': return new THREE.RingGeometry(params.innerRadius ?? 0.1, params.outerRadius ?? 0.22, params.thetaSegments || 24);
+                case 'plane': return new THREE.PlaneGeometry(params.width || 0.3, params.height || 0.3);
+                case 'air': return new THREE.BoxGeometry(params.width || 0.3, params.height || 0.3, params.depth || 0.3);
+                default: return new THREE.BoxGeometry(0.2, 0.2, 0.2);
             }
         }
 
@@ -1576,8 +1212,7 @@
             for (const type of PIECE_TYPES) {
                 const params = currentParams[type];
                 const pos = params.position || { x: 0, y: 0, z: 0 };
-                const customParts = params.parts || {};
-                const group = buildPiece(type, params, customParts);
+                const group = buildPiece(type, params, params.parts || {});
                 group.position.set(pos.x, pos.y, pos.z);
                 scene.add(group);
                 pieceGroups[type] = group;
@@ -1604,14 +1239,12 @@
               <div class="param-group">
                 <div class="param-label">
                   <span>${label}</span>
-                  <input type="number" class="num-input" id="${id}_num"
-                         min="${min}" max="${max}" step="${step}" value="${shown}">
+                  <input type="number" class="num-input" id="${id}_num" min="${min}" max="${max}" step="${step}" value="${shown}">
                 </div>
                 <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${isNaN(v) ? 0 : v}">
               </div>`;
         }
 
-        // 綁定一組滑桿 + 數字框（每次變更自動記錄歷史）
         function bindRange(id, onChange, opts = {}) {
             const range = document.getElementById(id);
             const num = document.getElementById(id + '_num');
@@ -1632,10 +1265,7 @@
                 let v = parseFloat(num.value);
                 const min = parseFloat(range.min);
                 const max = parseFloat(range.max);
-                if (isNaN(v)) {
-                    num.value = parseFloat(range.value).toFixed(dec);
-                    return;
-                }
+                if (isNaN(v)) { num.value = parseFloat(range.value).toFixed(dec); return; }
                 v = Math.min(max, Math.max(min, v));
                 range.value = v;
                 num.value = v.toFixed(dec);
@@ -1646,10 +1276,7 @@
             num.addEventListener('change', commit);
             num.addEventListener('blur', commit);
             num.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    commit();
-                    num.blur();
-                }
+                if (e.key === 'Enter') { commit(); num.blur(); }
             });
         }
 
@@ -1743,7 +1370,6 @@
                 const body = document.createElement('div');
                 body.className = 'accordion-body';
 
-                // 顏色 / 材質
                 const colorRow = document.createElement('div');
                 colorRow.className = 'param-row';
                 colorRow.innerHTML = `
@@ -1754,7 +1380,6 @@
             `;
                 body.appendChild(colorRow);
 
-                // 整體位置
                 const posDiv = document.createElement('div');
                 posDiv.className = 'pos-group';
                 posDiv.innerHTML = `
@@ -1767,7 +1392,6 @@
             `;
                 body.appendChild(posDiv);
 
-                // 部件編輯區
                 const partsDiv = document.createElement('div');
                 partsDiv.className = 'pos-group';
                 partsDiv.id = `parts_${type}`;
@@ -1788,6 +1412,7 @@
                   <option value="icosahedron">二十面體</option>
                   <option value="ring">平面環</option>
                   <option value="plane">平面</option>
+                  <option value="air">🕳 挖空塊 (Air)</option>
                 </select>
                 <button class="btn btn-success btn-sm" onclick="addPartToPiece('${type}')">➕ 添加</button>
               </div>
@@ -1823,7 +1448,6 @@
             `;
                 body.appendChild(partsDiv);
 
-                // 重置按鈕
                 const resetBtn = document.createElement('button');
                 resetBtn.className = 'btn btn-secondary btn-sm';
                 resetBtn.style.cssText = 'margin-top:8px;width:100%;justify-content:center;';
@@ -1837,7 +1461,6 @@
                 item.appendChild(body);
                 panelBody.appendChild(item);
 
-                // ---- 綁定事件 ----
                 document.getElementById(`color_${type}`).addEventListener('input', function () {
                     params.color = this.value;
                     const dot = item.querySelector('.piece-color-dot');
@@ -1846,17 +1469,9 @@
                     pushHistory();
                 });
 
-                bindRange(`roughness_${type}`, (v) => {
-                    params.roughness = v;
-                    rebuildAllPieces();
-                });
+                bindRange(`roughness_${type}`, (v) => { params.roughness = v; rebuildAllPieces(); });
+                bindRange(`metalness_${type}`, (v) => { params.metalness = v; rebuildAllPieces(); });
 
-                bindRange(`metalness_${type}`, (v) => {
-                    params.metalness = v;
-                    rebuildAllPieces();
-                });
-
-                // 整體位置（只更新 group，不重建，避免打斷 gizmo）
                 const updatePiecePos = () => {
                     params.position = {
                         x: getRangeVal(`posX_${type}`, 0),
@@ -1870,11 +1485,12 @@
                 bindRange(`posY_${type}`, updatePiecePos);
                 bindRange(`posZ_${type}`, updatePiecePos);
 
-                // 部件變換
+                // ★ Part transform slider callback
                 const updatePart = () => {
                     if (!selectedPart || selectedPart.type !== type) return;
                     const mesh = getPartMesh(type, selectedPart.partId);
                     if (!mesh) return;
+
                     mesh.position.set(
                         getRangeVal(`partX_${type}`, 0),
                         getRangeVal(`partY_${type}`, 0),
@@ -1891,8 +1507,14 @@
                         getRangeVal(`partSZ_${type}`, 1)
                     );
                     writePartTransform(type, selectedPart.partId, mesh);
-                    // ★ 同步更新金色外框
+
                     if (highlightBoxHelper && highlightMeshRef === mesh) highlightBoxHelper.update();
+
+                    // ★ 只要該棋子含有 air 塊，任何部件移動都要重算 CSG
+                    const group = pieceGroups[type];
+                    if (pieceHasAir(group)) {
+                        scheduleCSGRebuild();
+                    }
                 };
 
                 ['partX', 'partY', 'partZ', 'partRX', 'partRY', 'partRZ', 'partSX', 'partSY', 'partSZ']
@@ -1906,6 +1528,29 @@
             if (first) first.classList.add('active');
 
             updatePartsListUI();
+        }
+
+        // ★ Debounced CSG rebuild
+        let csgRebuildTimer = null;
+        let csgRebuildInFlight = false;
+
+        function scheduleCSGRebuild(delay = 90) {
+            if (csgRebuildInFlight) return;
+            clearTimeout(csgRebuildTimer);
+            csgRebuildTimer = setTimeout(() => {
+                csgRebuildInFlight = true;
+                try {
+                    const keepSel = selectedPart ? { ...selectedPart } : null;
+                    rebuildAllPieces();
+                    if (keepSel && getPartMesh(keepSel.type, keepSel.partId)) {
+                        selectedPart = keepSel;
+                        highlightPart(keepSel.type, keepSel.partId);
+                        attachGizmo();
+                    }
+                } finally {
+                    csgRebuildInFlight = false;
+                }
+            }, delay);
         }
 
         // ============================================================
@@ -1927,49 +1572,36 @@
                 for (const [id, mesh] of Object.entries(parts)) {
                     const tag = document.createElement('span');
                     tag.className = 'part-tag';
+                    if (mesh.userData.isAir) tag.classList.add('air-tag');
                     if (selectedPart && selectedPart.type === type && selectedPart.partId === id) {
                         tag.classList.add('active');
                     }
                     const name = mesh.userData.partName || id;
-                    tag.textContent = name;
+                    tag.textContent = mesh.userData.isAir ? '🕳 ' + name : name;
                     tag.title = id;
 
-                    // ✎ 重新命名（內建 + 自定義都可用）
                     const renameBtn = document.createElement('span');
                     renameBtn.className = 'rename-part';
                     renameBtn.textContent = '✎';
                     renameBtn.title = '重新命名';
-                    renameBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        renamePart(type, id);
-                    });
+                    renameBtn.addEventListener('click', (e) => { e.stopPropagation(); renamePart(type, id); });
                     tag.appendChild(renameBtn);
 
-                    // 📋 複製部件
                     const cloneBtn = document.createElement('span');
                     cloneBtn.className = 'clone-part';
                     cloneBtn.textContent = '📋';
                     cloneBtn.title = '複製部件';
-                    cloneBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        clonePart(type, id);
-                    });
+                    cloneBtn.addEventListener('click', (e) => { e.stopPropagation(); clonePart(type, id); });
                     tag.appendChild(cloneBtn);
 
-                    // ✕ 刪除部件（★ 現在所有部件都可刪除）
                     const del = document.createElement('span');
                     del.className = 'del-part';
                     del.textContent = '✕';
                     del.title = '刪除部件';
-                    del.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        deletePart(type, id);
-                    });
+                    del.addEventListener('click', (e) => { e.stopPropagation(); deletePart(type, id); });
                     tag.appendChild(del);
 
-                    tag.addEventListener('click', () => {
-                        selectPart(type, id);
-                    });
+                    tag.addEventListener('click', () => { selectPart(type, id); });
                     list.appendChild(tag);
                 }
             }
@@ -1979,18 +1611,13 @@
         function selectPart(type, partId) {
             selectedPart = { type, partId };
             document.querySelectorAll('.parts-list').forEach(list => {
-                list.querySelectorAll('.part-tag').forEach(tag => {
-                    tag.classList.remove('active');
-                });
+                list.querySelectorAll('.part-tag').forEach(tag => tag.classList.remove('active'));
             });
             const list = document.getElementById(`partsList_${type}`);
             if (list) {
                 const tags = list.querySelectorAll('.part-tag');
                 for (const tag of tags) {
-                    if (tag.title === partId) {
-                        tag.classList.add('active');
-                        break;
-                    }
+                    if (tag.title === partId) { tag.classList.add('active'); break; }
                 }
             }
             const controls = document.getElementById(`partControls_${type}`);
@@ -2017,16 +1644,20 @@
             return group.userData.parts[partId] || null;
         }
 
-        // ★ 強化版選中高亮：脈動金色自發光 + 金色外框（永遠置頂）
         function highlightPart(type, partId) {
-            // ── 1. 先清除舊的高亮 ──
             for (const t of PIECE_TYPES) {
                 const g = pieceGroups[t];
                 if (!g) continue;
                 for (const mesh of Object.values(g.userData.parts || {})) {
                     if (mesh.material && mesh.material.emissive) {
-                        mesh.material.emissive.setHex(0x000000);
-                        mesh.material.emissiveIntensity = 1;
+                        if (mesh.userData.isAir) {
+                            mesh.material.emissive.setHex(0x882222);
+                            mesh.material.emissiveIntensity = 0.4;
+                            mesh.material.opacity = 0.15;
+                        } else {
+                            mesh.material.emissive.setHex(0x000000);
+                            mesh.material.emissiveIntensity = 1;
+                        }
                     }
                 }
             }
@@ -2038,19 +1669,22 @@
             }
             highlightMeshRef = null;
 
-            // ── 2. 對新部件套用高亮 ──
             const mesh = getPartMesh(type, partId);
             if (!mesh) return;
 
-            // 亮金自發光（會脈動）
             if (mesh.material && mesh.material.emissive) {
-                mesh.material.emissive.setHex(0xffcc33);
-                mesh.material.emissiveIntensity = 0.9;
+                if (mesh.userData.isAir) {
+                    mesh.material.emissive.setHex(0xff4444);
+                    mesh.material.emissiveIntensity = 0.9;
+                    mesh.material.opacity = 0.28;
+                } else {
+                    mesh.material.emissive.setHex(0xffcc33);
+                    mesh.material.emissiveIntensity = 0.9;
+                }
             }
 
-            // 金色線框方框，永遠畫在最上層
             highlightBoxHelper = new THREE.BoxHelper(mesh, 0xffd700);
-            highlightBoxHelper.material.depthTest = false;      // 蓋過所有物件
+            highlightBoxHelper.material.depthTest = false;
             highlightBoxHelper.material.transparent = true;
             highlightBoxHelper.material.opacity = 0.95;
             highlightBoxHelper.renderOrder = 999;
@@ -2059,15 +1693,20 @@
             highlightMeshRef = mesh;
         }
 
-        // ★ 清除高亮（取消選取時）
         function clearPartHighlight() {
             for (const t of PIECE_TYPES) {
                 const g = pieceGroups[t];
                 if (!g) continue;
                 for (const mesh of Object.values(g.userData.parts || {})) {
                     if (mesh.material && mesh.material.emissive) {
-                        mesh.material.emissive.setHex(0x000000);
-                        mesh.material.emissiveIntensity = 1;
+                        if (mesh.userData.isAir) {
+                            mesh.material.emissive.setHex(0x882222);
+                            mesh.material.emissiveIntensity = 0.4;
+                            mesh.material.opacity = 0.15;
+                        } else {
+                            mesh.material.emissive.setHex(0x000000);
+                            mesh.material.emissiveIntensity = 1;
+                        }
                     }
                 }
             }
@@ -2105,7 +1744,6 @@
                 case 'cylinder': geoParams = { radiusTop: 0.15, radiusBottom: 0.15, height: 0.3 }; break;
                 case 'cone': geoParams = { radius: 0.15, height: 0.3 }; break;
                 case 'torus': geoParams = { radius: 0.15, tube: 0.05 }; break;
-                // ★ 新增形狀
                 case 'frustum': geoParams = { radiusTop: 0.08, radiusBottom: 0.18, height: 0.3, segments: 16 }; break;
                 case 'tetrahedron': geoParams = { radius: 0.2, detail: 0 }; break;
                 case 'octahedron': geoParams = { radius: 0.2, detail: 0 }; break;
@@ -2113,14 +1751,15 @@
                 case 'icosahedron': geoParams = { radius: 0.2, detail: 0 }; break;
                 case 'ring': geoParams = { innerRadius: 0.1, outerRadius: 0.22, thetaSegments: 24 }; break;
                 case 'plane': geoParams = { width: 0.3, height: 0.3 }; break;
+                case 'air': geoParams = { width: 0.3, height: 0.3, depth: 0.3 }; break;
                 default: geoParams = { width: 0.2, height: 0.2, depth: 0.2 };
             }
 
-            // ★ 給新部件一個友善的預設名稱
             const SHAPE_NAMES = {
                 box: 'Box', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', torus: 'Torus',
                 frustum: 'Frustum', tetrahedron: 'Tetra', octahedron: 'Octa',
-                dodecahedron: 'Dodeca', icosahedron: 'Icosa', ring: 'Ring', plane: 'Plane'
+                dodecahedron: 'Dodeca', icosahedron: 'Icosa', ring: 'Ring', plane: 'Plane',
+                air: 'Air',
             };
 
             const partData = {
@@ -2134,6 +1773,18 @@
                 name: SHAPE_NAMES[shapeType] || shapeType,
             };
             params.parts[id] = partData;
+
+            // Always rebuild when adding air block (or if piece already has one)
+            const isAir = shapeType === 'air';
+            const hadAir = Object.values(params.parts).some(p => p && p.type === 'air');
+            if (isAir || hadAir) {
+                rebuildAllPieces();
+                updatePartsListUI();
+                selectPart(type, id);
+                pushHistory(true);
+                showToast(isAir ? '🕳 已添加挖空塊' : '✅ 已添加 ' + partData.name);
+                return;
+            }
 
             const group = pieceGroups[type];
             if (group) {
@@ -2154,101 +1805,44 @@
 
             updatePartsListUI();
             selectPart(type, id);
-            pushHistory(true);   // ★ 添加部件 → 記錄歷史
+            pushHistory(true);
             showToast('✅ 已添加 ' + partData.name);
         }
 
-        // ★ 擴充版：辨識新增形狀（用於複製內建部件）
         function inferGeometryInfo(mesh) {
             const geo = mesh.geometry;
             if (!geo) return null;
             const p = geo.parameters || {};
             switch (geo.type) {
-                case 'BoxGeometry':
-                    return { type: 'box', geometryParams: { width: p.width, height: p.height, depth: p.depth } };
-                case 'SphereGeometry':
-                    return { type: 'sphere', geometryParams: { radius: p.radius } };
+                case 'BoxGeometry': return { type: 'box', geometryParams: { width: p.width, height: p.height, depth: p.depth } };
+                case 'SphereGeometry': return { type: 'sphere', geometryParams: { radius: p.radius } };
                 case 'CylinderGeometry':
-                    // 上下半徑不同 → 視為圓錐台
                     if (Math.abs((p.radiusTop ?? 0) - (p.radiusBottom ?? 0)) > 1e-4) {
-                        return {
-                            type: 'frustum',
-                            geometryParams: {
-                                radiusTop: p.radiusTop,
-                                radiusBottom: p.radiusBottom,
-                                height: p.height,
-                                segments: p.radialSegments
-                            }
-                        };
+                        return { type: 'frustum', geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height, segments: p.radialSegments } };
                     }
-                    return {
-                        type: 'cylinder',
-                        geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height }
-                    };
-                case 'ConeGeometry':
-                    return { type: 'cone', geometryParams: { radius: p.radius, height: p.height } };
-                case 'TorusGeometry':
-                    return { type: 'torus', geometryParams: { radius: p.radius, tube: p.tube } };
-                case 'TetrahedronGeometry':
-                    return { type: 'tetrahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'OctahedronGeometry':
-                    return { type: 'octahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'DodecahedronGeometry':
-                    return { type: 'dodecahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'IcosahedronGeometry':
-                    return { type: 'icosahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'RingGeometry':
-                    return {
-                        type: 'ring',
-                        geometryParams: {
-                            innerRadius: p.innerRadius,
-                            outerRadius: p.outerRadius,
-                            thetaSegments: p.thetaSegments
-                        }
-                    };
-                case 'PlaneGeometry':
-                    return { type: 'plane', geometryParams: { width: p.width, height: p.height } };
-                default:
-                    return null;
+                    return { type: 'cylinder', geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height } };
+                case 'ConeGeometry': return { type: 'cone', geometryParams: { radius: p.radius, height: p.height } };
+                case 'TorusGeometry': return { type: 'torus', geometryParams: { radius: p.radius, tube: p.tube } };
+                case 'TetrahedronGeometry': return { type: 'tetrahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'OctahedronGeometry': return { type: 'octahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'DodecahedronGeometry': return { type: 'dodecahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'IcosahedronGeometry': return { type: 'icosahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'RingGeometry': return { type: 'ring', geometryParams: { innerRadius: p.innerRadius, outerRadius: p.outerRadius, thetaSegments: p.thetaSegments } };
+                case 'PlaneGeometry': return { type: 'plane', geometryParams: { width: p.width, height: p.height } };
+                default: return null;
             }
         }
 
         function clonePart(type, partId) {
             const params = currentParams[type];
             const group = pieceGroups[type];
-            if (!group) {
-                showToast('⚠️ 找不到棋子');
-                return;
-            }
+            if (!group) { showToast('⚠️ 找不到棋子'); return; }
 
             const sourceMesh = getPartMesh(type, partId);
-            if (!sourceMesh) {
-                showToast('⚠️ 找不到該部件');
-                return;
-            }
+            if (!sourceMesh) { showToast('⚠️ 找不到該部件'); return; }
 
             const newId = 'custom_' + (partIdCounter++);
-
-            const newMaterial = sourceMesh.material
-                ? sourceMesh.material.clone()
-                : new THREE.MeshStandardMaterial({ color: params.color || '#f5f0e1' });
-            if (newMaterial.emissive) {
-                newMaterial.emissive.setHex(0x000000);
-                newMaterial.emissiveIntensity = 1;
-            }
-
-            const newMesh = new THREE.Mesh(sourceMesh.geometry, newMaterial);
-            newMesh.position.copy(sourceMesh.position);
-            newMesh.rotation.copy(sourceMesh.rotation);
-            newMesh.scale.copy(sourceMesh.scale);
-            newMesh.castShadow = true;
-            newMesh.receiveShadow = true;
-            newMesh.userData.partKey = newId;
-            newMesh.userData.partName = (sourceMesh.userData.partName || '部件') + ' Copy';
-            newMesh.userData.isCustom = true;
-
-            group.add(newMesh);
-            group.userData.parts[newId] = newMesh;
+            const isAirSource = sourceMesh.userData.isAir === true;
 
             if (!params.parts) params.parts = {};
 
@@ -2259,12 +1853,7 @@
                 newData = JSON.parse(JSON.stringify(sourceData));
             } else {
                 const geoInfo = inferGeometryInfo(sourceMesh);
-                if (!geoInfo) {
-                    showToast('⚠️ 此部件無法複製（幾何體無法辨識）');
-                    group.remove(newMesh);
-                    delete group.userData.parts[newId];
-                    return;
-                }
+                if (!geoInfo) { showToast('⚠️ 此部件無法複製（幾何體無法辨識）'); return; }
                 newData = {
                     type: geoInfo.type,
                     geometryParams: geoInfo.geometryParams,
@@ -2273,29 +1862,49 @@
                 };
             }
 
-            delete newData.deleted;   // ★ 複製體一定不會是「已刪除」
+            delete newData.deleted;
 
             newData.position = { x: sourceMesh.position.x, y: sourceMesh.position.y, z: sourceMesh.position.z };
             newData.rotation = { x: sourceMesh.rotation.x, y: sourceMesh.rotation.y, z: sourceMesh.rotation.z };
             newData.scale = { x: sourceMesh.scale.x, y: sourceMesh.scale.y, z: sourceMesh.scale.z };
-            newData.name = newMesh.userData.partName;
+            newData.name = (sourceMesh.userData.partName || '部件') + ' Copy';
 
             params.parts[newId] = newData;
 
+            const hasAir = isAirSource || Object.values(params.parts).some(p => p && p.type === 'air');
+            if (hasAir) {
+                rebuildAllPieces();
+            } else {
+                const newMaterial = sourceMesh.material
+                    ? sourceMesh.material.clone()
+                    : new THREE.MeshStandardMaterial({ color: params.color || '#f5f0e1' });
+                if (newMaterial.emissive) {
+                    newMaterial.emissive.setHex(0x000000);
+                    newMaterial.emissiveIntensity = 1;
+                }
+                const newMesh = new THREE.Mesh(sourceMesh.geometry, newMaterial);
+                newMesh.position.copy(sourceMesh.position);
+                newMesh.rotation.copy(sourceMesh.rotation);
+                newMesh.scale.copy(sourceMesh.scale);
+                newMesh.castShadow = true;
+                newMesh.receiveShadow = true;
+                newMesh.userData.partKey = newId;
+                newMesh.userData.partName = newData.name;
+                newMesh.userData.isCustom = true;
+                group.add(newMesh);
+                group.userData.parts[newId] = newMesh;
+            }
+
             updatePartsListUI();
             selectPart(type, newId);
-            pushHistory(true);   // ★ 複製部件 → 記錄歷史
-            const total = Object.keys(group.userData.parts).length;
+            pushHistory(true);
+            const total = Object.keys(params.parts).length;
             showToast('📋 已複製 ' + (sourceMesh.userData.partName || '部件') + `（共 ${total} 個部件）`);
         }
 
-        // ★ 刪除部件（內建部件以 deleted 標記處理）
         function deletePart(type, partId) {
             const mesh = getPartMesh(type, partId);
-            if (!mesh) {
-                showToast('⚠️ 找不到該部件');
-                return;
-            }
+            if (!mesh) { showToast('⚠️ 找不到該部件'); return; }
             const displayName = mesh.userData.partName || partId;
             if (!confirm(`確定刪除部件「${displayName}」嗎？`)) return;
 
@@ -2304,45 +1913,43 @@
 
             const isCustom = mesh.userData.isCustom === true;
             if (isCustom) {
-                // 自定義部件：直接從參數移除
                 delete params.parts[partId];
             } else {
-                // ★ 內建部件：留下 deleted 標記，重建時就不再生成
                 params.parts[partId] = { deleted: true };
-            }
-
-            const group = pieceGroups[type];
-            if (group) {
-                group.remove(mesh);
-                delete group.userData.parts[partId];
             }
 
             if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
-                clearPartHighlight();   // ★ 清除高亮
+                clearPartHighlight();
             }
+
+            const hadAir = mesh.userData.isAir === true;
+            const stillHasAir = Object.values(params.parts).some(p => p && p.type === 'air');
+            if (hadAir || stillHasAir) {
+                rebuildAllPieces();
+            } else {
+                const group = pieceGroups[type];
+                if (group) {
+                    group.remove(mesh);
+                    delete group.userData.parts[partId];
+                }
+            }
+
             updatePartsListUI();
             updatePartControls();
-            pushHistory(true);   // ★ 刪除部件 → 記錄歷史
+            pushHistory(true);
             showToast('🗑 已刪除部件「' + displayName + '」');
         }
 
-        // ★ 重新命名部件（內建 / 自定義皆可）
         function renamePart(type, partId) {
             const mesh = getPartMesh(type, partId);
-            if (!mesh) {
-                showToast('⚠️ 找不到該部件');
-                return;
-            }
+            if (!mesh) { showToast('⚠️ 找不到該部件'); return; }
             const currentName = mesh.userData.partName || partId;
             const input = prompt('請輸入新的部件名稱：', currentName);
-            if (input === null) return;               // 使用者取消
+            if (input === null) return;
             const newName = input.trim();
-            if (!newName) {
-                showToast('⚠️ 名稱不能為空');
-                return;
-            }
+            if (!newName) { showToast('⚠️ 名稱不能為空'); return; }
             if (newName === currentName) return;
 
             const params = currentParams[type];
@@ -2358,7 +1965,7 @@
             }
 
             updatePartsListUI();
-            pushHistory(true);   // ★ 重命名 → 記錄歷史
+            pushHistory(true);
             showToast('✏️ 已重新命名為「' + newName + '」');
         }
 
@@ -2380,7 +1987,7 @@
             rebuildAllPieces();
             updatePartsListUI();
             updatePartControls();
-            pushHistory(true);   // ★ 重置棋子 → 記錄歷史
+            pushHistory(true);
         }
 
         function resetAll() {
@@ -2395,7 +2002,7 @@
             if (first) first.classList.add('active');
             updatePartsListUI();
             updatePartControls();
-            pushHistory(true);   // ★ 重置全部 → 記錄歷史
+            pushHistory(true);
             showToast('↺ 已重置');
         }
 
@@ -2409,7 +2016,7 @@
             }
             rebuildAllPieces();
             refreshPanelPositions();
-            pushHistory(true);   // ★ 重置位置 → 記錄歷史
+            pushHistory(true);
             showToast('↺ 位置已重置');
         }
 
@@ -2424,7 +2031,7 @@
             }
             rebuildAllPieces();
             refreshPanelPositions();
-            pushHistory(true);   // ★ 排列 → 記錄歷史
+            pushHistory(true);
             showToast('➡ 已排列');
         }
 
@@ -2439,7 +2046,7 @@
             }
             rebuildAllPieces();
             refreshPanelPositions();
-            pushHistory(true);   // ★ 隨機位置 → 記錄歷史
+            pushHistory(true);
             showToast('🎲 隨機位置');
         }
 
@@ -2498,25 +2105,17 @@
         function doImport() {
             const area = document.getElementById('importCodeArea');
             let raw = area.value.trim();
-            if (!raw) {
-                showToast('⚠️ 請貼上 JSON 代碼');
-                return;
-            }
+            if (!raw) { showToast('⚠️ 請貼上 JSON 代碼'); return; }
 
             let jsonStr = raw;
             const assignMatch = raw.match(/PIECE_PARAMS\s*=\s*({[\s\S]*});?/);
-            if (assignMatch) {
-                jsonStr = assignMatch[1];
-            }
+            if (assignMatch) jsonStr = assignMatch[1];
 
             try {
                 const imported = JSON.parse(jsonStr);
                 const required = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
                 const allPresent = required.every(t => imported[t]);
-                if (!allPresent) {
-                    showToast('❌ 缺少必要的棋子類型 (pawn, rook, knight, bishop, queen, king)');
-                    return;
-                }
+                if (!allPresent) { showToast('❌ 缺少必要的棋子類型'); return; }
                 currentParams = imported;
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
@@ -2540,7 +2139,7 @@
                 const first = document.querySelector('.accordion-item');
                 if (first) first.classList.add('active');
                 closeImport();
-                pushHistory(true);   // ★ 匯入 → 記錄歷史
+                pushHistory(true);
                 showToast('✅ 匯入成功！');
             } catch (e) {
                 showToast('❌ JSON 解析錯誤: ' + e.message);
@@ -2548,7 +2147,7 @@
         }
 
         // ============================================================
-        //  12. 撤銷 / 重做 (歷史記錄)
+        //  12. 撤銷 / 重做
         // ============================================================
         let historyStack = [];
         let historyIndex = -1;
@@ -2563,17 +2162,13 @@
             };
         }
 
-        // 記錄一步（immediate=true 立即記錄；否則延遲 350ms 合併連續拖曳）
         function pushHistory(immediate = false) {
             if (historyPaused) return;
 
             const run = () => {
                 const snap = captureState();
-
-                // 丟棄「未來」的分支（撤銷後又做新修改的情況）
                 historyStack = historyStack.slice(0, historyIndex + 1);
 
-                // 避免重複記錄同一狀態
                 if (historyStack.length > 0) {
                     const last = historyStack[historyStack.length - 1];
                     if (JSON.stringify(last.params) === JSON.stringify(snap.params)) {
@@ -2583,9 +2178,7 @@
                 }
 
                 historyStack.push(snap);
-                if (historyStack.length > HISTORY_LIMIT) {
-                    historyStack.shift();
-                }
+                if (historyStack.length > HISTORY_LIMIT) historyStack.shift();
                 historyIndex = historyStack.length - 1;
                 updateUndoRedoButtons();
             };
@@ -2599,7 +2192,6 @@
             }
         }
 
-        // 確保「當前狀態」已被記錄（撤銷/重做前呼叫）
         function ensureCurrentStateSaved() {
             const cur = captureState();
             if (historyStack.length === 0) {
@@ -2618,10 +2210,7 @@
         function undo() {
             clearTimeout(historyTimer);
             ensureCurrentStateSaved();
-            if (historyIndex <= 0) {
-                showToast('已到最早狀態');
-                return;
-            }
+            if (historyIndex <= 0) { showToast('已到最早狀態'); return; }
             historyIndex--;
             restoreState(historyStack[historyIndex]);
             showToast('↶ 撤銷 (' + (historyIndex + 1) + '/' + historyStack.length + ')');
@@ -2630,10 +2219,7 @@
         function redo() {
             clearTimeout(historyTimer);
             ensureCurrentStateSaved();
-            if (historyIndex >= historyStack.length - 1) {
-                showToast('已到最新狀態');
-                return;
-            }
+            if (historyIndex >= historyStack.length - 1) { showToast('已到最新狀態'); return; }
             historyIndex++;
             restoreState(historyStack[historyIndex]);
             showToast('↷ 重做 (' + (historyIndex + 1) + '/' + historyStack.length + ')');
@@ -2648,14 +2234,12 @@
             buildPanel();
             rebuildAllPieces();
 
-            // ★ 若選中的部件在重建後不存在（例如被刪除），清空選擇
             if (selectedPart && !getPartMesh(selectedPart.type, selectedPart.partId)) {
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
                 clearPartHighlight();
             }
 
-            // 展開對應的棋子手風琴
             const typeToOpen = selectedPart ? selectedPart.type : 'pawn';
             document.querySelectorAll('.accordion-item').forEach(el => el.classList.remove('active'));
             const item = document.querySelector(`.accordion-item[data-type="${typeToOpen}"]`);
@@ -2698,7 +2282,6 @@
             const tag = (e.target && e.target.tagName || '').toLowerCase();
             const isEditing = tag === 'input' || tag === 'textarea' || tag === 'select';
 
-            // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y  →  撤銷 / 重做
             if ((e.ctrlKey || e.metaKey) && !e.altKey) {
                 const k = e.key.toLowerCase();
                 if (k === 'z') {
@@ -2707,17 +2290,12 @@
                     else undo();
                     return;
                 }
-                if (k === 'y') {
-                    e.preventDefault();
-                    redo();
-                    return;
-                }
+                if (k === 'y') { e.preventDefault(); redo(); return; }
             }
 
             if (isEditing) return;
             if (!selectedPart) return;
 
-            // G / R / S  →  gizmo 模式
             const k = e.key.toLowerCase();
             if (k === 'g') setGizmoMode('translate');
             else if (k === 'r') setGizmoMode('rotate');
@@ -2731,7 +2309,6 @@
             initScene();
             initTransformControls();
 
-            // ★ Advance partIdCounter past any custom_XXXX already used by defaults
             partIdCounter = 1000;
             for (const t of PIECE_TYPES) {
                 const parts = (currentParams[t] && currentParams[t].parts) || {};
@@ -2749,7 +2326,6 @@
             const first = document.querySelector('.accordion-item');
             if (first) first.classList.add('active');
 
-            // 初始狀態推入歷史
             historyStack = [];
             historyIndex = -1;
             pushHistory(true);
@@ -2761,7 +2337,6 @@
             init();
         }
 
-        // 暴露全局函數
         window.resetAll = resetAll;
         window.exportCode = exportCode;
         window.closeExport = closeExport;
@@ -2784,6 +2359,7 @@
         window.redo = redo;
         window.showToast = showToast;
         window.clearPartHighlight = clearPartHighlight;
+        window.scheduleCSGRebuild = scheduleCSGRebuild;
     </script>
 </body>
 
