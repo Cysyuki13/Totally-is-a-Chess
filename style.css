@@ -1364,3 +1364,93 @@ body {
         transform: translate(28px, -50%);
     }
 }
+
+/* ============================================================
+   Queen revive chooser
+   ============================================================ */
+#reviveChoices .promotion-btn {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 1.9rem;
+    position: relative;
+}
+
+#reviveChoices .promotion-btn .revive-count {
+    font-size: 0.65rem;
+    font-weight: 700;
+    opacity: 0.65;
+    letter-spacing: 0.5px;
+}
+
+#reviveChoices .promotion-btn.heal-tinted {
+    border-color: #2ecc71;
+}
+
+/* ============================================================
+   Queen revive speech bubble
+   ============================================================ */
+.queen-speech-bubble {
+    position: fixed;
+    z-index: 150;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(22, 33, 62, 0.96), rgba(10, 15, 35, 0.96));
+    color: #e8c547;
+    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: 2px solid #e8c547;
+    box-shadow:
+        0 0 26px rgba(232, 197, 71, 0.55),
+        0 8px 26px rgba(0, 0, 0, 0.65),
+        inset 0 0 14px rgba(232, 197, 71, 0.12);
+    white-space: nowrap;
+    letter-spacing: 0.4px;
+    text-shadow: 0 0 10px rgba(232, 197, 71, 0.65);
+    transform: translate(-50%, -100%) scale(0.85);
+    opacity: 0;
+    transition:
+        opacity 0.32s ease,
+        transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: opacity, transform;
+}
+
+/* Tail (double-triangle → crisp outline + filled tip) */
+.queen-speech-bubble::before,
+.queen-speech-bubble::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+}
+
+/* Outer gold border of the tail */
+.queen-speech-bubble::before {
+    bottom: -11px;
+    border-left: 11px solid transparent;
+    border-right: 11px solid transparent;
+    border-top: 12px solid #e8c547;
+    filter: drop-shadow(0 0 6px rgba(232, 197, 71, 0.55));
+}
+
+/* Inner dark fill of the tail (1px inside) */
+.queen-speech-bubble::after {
+    bottom: -8px;
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-top: 10px solid #16213e;
+    z-index: 1;
+}
+
+.queen-speech-bubble.visible {
+    opacity: 1;
+    transform: translate(-50%, -120%) scale(1);
+}
+
+.queen-speech-bubble.fading {
+    opacity: 0;
+    transform: translate(-50%, -135%) scale(0.95);
+}

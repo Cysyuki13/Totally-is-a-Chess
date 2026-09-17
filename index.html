@@ -300,7 +300,7 @@
                 <header class="wiki-header">
                     <h1 id="wikiPieceName">兵</h1>
                     <div class="wiki-badges">
-                        <span class="wiki-badge damage">💥 傷害 <b id="wikiDamage">-</b></span>
+                        <span class="wiki-badge damage" id="wikiDamageBadge">💥 傷害 <b id="wikiDamage">-</b></span>
                         <span class="wiki-badge selfdamage hidden" id="wikiSelfDamageBadge">💔 自身 <b
                                 id="wikiSelfDamage">-</b></span>
                         <span class="wiki-badge cooldown">⏳ 冷卻 <b id="wikiCooldown">-</b></span>
@@ -340,6 +340,20 @@
                 <button class="promotion-btn" onclick="choosePromotion('rook')">♜</button>
                 <button class="promotion-btn" onclick="choosePromotion('bishop')">♝</button>
                 <button class="promotion-btn" onclick="choosePromotion('knight')">♞</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  QUEEN REVIVE CHOOSER                                         -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="reviveOverlay">
+        <div class="panel">
+            <h2>✨ 復活棋子</h2>
+            <p>選擇要以滿血復活的棋子：</p>
+            <div class="promotion-choices" id="reviveChoices"></div>
+            <div class="btn-row" style="margin-top:12px;">
+                <button class="btn btn-secondary" onclick="cancelRevive()">✕ 取消</button>
             </div>
         </div>
     </div>

@@ -92,12 +92,11 @@ function generateActions(game, color) {
 
                 for (const ab of game.getLegalAbilities(r, c)) {
                     const target = game.getPiece(ab.r, ab.c);
+                    const abId = ab.ability && ab.ability.id;
+                    const isHeal = abId === 'heal';
 
-                    // ★ Reject friendly fire.
-                    //   - Empty-square targets (e.g. pawn charge landing) → allowed
-                    //   - The moving piece itself (pawn in-place detonation) → allowed
-                    //   - Any OTHER friendly piece → forbidden
-                    if (target && target.color === color && target !== p) continue;
+                    // ★ Reject friendly fire — but healing allies is the exception.
+                    if (target && target.color === color && target !== p && !isHeal) continue;
 
                     abilities.push(ab);
                 }
@@ -196,6 +195,53 @@ function applyAbilityToClone(game, action) {
     if (!piece) return;
     const ability = action.ability;
     const enemyColor = piece.color === 'white' ? 'black' : 'white';
+
+        // ── Queen "Heal" ──
+    if (ability.id === 'heal') {
+        const ally = game.getPiece(action.r, action.c);
+        if (ally) ally.hp = Math.min(ally.maxHp, ally.hp + (ability.healAmount || 100));
+        game.putOnSkillCooldown(piece, 'heal');
+        game.halfMoveClock++;
+        game.flipTurn();
+        game.moveHistory.push({
+            type: 'ability', abilityName: ability.name,
+            fromR: action.fromR, fromC: action.fromC,
+            targetR: action.r, targetC: action.c, healAmount: ability.healAmount || 100,
+        });
+        return;
+    }
+
+    // ── Queen "Revive" ──
+    if (ability.id === 'revive') {
+        const dead = game.getDeadPieces(piece.color);
+        if (dead.length > 0) {
+            let best = dead[0], bestVal = -1;
+            for (const d of dead) {
+                const v = PIECE_VALUES[d.type] || 0;
+                if (v > bestVal) { bestVal = v; best = d; }
+            }
+            const np = {
+                id: ++_pieceIdCounter,
+                type: best.type,
+                color: piece.color,
+                hasMoved: true,
+                hp: 100, maxHp: 100,
+                skillCooldown: 0, reviveCooldown: 0,
+                justUsedSkill: false, justUsedRevive: false,
+            };
+            game.board[action.r][action.c] = np;
+            game.initialPieces.push({ id: np.id, type: best.type, color: piece.color });
+        }
+        game.putOnSkillCooldown(piece, 'revive');
+        game.halfMoveClock++;
+        game.flipTurn();
+        game.moveHistory.push({
+            type: 'ability', abilityName: ability.name,
+            fromR: action.fromR, fromC: action.fromC,
+            targetR: action.r, targetC: action.c,
+        });
+        return;
+    }
 
     // ── Pawn "charge explosion": move + cross AoE + self-damage ──
     if (piece.type === 'pawn' && ability.name === '冲锋爆炸') {
@@ -437,6 +483,25 @@ function scoreActionImmediate(game, action, side, cfg) {
         const target = game.getPiece(action.r, action.c);
         const movingPiece = game.getPiece(action.fromR, action.fromC);
         const ab = action.ability;
+
+                // ★ Queen Heal
+        if (ab.id === 'heal') {
+            const t = game.getPiece(action.r, action.c);
+            if (t) {
+                const healed = Math.min(ab.healAmount || 100, t.maxHp - t.hp);
+                score += (healed / 100) * (PIECE_VALUES[t.type] || 100) * 0.6 * cfg.damageWeight;
+            }
+            return score;
+        }
+
+        // ★ Queen Revive
+        if (ab.id === 'revive') {
+            const dead = game.getDeadPieces(side);
+            let bestVal = 0;
+            for (const d of dead) bestVal = Math.max(bestVal, PIECE_VALUES[d.type] || 0);
+            score += bestVal * 0.9 * cfg.captureWeight;
+            return score;
+        }
 
         // ★ Bishop leap: sum path damage; penalise friendly fire
         if (movingPiece && movingPiece.type === 'bishop' &&

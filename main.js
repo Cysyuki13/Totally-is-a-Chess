@@ -27,6 +27,93 @@ let mouse = new THREE.Vector2();
 let touchActive = false;
 let selectedPiecePulse = 0;
 
+// ★ 棋子唯一 ID（用來推算「已陣亡棋子」，供皇后復活使用）
+let _pieceIdCounter = 0;
+// ★ 皇后復活選擇中的暫存狀態
+let pendingRevive = null;
+
+// ============================================================
+//  ★ Queen voice — Web Speech API wrapper
+// ============================================================
+const QUEEN_VOICE_PREFS = [
+    // Preferred female English voices, in order. First match wins.
+    'Google UK English Female',
+    'Google US English',
+    'Samantha',           // macOS / iOS
+    'Karen',              // macOS AU
+    'Moira',              // macOS IE
+    'Tessa',              // macOS ZA
+    'Fiona',              // macOS
+    'Victoria',           // macOS
+    'Microsoft Zira',     // Windows
+    'Microsoft Hazel',    // Windows UK
+    'Microsoft Aria',     // Windows newer
+    'Female',             // generic
+];
+
+let queenVoice = null;
+let queenVoiceMuted = false;
+try { queenVoiceMuted = localStorage.getItem('queenVoiceMuted') === '1'; } catch (_) { }
+
+function initQueenVoice() {
+    if (!('speechSynthesis' in window)) return;
+
+    const pickVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) return;
+        // 1) Try the preference list
+        for (const pref of QUEEN_VOICE_PREFS) {
+            const v = voices.find(v =>
+                v.name.toLowerCase().includes(pref.toLowerCase()));
+            if (v) { queenVoice = v; return; }
+        }
+        // 2) Fallback: any English voice
+        const anyEn = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+        if (anyEn) { queenVoice = anyEn; return; }
+        // 3) Last resort: default voice
+        queenVoice = voices[0];
+    };
+
+    pickVoice();
+    // Voices load asynchronously in Chrome / Edge
+    window.speechSynthesis.onvoiceschanged = pickVoice;
+}
+
+// Speak a line as the Queen. Safe to call even if TTS isn't supported.
+function speakQueenLine(text) {
+    if (queenVoiceMuted) return;
+    if (!('speechSynthesis' in window)) return;
+
+    try {
+        // Cancel anything still talking so lines don't queue up
+        window.speechSynthesis.cancel();
+
+        const u = new SpeechSynthesisUtterance(text);
+        if (queenVoice) u.voice = queenVoice;
+        u.lang = (queenVoice && queenVoice.lang) || 'en-GB';
+        u.pitch = 1.35;   // slightly high — regal / feminine
+        u.rate = 0.92;    // a touch slower, dramatic
+        u.volume = 1.0;
+
+        window.speechSynthesis.speak(u);
+    } catch (err) {
+        console.warn('🔇 Speech failed:', err);
+    }
+}
+
+// Toggle helper (wired to a keyboard shortcut + a console command)
+function setQueenVoiceMuted(muted) {
+    queenVoiceMuted = !!muted;
+    try { localStorage.setItem('queenVoiceMuted', queenVoiceMuted ? '1' : '0'); } catch (_) { }
+    if (queenVoiceMuted && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    console.log(`🔊 皇后語音: %c${queenVoiceMuted ? '關閉' : '開啟'}`,
+        queenVoiceMuted
+            ? 'color:#e74c3c;font-weight:bold;'
+            : 'color:#2ecc71;font-weight:bold;');
+}
+
 let isAiming = false;
 let ghostLine = null;
 let aimWorldPos = null;
@@ -102,9 +189,12 @@ const SKILL_COOLDOWNS = {
     knight: 2,
     bishop: 2,
     rook: 1,
-    queen: 1,
+    queen: 2,       // ★ 皇后「治癒」冷卻
     king: 1,
 };
+
+// ★ 皇后「復活」獨立冷卻（8 步）
+const QUEEN_REVIVE_COOLDOWN = 8;
 
 function getSkillCooldown(type) {
     return SKILL_COOLDOWNS[type] || 0;
@@ -129,17 +219,35 @@ class ChessGame {
 
     initBoard() {
         this.board = Array(8).fill(null).map(() => Array(8).fill(null));
+        this.initialPieces = [];   // ★ 開局所有棋子的身分證（用於推算陣亡名單）
+
+        const makePiece = (type, color) => {
+            const p = {
+                id: ++_pieceIdCounter,
+                type, color,
+                hasMoved: false,
+                hp: 100, maxHp: 100,
+                skillCooldown: 0,
+                reviveCooldown: 0,
+                justUsedSkill: false,
+                justUsedRevive: false,
+            };
+            this.initialPieces.push({ id: p.id, type, color });
+            return p;
+        };
+
         const backRow = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
         for (let c = 0; c < 8; c++) {
-            this.board[0][c] = { type: backRow[c], color: 'white', hasMoved: false, hp: 100, maxHp: 100, skillCooldown: 0, justUsedSkill: false };
-            this.board[1][c] = { type: 'pawn', color: 'white', hasMoved: false, hp: 100, maxHp: 100, skillCooldown: 0, justUsedSkill: false };
-            this.board[6][c] = { type: 'pawn', color: 'black', hasMoved: false, hp: 100, maxHp: 100, skillCooldown: 0, justUsedSkill: false };
-            this.board[7][c] = { type: backRow[c], color: 'black', hasMoved: false, hp: 100, maxHp: 100, skillCooldown: 0, justUsedSkill: false };
+            this.board[0][c] = makePiece(backRow[c], 'white');
+            this.board[1][c] = makePiece('pawn', 'white');
+            this.board[6][c] = makePiece('pawn', 'black');
+            this.board[7][c] = makePiece(backRow[c], 'black');
         }
     }
 
     clone() {
-        const g = new ChessGame();
+        // ★ 使用 Object.create 避免每次都跑 initBoard（效能 + 保持 ID 一致）
+        const g = Object.create(ChessGame.prototype);
         g.board = this.board.map(row => row.map(p => p ? { ...p } : null));
         g.turn = this.turn;
         g.castlingRights = { ...this.castlingRights };
@@ -149,10 +257,27 @@ class ChessGame {
         g.gameResult = this.gameResult;
         g.halfMoveClock = this.halfMoveClock;
         g.fullMoveNumber = this.fullMoveNumber;
+        g.initialPieces = (this.initialPieces || []).map(p => ({ ...p }));
         return g;
     }
+
+    // ★ 取得某顏色已陣亡的棋子清單
+    getDeadPieces(color) {
+        const alive = new Set();
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = this.board[r][c];
+                if (p && p.id !== undefined) alive.add(p.id);
+            }
+        }
+        return (this.initialPieces || []).filter(p => p.color === color && !alive.has(p.id));
+    }
+
+    // ★★★ RESTORED ★★★
     getPiece(r, c) { return this.board[r][c]; }
+
     isInBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+
     // ★ 切換回合，並在「新一方的回合開始時」倒數他們的技能冷卻
     flipTurn() {
         if (this.turn === 'black') this.fullMoveNumber++;
@@ -166,14 +291,12 @@ class ChessGame {
                 const p = this.board[r][c];
                 if (!p || p.color !== color) continue;
 
-                // ★ 這顆棋子「上一回合」才剛施放技能 →
-                //   本回合先不倒數（讓玩家至少少用一輪），並清掉 flag
-                if (p.justUsedSkill) {
-                    p.justUsedSkill = false;
-                    continue;
-                }
+                // ★ 上一回合才剛施放 → 本回合先不倒數
+                if (p.justUsedSkill) p.justUsedSkill = false;
+                else if ((p.skillCooldown || 0) > 0) p.skillCooldown--;
 
-                if (p.skillCooldown > 0) p.skillCooldown--;
+                if (p.justUsedRevive) p.justUsedRevive = false;
+                else if ((p.reviveCooldown || 0) > 0) p.reviveCooldown--;
             }
         }
     }
@@ -360,8 +483,10 @@ class ChessGame {
             })();
             if (!kingPos) continue;
             const enemyColor = movingPiece.color === 'white' ? 'black' : 'white';
-            const tempGameObj = new ChessGame();
+            const tempGameObj = Object.create(ChessGame.prototype);
             tempGameObj.board = tempBoard;
+            tempGameObj.enPassantTarget = null;
+            tempGameObj.castlingRights = this.castlingRights;
             if (!tempGameObj.isSquareAttacked(kingPos.r, kingPos.c, enemyColor, tempBoard)) {
                 legal.push(move);
             }
@@ -497,10 +622,15 @@ class ChessGame {
 
 // ★ 一個地方統一設定「技能進入冷卻 + 標記為剛使用」，
 //   避免各處忘了帶 flag。
-ChessGame.prototype.putOnSkillCooldown = function (piece) {
+ChessGame.prototype.putOnSkillCooldown = function (piece, abilityId) {
     if (!piece) return;
-    piece.skillCooldown = getSkillCooldown(piece.type);
-    piece.justUsedSkill = true;
+    if (abilityId === 'revive') {
+        piece.reviveCooldown = QUEEN_REVIVE_COOLDOWN;
+        piece.justUsedRevive = true;
+    } else {
+        piece.skillCooldown = getSkillCooldown(piece.type);
+        piece.justUsedSkill = true;
+    }
 };
 
 // ============================================================
@@ -586,6 +716,13 @@ const ABILITIES = {
             return targets;
         }
     },
+    queen: {
+        id: 'heal',
+        name: '治癒 (Heal)',
+        damage: 0,
+        healAmount: 100,
+        getTargets: (game, r, c) => getQueenHealTargets(game, r, c),
+    },
     default: {
         name: '普通攻擊 (Strike)',
         damage: 40,
@@ -601,6 +738,59 @@ const ABILITIES = {
         }
     }
 };
+
+// ★ 皇后第二技能：復活
+const QUEEN_REVIVE_ABILITY = {
+    id: 'revive',
+    name: '復活 (Revive)',
+    damage: 0,
+};
+
+// ============================================================
+//  ★ 皇后技能輔助
+// ============================================================
+
+// 皇后「治癒」：她移動範圍內（每條射線上第一個棋子）的受損友方棋子
+function getQueenHealTargets(game, r, c) {
+    const piece = game.getPiece(r, c);
+    if (!piece) return [];
+    const targets = [];
+    const dirs = [
+        [-1, -1], [-1, 0], [-1, 1],
+        [0, -1], [0, 1],
+        [1, -1], [1, 0], [1, 1],
+    ];
+    for (const [dr, dc] of dirs) {
+        for (let i = 1; i < 8; i++) {
+            const tr = r + dr * i;
+            const tc = c + dc * i;
+            if (!game.isInBounds(tr, tc)) break;
+            const t = game.getPiece(tr, tc);
+            if (!t) continue;
+            if (t.color === piece.color && t !== piece && t.hp < t.maxHp) {
+                targets.push({ r: tr, c: tc });
+            }
+            break;   // 被擋住，射線結束
+        }
+    }
+    return targets;
+}
+
+// 皇后「復活」：自身周圍 8 格中的空格
+function getReviveSquares(game, r, c) {
+    const out = [];
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const tr = r + dr;
+            const tc = c + dc;
+            if (!game.isInBounds(tr, tc)) continue;
+            if (game.getPiece(tr, tc)) continue;
+            out.push({ r: tr, c: tc });
+        }
+    }
+    return out;
+}
 
 // ============================================================
 //  ★ 騎士擊退輔助函式
@@ -736,8 +926,8 @@ ChessGame.prototype.getLegalAbilities = function (r, c) {
     const piece = this.getPiece(r, c);
     if (!piece) return [];
     if (!isAbilityEnabledForColor(piece.color)) return [];
-    // ★ 冷卻中 → 無法施放技能（連 AI 也會因此看不到此技能）
-    if ((piece.skillCooldown || 0) > 0) return [];
+    // ★ 皇后有兩招，不能因為單一冷卻就全部鎖死
+    if (piece.type !== 'queen' && (piece.skillCooldown || 0) > 0) return [];
 
     const abilityDef = ABILITIES[piece.type];
     if (!abilityDef) return [];
@@ -763,6 +953,33 @@ ChessGame.prototype.getLegalAbilities = function (r, c) {
         return landings.map(m => ({
             type: 'ability', fromR: r, fromC: c, r: m.r, c: m.c, ability: abilityDef
         }));
+    }
+
+    // ★ 皇后：治癒 + 復活
+    if (piece.type === 'queen') {
+        const out = [];
+
+        // ── 治癒 ──
+        if ((piece.skillCooldown || 0) === 0) {
+            for (const t of getQueenHealTargets(this, r, c)) {
+                out.push({
+                    type: 'ability', fromR: r, fromC: c, r: t.r, c: t.c,
+                    ability: ABILITIES.queen,
+                });
+            }
+        }
+
+        // ── 復活 ──
+        if ((piece.reviveCooldown || 0) === 0 && this.getDeadPieces(piece.color).length > 0) {
+            for (const sq of getReviveSquares(this, r, c)) {
+                out.push({
+                    type: 'ability', fromR: r, fromC: c, r: sq.r, c: sq.c,
+                    ability: QUEEN_REVIVE_ABILITY,
+                });
+            }
+        }
+
+        return out;
     }
 
     if (piece.type === 'rook') {
@@ -900,12 +1117,1161 @@ function timerOutGameOver(player) {
 //  PIECE PARAMS
 // ============================================================
 const PIECE_PARAMS = {
-    "pawn": { "baseRadius": 0.12, "baseHeight": 0.28, "topRadius": 0.185, "topHeight": 0.04, "sphereRadius": 0.18, "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2, "position": { "x": -4.2, "y": 0, "z": 0 } },
-    "rook": { "bodyRadius": 0.2, "bodyHeight": 0.44, "crownRadius": 0.285, "crownHeight": 0.13, "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2, "position": { "x": -2.52, "y": 0.02, "z": 0 }, "parts": { "custom_1002": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy Copy" }, "custom_1000": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0.21 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy" }, "custom_1001": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy" }, "custom_1003": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": -0.21 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy" } } },
-    "knight": { "bodyRadius": 0.26, "bodyHeight": 0.38, "neckWidth": 0.22, "neckHeight": 0.3, "neckDepth": 0.22, "headWidth": 0.16, "headHeight": 0.22, "headDepth": 0.3, "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2, "position": { "x": -0.84, "y": 0.02, "z": 0 }, "parts": { "body": { "position": { "x": 0, "y": 0.21, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5, "y": 1.02, "z": 0.84 } }, "neck": { "position": { "x": 0, "y": 0.54, "z": 0.13 }, "rotation": { "x": 0.22, "y": 0, "z": 0 }, "scale": { "x": 0.58, "y": 2.44, "z": 1.12 } }, "head": { "position": { "x": 0, "y": 0.76, "z": 0.25 }, "rotation": { "x": -0.08, "y": 0, "z": 0 }, "scale": { "x": 0.98, "y": 1.2, "z": 1.76 } } } },
-    "bishop": { "bodyRadius": 0.22, "bodyHeight": 0.42, "sphereRadius": 0.1, "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2, "position": { "x": 0.84, "y": 0.02, "z": 0 }, "parts": { "body": { "position": { "x": 0, "y": 0.31, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5, "y": 1.2, "z": 0.5 } }, "sphere": { "position": { "x": 0, "y": 0.93, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } }, "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.42, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.08, "y": 2, "z": 1.2 }, "name": "Torus" } } },
-    "queen": { "bodyRadius": 0.22, "bodyHeight": 0.52, "crownRadius": 0.27, "crownHeight": 0.2, "spikeRadius": 0.13, "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2, "position": { "x": 2.52, "y": 0.03, "z": 0 }, "parts": { "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.57, "z": 0 }, "rotation": { "x": -1.56, "y": 0, "z": 0 }, "scale": { "x": 1.56, "y": 1.58, "z": 1.12 }, "name": "Torus" }, "custom_1001": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0 }, "rotation": { "x": -3.14, "y": 0, "z": 0 }, "scale": { "x": 2.12, "y": 0.5, "z": 1 }, "name": "Cone" }, "custom_1002": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0 }, "rotation": { "x": -3.14, "y": -1.58, "z": 0 }, "scale": { "x": 2.16, "y": 0.5, "z": 1 }, "name": "Cone" }, "spike": { "position": { "x": 0, "y": 0.79, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } }, "crown": { "position": { "x": 0, "y": 0.52, "z": 0 }, "rotation": { "x": -3.14, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 0.48, "z": 1 } }, "body": { "position": { "x": 0, "y": 0.32, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.7, "y": 1, "z": 0.7 } } } },
-    "king": { "bodyRadius": 0.235, "bodyHeight": 0.5, "crownRadius": 0.25, "crownHeight": 0.12, "crossWidth": 0.07, "crossHeight": 0.28, "crossDepth": 0.105, "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2, "position": { "x": 4.2, "y": 0.04, "z": 0 }, "parts": { "custom_1000": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.82, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.4, "y": 0.84, "z": 1.4 }, "name": "Cone" }, "body": { "position": { "x": 0, "y": 0.48, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.54, "y": 1.7, "z": 0.56 } }, "crown": { "position": { "x": 0, "y": 0.81, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8, "y": 0.6, "z": 0.8 } }, "crossH": { "position": { "x": 0, "y": 1.04, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } }, "crossV": { "position": { "x": 0, "y": 0.99, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } }, "custom_1001": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.42, "z": -0.18 }, "rotation": { "x": 0.42, "y": 0, "z": 0 }, "scale": { "x": 1.9, "y": 3, "z": 0.1 }, "name": "Box" } } }
+    "pawn": {
+        "baseRadius": 0.12,
+        "baseHeight": 0.28,
+        "topRadius": 0.185,
+        "topHeight": 0.04,
+        "sphereRadius": 0.18,
+        "color": "#f5f0e1",
+        "roughness": 0.25,
+        "metalness": 0.2,
+        "position": {
+            "x": -4.2,
+            "y": 0,
+            "z": 0
+        }
+    },
+    "rook": {
+        "bodyRadius": 0.2,
+        "bodyHeight": 0.44,
+        "crownRadius": 0.285,
+        "crownHeight": 0.13,
+        "color": "#f5f0e1",
+        "roughness": 0.25,
+        "metalness": 0.2,
+        "position": {
+            "x": -2.52,
+            "y": 0.02,
+            "z": 0
+        },
+        "parts": {
+            "custom_1002": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.21,
+                    "y": 0.62,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 1.56,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy Copy Copy"
+            },
+            "custom_1000": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.62,
+                    "z": 0.21
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy"
+            },
+            "custom_1001": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.21,
+                    "y": 0.62,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 1.56,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy Copy"
+            },
+            "custom_1003": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.62,
+                    "z": -0.21
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy Copy"
+            }
+        }
+    },
+    "knight": {
+        "bodyRadius": 0.26,
+        "bodyHeight": 0.38,
+        "neckWidth": 0.22,
+        "neckHeight": 0.3,
+        "neckDepth": 0.22,
+        "headWidth": 0.16,
+        "headHeight": 0.22,
+        "headDepth": 0.3,
+        "color": "#f5f0e1",
+        "roughness": 0.25,
+        "metalness": 0.2,
+        "position": {
+            "x": -0.84,
+            "y": 0.02,
+            "z": 0
+        },
+        "parts": {
+            "body": {
+                "position": {
+                    "x": 0,
+                    "y": 0.21,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5,
+                    "y": 1.02,
+                    "z": 0.84
+                }
+            },
+            "neck": {
+                "position": {
+                    "x": 0,
+                    "y": 0.54,
+                    "z": 0.13
+                },
+                "rotation": {
+                    "x": 0.22,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.58,
+                    "y": 2.44,
+                    "z": 1.12
+                }
+            },
+            "head": {
+                "position": {
+                    "x": 0,
+                    "y": 0.76,
+                    "z": 0.25
+                },
+                "rotation": {
+                    "x": -0.08,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.98,
+                    "y": 1.2,
+                    "z": 1.76
+                }
+            }
+        }
+    },
+    "bishop": {
+        "bodyRadius": 0.22,
+        "bodyHeight": 0.42,
+        "sphereRadius": 0.1,
+        "color": "#ffffff",
+        "roughness": 0.25,
+        "metalness": 0.2,
+        "position": {
+            "x": 0.84,
+            "y": 0.02,
+            "z": 0
+        },
+        "parts": {
+            "body": {
+                "deleted": true
+            },
+            "sphere": {
+                "deleted": true
+            },
+            "custom_1000": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.002,
+                    "y": 0.2385,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.9999,
+                    "y": 0.9193,
+                    "z": 1.9931
+                },
+                "name": "Cone"
+            },
+            "custom_1001": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.1306,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.2957,
+                    "y": 1,
+                    "z": 1.2146
+                },
+                "name": "Cylinder"
+            },
+            "custom_1003": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.52,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.25,
+                    "y": 2.91,
+                    "z": 1.25
+                },
+                "name": "Cone"
+            },
+            "custom_1004": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.59,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.65,
+                    "y": 1.25,
+                    "z": 0.65
+                },
+                "name": "Cylinder"
+            },
+            "custom_1005": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.6888,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": -0.0615,
+                    "z": 1
+                },
+                "name": "Cylinder"
+            },
+            "custom_1006": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7085,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.8292,
+                    "y": -0.0999,
+                    "z": 0.8503
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1007": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7318,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5847,
+                    "y": 0.0505,
+                    "z": 0.612
+                },
+                "name": "Cylinder"
+            },
+            "custom_1009": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.016,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.51,
+                    "y": 0.15,
+                    "z": 0.56
+                },
+                "name": "Cylinder"
+            },
+            "custom_1010": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9859,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 0.0559,
+                    "z": 0.3
+                },
+                "name": "Cylinder Copy"
+            },
+            "base": {
+                "position": {
+                    "x": 0,
+                    "y": 0.06,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "custom_1016": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7763,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5847,
+                    "y": 0.0505,
+                    "z": 0.612
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1017": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9228,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.85,
+                    "y": 0.7,
+                    "z": 0.85
+                },
+                "name": "Cone"
+            },
+            "custom_1018": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.754,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 3.15
+                },
+                "scale": {
+                    "x": 0.85,
+                    "y": 0.45,
+                    "z": 0.85
+                },
+                "name": "Cone Copy"
+            },
+            "custom_1020": {
+                "type": "air",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.0613,
+                    "y": 0.9222,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -2.4597
+                },
+                "scale": {
+                    "x": 0.0918,
+                    "y": 0.6278,
+                    "z": 2.5012
+                },
+                "name": "Air"
+            },
+            "custom_1021": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7686,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.8292,
+                    "y": -0.0999,
+                    "z": 0.8503
+                },
+                "name": "Cylinder Copy Copy"
+            }
+        }
+    },
+    "queen": {
+        "bodyRadius": 0.22,
+        "bodyHeight": 0.52,
+        "crownRadius": 0.27,
+        "crownHeight": 0.2,
+        "spikeRadius": 0.13,
+        "color": "#f5f0e1",
+        "roughness": 0.25,
+        "metalness": 0.2,
+        "position": {
+            "x": 2.52,
+            "y": 0.03,
+            "z": 0
+        },
+        "parts": {
+            "custom_1000": {
+                "type": "torus",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "tube": 0.05
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.57,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -1.56,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.56,
+                    "y": 1.58,
+                    "z": 1.12
+                },
+                "name": "Torus"
+            },
+            "custom_1001": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.62,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -3.14,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 2.12,
+                    "y": 0.5,
+                    "z": 1
+                },
+                "name": "Cone"
+            },
+            "custom_1002": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.62,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -3.14,
+                    "y": -1.58,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 2.16,
+                    "y": 0.5,
+                    "z": 1
+                },
+                "name": "Cone"
+            },
+            "spike": {
+                "position": {
+                    "x": 0,
+                    "y": 0.79,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "crown": {
+                "position": {
+                    "x": 0,
+                    "y": 0.52,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -3.14,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 0.48,
+                    "z": 1
+                }
+            },
+            "body": {
+                "position": {
+                    "x": 0,
+                    "y": 0.32,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.7,
+                    "y": 1,
+                    "z": 0.7
+                }
+            }
+        }
+    },
+    "king": {
+        "bodyRadius": 0.235,
+        "bodyHeight": 0.5,
+        "crownRadius": 0.25,
+        "crownHeight": 0.12,
+        "crossWidth": 0.07,
+        "crossHeight": 0.28,
+        "crossDepth": 0.105,
+        "color": "#ffffff",
+        "roughness": 0.25,
+        "metalness": 0.2,
+        "position": {
+            "x": 4.2,
+            "y": 0.04,
+            "z": 0
+        },
+        "parts": {
+            "base": {
+                "position": {
+                    "x": 0,
+                    "y": 0.06,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "body": {
+                "deleted": true
+            },
+            "crown": {
+                "deleted": true
+            },
+            "crossV": {
+                "deleted": true
+            },
+            "crossH": {
+                "deleted": true
+            },
+            "custom_1000": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.002,
+                    "y": 0.2539,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.9999,
+                    "y": 0.9193,
+                    "z": 1.9931
+                },
+                "name": "Cone"
+            },
+            "custom_1001": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.1491,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.2957,
+                    "y": 1,
+                    "z": 1.2146
+                },
+                "name": "Cylinder"
+            },
+            "custom_1003": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.4262,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.0914,
+                    "y": 2.9097,
+                    "z": 1.2881
+                },
+                "name": "Cone"
+            },
+            "custom_1004": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5664,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.4607,
+                    "y": 1.5936,
+                    "z": 0.52
+                },
+                "name": "Cylinder"
+            },
+            "custom_1005": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.736,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": -0.0615,
+                    "z": 1
+                },
+                "name": "Cylinder"
+            },
+            "custom_1006": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7539,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.8292,
+                    "y": -0.0999,
+                    "z": 0.8503
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1007": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8041,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5847,
+                    "y": 0.0505,
+                    "z": 0.612
+                },
+                "name": "Cylinder"
+            },
+            "custom_1008": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8217,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -3.15
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                },
+                "name": "Cone"
+            },
+            "custom_1009": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9791,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.51,
+                    "y": 0.0552,
+                    "z": 0.5632
+                },
+                "name": "Cylinder"
+            },
+            "custom_1010": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9859,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 0.0559,
+                    "z": 0.3
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1012": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.0719,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.9734,
+                    "y": 0.3662,
+                    "z": 0.2203
+                },
+                "name": "Box"
+            },
+            "custom_1013": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.07,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -1.58
+                },
+                "scale": {
+                    "x": 0.8,
+                    "y": 0.37,
+                    "z": 0.22
+                },
+                "name": "Box Copy"
+            },
+            "custom_1015": {
+                "type": "frustum",
+                "geometryParams": {
+                    "radiusTop": 0.08,
+                    "radiusBottom": 0.18,
+                    "height": 0.3,
+                    "segments": 16
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.17,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.25,
+                    "y": 0.14,
+                    "z": 0.15
+                },
+                "name": "Frustum"
+            },
+            "custom_1016": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.523,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5268,
+                    "y": 0.6517,
+                    "z": 0.6517
+                },
+                "name": "Sphere"
+            }
+        }
+    }
 };
 
 const GEO_CACHE = new Map();
@@ -920,6 +2286,337 @@ const gBox = (w, h, d) => getGeo(`box_${w}_${h}_${d}`, () => new THREE.BoxGeomet
 const gSph = (r, w, h) => getGeo(`sph_${r}_${w}_${h}`, () => new THREE.SphereGeometry(r, w, h));
 const gCone = (r, h, s) => getGeo(`cone_${r}_${h}_${s}`, () => new THREE.ConeGeometry(r, h, s));
 const gTorus = (r, t, rs, ts) => getGeo(`tor_${r}_${t}_${rs}_${ts}`, () => new THREE.TorusGeometry(r, t, rs, ts));
+
+// ============================================================
+//  CSG LIBRARY — same math as chessEditor.html, used for
+//  air-block subtraction on pieces (e.g. the bishop).
+// ============================================================
+(function (global) {
+    const EPSILON = 1e-5;
+    const COPLANAR = 0, FRONT = 1, BACK = 2, SPANNING = 3;
+
+    class Vector {
+        constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+        clone() { return new Vector(this.x, this.y, this.z); }
+        negated() { return new Vector(-this.x, -this.y, -this.z); }
+        plus(a) { return new Vector(this.x + a.x, this.y + a.y, this.z + a.z); }
+        minus(a) { return new Vector(this.x - a.x, this.y - a.y, this.z - a.z); }
+        times(a) { return new Vector(this.x * a, this.y * a, this.z * a); }
+        dividedBy(a) { return new Vector(this.x / a, this.y / a, this.z / a); }
+        dot(a) { return this.x * a.x + this.y * a.y + this.z * a.z; }
+        lerp(a, t) { return this.plus(a.minus(this).times(t)); }
+        length() { return Math.sqrt(this.dot(this)); }
+        unit() { return this.dividedBy(this.length()); }
+        cross(a) {
+            return new Vector(
+                this.y * a.z - this.z * a.y,
+                this.z * a.x - this.x * a.z,
+                this.x * a.y - this.y * a.x
+            );
+        }
+    }
+
+    class Vertex {
+        constructor(pos, normal) { this.pos = pos; this.normal = normal; }
+        clone() { return new Vertex(this.pos.clone(), this.normal.clone()); }
+        flip() { this.normal = this.normal.negated(); }
+        interpolate(other, t) {
+            return new Vertex(this.pos.lerp(other.pos, t), this.normal.lerp(other.normal, t));
+        }
+    }
+
+    class Plane {
+        constructor(normal, w) { this.normal = normal; this.w = w; }
+        static fromPoints(a, b, c) {
+            const n = b.minus(a).cross(c.minus(a)).unit();
+            return new Plane(n, n.dot(a));
+        }
+        clone() { return new Plane(this.normal.clone(), this.w); }
+        flip() { this.normal = this.normal.negated(); this.w = -this.w; }
+        splitPolygon(polygon, coplanarFront, coplanarBack, front, back) {
+            let polygonType = 0;
+            const types = [];
+            for (const v of polygon.vertices) {
+                const t = this.normal.dot(v.pos) - this.w;
+                const type = t < -EPSILON ? BACK : (t > EPSILON ? FRONT : COPLANAR);
+                polygonType |= type;
+                types.push(type);
+            }
+            switch (polygonType) {
+                case COPLANAR:
+                    (this.normal.dot(polygon.plane.normal) > 0 ? coplanarFront : coplanarBack).push(polygon);
+                    break;
+                case FRONT: front.push(polygon); break;
+                case BACK: back.push(polygon); break;
+                case SPANNING: {
+                    const f = [], b = [];
+                    for (let i = 0; i < polygon.vertices.length; i++) {
+                        const j = (i + 1) % polygon.vertices.length;
+                        const ti = types[i], tj = types[j];
+                        const vi = polygon.vertices[i], vj = polygon.vertices[j];
+                        if (ti !== BACK) f.push(vi);
+                        if (ti !== FRONT) b.push(ti !== BACK ? vi.clone() : vi);
+                        if ((ti | tj) === SPANNING) {
+                            const t = (this.w - this.normal.dot(vi.pos)) /
+                                this.normal.dot(vj.pos.minus(vi.pos));
+                            const v = vi.interpolate(vj, t);
+                            f.push(v);
+                            b.push(v.clone());
+                        }
+                    }
+                    if (f.length >= 3) front.push(new Polygon(f, polygon.shared));
+                    if (b.length >= 3) back.push(new Polygon(b, polygon.shared));
+                    break;
+                }
+            }
+        }
+    }
+
+    class Polygon {
+        constructor(vertices, shared) {
+            this.vertices = vertices;
+            this.shared = shared;
+            this._plane = null;
+        }
+        clone() { return new Polygon(this.vertices.map(v => v.clone()), this.shared); }
+        flip() {
+            this.vertices.reverse().forEach(v => v.flip());
+            if (this._plane) this._plane.flip();
+        }
+        get plane() {
+            if (!this._plane) {
+                this._plane = Plane.fromPoints(
+                    this.vertices[0].pos,
+                    this.vertices[1].pos,
+                    this.vertices[2].pos
+                );
+            }
+            return this._plane;
+        }
+    }
+
+    class Node {
+        constructor(polygons) {
+            this.plane = null;
+            this.front = null;
+            this.back = null;
+            this.polygons = [];
+            if (polygons) this.build(polygons);
+        }
+        clone() {
+            const n = new Node();
+            n.plane = this.plane && this.plane.clone();
+            n.front = this.front && this.front.clone();
+            n.back = this.back && this.back.clone();
+            n.polygons = this.polygons.map(p => p.clone());
+            return n;
+        }
+        invert() {
+            for (const p of this.polygons) p.flip();
+            if (this.plane) this.plane.flip();
+            if (this.front) this.front.invert();
+            if (this.back) this.back.invert();
+            const temp = this.front; this.front = this.back; this.back = temp;
+        }
+        clipPolygons(polygons) {
+            if (!this.plane) return polygons.slice();
+            let front = [], back = [];
+            for (const p of polygons) this.plane.splitPolygon(p, front, back, front, back);
+            if (this.front) front = this.front.clipPolygons(front);
+            back = this.back ? this.back.clipPolygons(back) : [];
+            return front.concat(back);
+        }
+        clipTo(bsp) {
+            this.polygons = bsp.clipPolygons(this.polygons);
+            if (this.front) this.front.clipTo(bsp);
+            if (this.back) this.back.clipTo(bsp);
+        }
+        allPolygons() {
+            let polygons = this.polygons.slice();
+            if (this.front) polygons = polygons.concat(this.front.allPolygons());
+            if (this.back) polygons = polygons.concat(this.back.allPolygons());
+            return polygons;
+        }
+        build(polygons) {
+            if (!polygons.length) return;
+            if (!this.plane) this.plane = polygons[0].plane.clone();
+            const front = [], back = [];
+            for (const p of polygons) {
+                this.plane.splitPolygon(p, this.polygons, this.polygons, front, back);
+            }
+            if (front.length) {
+                if (!this.front) this.front = new Node();
+                this.front.build(front);
+            }
+            if (back.length) {
+                if (!this.back) this.back = new Node();
+                this.back.build(back);
+            }
+        }
+    }
+
+    function subtract(polysA, polysB) {
+        const A = new Node(polysA.map(p => p.clone()));
+        const B = new Node(polysB.map(p => p.clone()));
+        A.invert();
+        A.clipTo(B);
+        B.clipTo(A);
+        B.invert();
+        B.clipTo(A);
+        B.invert();
+        A.build(B.allPolygons());
+        A.invert();
+        return A.allPolygons();
+    }
+
+    global.CSG = { Vector, Vertex, Plane, Polygon, Node, subtract };
+})(window);
+
+// ── Three.js ↔ CSG interop ──────────────────────────────────
+
+function meshToCSGPolygons(mesh) {
+    mesh.updateMatrixWorld(true);
+    const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+    const posAttr = geo.attributes.position;
+    const normAttr = geo.attributes.normal;
+    const matrix = mesh.matrixWorld;
+    const nrmMatrix = new THREE.Matrix3().getNormalMatrix(matrix);
+
+    // ★ If the mesh's world matrix has a negative determinant (e.g. mirrored
+    //   by a negative scale), triangle winding flips. Swap two vertices per
+    //   triangle so the winding stays "CCW seen from outside".
+    const flipWinding = matrix.determinant() < 0;
+
+    const polys = [];
+    for (let i = 0; i < posAttr.count; i += 3) {
+        const order = flipWinding ? [0, 2, 1] : [0, 1, 2];
+
+        const positions = order.map(k => new THREE.Vector3()
+            .fromBufferAttribute(posAttr, i + k)
+            .applyMatrix4(matrix));
+
+        const normals = normAttr
+            ? order.map(k => new THREE.Vector3()
+                .fromBufferAttribute(normAttr, i + k)
+                .applyMatrix3(nrmMatrix)
+                .normalize())
+            : null;
+
+        // Face normal computed from the (possibly reordered) positions so it
+        // always matches the winding.
+        const faceN = new THREE.Vector3()
+            .subVectors(positions[1], positions[0])
+            .cross(new THREE.Vector3().subVectors(positions[2], positions[0]))
+            .normalize();
+
+        const verts = [0, 1, 2].map(j => {
+            const n = normals ? normals[j] : faceN;
+            return new CSG.Vertex(
+                new CSG.Vector(positions[j].x, positions[j].y, positions[j].z),
+                new CSG.Vector(n.x, n.y, n.z)
+            );
+        });
+        polys.push(new CSG.Polygon(verts, mesh));
+    }
+    return polys;
+}
+
+function csgPolygonsToGeometry(polys, mesh) {
+    mesh.updateMatrixWorld(true);
+    const invMatrix = new THREE.Matrix4().copy(mesh.matrixWorld).invert();
+    const nrmMatrix = new THREE.Matrix3().getNormalMatrix(invMatrix);
+
+    const positions = [];
+    const normals = [];
+
+    for (const poly of polys) {
+        const vs = poly.vertices;
+        for (let i = 2; i < vs.length; i++) {
+            const tri = [vs[0], vs[i - 1], vs[i]];
+            for (const v of tri) {
+                const p = new THREE.Vector3(v.pos.x, v.pos.y, v.pos.z)
+                    .applyMatrix4(invMatrix);
+                const n = new THREE.Vector3(v.normal.x, v.normal.y, v.normal.z)
+                    .applyMatrix3(nrmMatrix).normalize();
+                positions.push(p.x, p.y, p.z);
+                normals.push(n.x, n.y, n.z);
+            }
+        }
+    }
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    return g;
+}
+
+function isSolidGeometry(geo) {
+    if (!geo) return false;
+    const t = geo.type;
+    if (t === 'RingGeometry' || t === 'PlaneGeometry' || t === 'CircleGeometry') return false;
+    return true;
+}
+
+// Apply air-block CSG on every mesh in the group (except air markers).
+// Also removes the air marker meshes afterwards so they don't render.
+function applyAirBlockCSGToGroup(group) {
+    const airMeshes = [];
+    const solidMeshes = [];
+    for (const child of group.children) {
+        if (!child.isMesh) continue;
+        if (child.userData.isAir) airMeshes.push(child);
+        else solidMeshes.push(child);
+    }
+    if (airMeshes.length === 0) return;
+
+    group.updateMatrixWorld(true);
+
+    const airData = airMeshes.map(air => {
+        const bbox = new THREE.Box3().setFromObject(air);
+        bbox.expandByScalar(0.03);
+        return { polys: meshToCSGPolygons(air), bbox };
+    });
+
+    for (const part of solidMeshes) {
+        if (!isSolidGeometry(part.geometry)) continue;
+
+        const partBox = new THREE.Box3().setFromObject(part);
+        partBox.expandByScalar(0.03);
+
+        const overlapping = airData.filter(a => partBox.intersectsBox(a.bbox));
+        if (overlapping.length === 0) continue;
+
+        let polys = meshToCSGPolygons(part);
+        for (const air of overlapping) {
+            try {
+                polys = CSG.subtract(polys, air.polys);
+            } catch (e) {
+                console.warn('CSG subtract failed on part', part.userData.partKey, e);
+            }
+        }
+
+        if (polys && polys.length > 0) {
+            const newGeo = csgPolygonsToGeometry(polys, part);
+            // ★ Recompute face normals — this guarantees consistent outward
+            //   shading for the carved surface (avoids the "solid block"
+            //   appearance caused by stale / interpolated normals).
+            newGeo.computeVertexNormals();
+            if (part.geometry.dispose) part.geometry.dispose();
+            part.geometry = newGeo;
+        } else {
+            const empty = new THREE.BufferGeometry();
+            empty.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+            empty.setAttribute('normal', new THREE.Float32BufferAttribute([], 3));
+            if (part.geometry.dispose) part.geometry.dispose();
+            part.geometry = empty;
+        }
+    }
+
+    // Remove the air markers from the group so they don't draw.
+    for (const air of airMeshes) group.remove(air);
+}
 
 const _CORES = navigator.hardwareConcurrency || 4;
 const _MEM = navigator.deviceMemory || 4;
@@ -1148,15 +2845,47 @@ function addHealthBarToModel(model, hp = 100, maxHp = 100) {
 }
 
 function createGeometryFromPart(type, params) {
-    const key = `part_${type}_${params.radius || 0}_${params.height || 0}_${params.width || 0}_${params.depth || 0}_${params.radiusTop || 0}_${params.radiusBottom || 0}_${params.tube || 0}`;
+    const key = `part_${type}_${params.radius || 0}_${params.height || 0}_${params.width || 0}_${params.depth || 0}_${params.radiusTop || 0}_${params.radiusBottom || 0}_${params.tube || 0}_${params.innerRadius || 0}_${params.outerRadius || 0}_${params.thetaSegments || 0}_${params.detail || 0}_${params.segments || 0}`;
     return getGeo(key, () => {
         switch (type) {
-            case 'box': return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
-            case 'sphere': return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
-            case 'cylinder': return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
-            case 'cone': return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
-            case 'torus': return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
-            default: return new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            case 'box':
+                return new THREE.BoxGeometry(params.width || 0.2, params.height || 0.2, params.depth || 0.2);
+            case 'sphere':
+                return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
+            case 'cylinder':
+                return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height || 0.3, 16);
+            case 'cone':
+                return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
+            case 'torus':
+                return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
+            // ★ 從編輯器同步：圓錐台（上下半徑不同的圓柱）
+            case 'frustum':
+                return new THREE.CylinderGeometry(
+                    params.radiusTop ?? 0.08,
+                    params.radiusBottom ?? 0.18,
+                    params.height || 0.3,
+                    params.segments || 16
+                );
+            // ★ 從編輯器同步：柏拉圖多面體
+            case 'tetrahedron':
+                return new THREE.TetrahedronGeometry(params.radius || 0.2, params.detail || 0);
+            case 'octahedron':
+                return new THREE.OctahedronGeometry(params.radius || 0.2, params.detail || 0);
+            case 'dodecahedron':
+                return new THREE.DodecahedronGeometry(params.radius || 0.2, params.detail || 0);
+            case 'icosahedron':
+                return new THREE.IcosahedronGeometry(params.radius || 0.2, params.detail || 0);
+            // ★ 從編輯器同步：平面環 / 平面
+            case 'ring':
+                return new THREE.RingGeometry(
+                    params.innerRadius ?? 0.1,
+                    params.outerRadius ?? 0.22,
+                    params.thetaSegments || 24
+                );
+            case 'plane':
+                return new THREE.PlaneGeometry(params.width || 0.3, params.height || 0.3);
+            default:
+                return new THREE.BoxGeometry(0.2, 0.2, 0.2);
         }
     });
 }
@@ -1198,6 +2927,9 @@ function createPieceModel(type, color, hp, maxHp, params) {
     const p = params || PIECE_PARAMS[type] || {};
 
     const addMesh = (geo, matUsed, x, y, z, partKey, rot) => {
+        // ★ 內建部件可以被「刪除」（以 deleted:true 標記），此時不要生成
+        if (p.parts && p.parts[partKey] && p.parts[partKey].deleted) return null;
+
         const materialClone = matUsed.clone();
         const mesh = new THREE.Mesh(geo, materialClone);
         mesh.position.set(x, y, z);
@@ -1280,6 +3012,34 @@ function createPieceModel(type, color, hp, maxHp, params) {
     if (p.parts) {
         for (const [id, partData] of Object.entries(p.parts)) {
             if (['base', 'body', 'neck', 'head', 'top', 'sphere', 'crown', 'spike', 'crossV', 'crossH'].includes(id)) continue;
+            // ★ 已刪除的部件 → 跳過
+            if (partData.deleted) continue;
+
+            // ★ 挖空塊：加入一個不可見的 marker mesh，讓 CSG 使用。
+            //   它本身不繪製，CSG 運算完成後會被移除。
+            if (partData.type === 'air') {
+                const gp = partData.geometryParams || {};
+                const airGeo = new THREE.BoxGeometry(
+                    gp.width || 0.3,
+                    gp.height || 0.3,
+                    gp.depth || 0.3
+                );
+                const airMesh = new THREE.Mesh(
+                    airGeo,
+                    new THREE.MeshBasicMaterial({ visible: false })
+                );
+                airMesh.position.set(partData.position?.x || 0, partData.position?.y || 0, partData.position?.z || 0);
+                airMesh.rotation.set(partData.rotation?.x || 0, partData.rotation?.y || 0, partData.rotation?.z || 0);
+                airMesh.scale.set(partData.scale?.x || 1, partData.scale?.y || 1, partData.scale?.z || 1);
+                airMesh.visible = false;               // never rendered
+                airMesh.castShadow = false;
+                airMesh.receiveShadow = false;
+                airMesh.userData.isAir = true;
+                airMesh.userData.partKey = id;
+                group.add(airMesh);
+                continue;
+            }
+
             const geo = createGeometryFromPart(partData.type, partData.geometryParams || {});
             let partColor;
             if (!partData.color || partData.color === 'piece') partColor = baseColor;
@@ -1302,6 +3062,16 @@ function createPieceModel(type, color, hp, maxHp, params) {
         }
     }
 
+    // ★ 若存在挖空塊，對整個棋子套用 CSG 減法
+    //   注意：必須在 addHealthBarToModel 之前、且未旋轉棋盤之前執行
+    if (group.children.some(c => c.userData && c.userData.isAir)) {
+        try {
+            applyAirBlockCSGToGroup(group);
+        } catch (e) {
+            console.warn('Air block CSG failed for', type, e);
+        }
+    }
+
     addHealthBarToModel(group, hp, maxHp);
 
     if (type === 'knight' || type === 'king') {
@@ -1312,7 +3082,8 @@ function createPieceModel(type, color, hp, maxHp, params) {
     return group;
 }
 
-function createCooldownSprite(cooldown) {
+function createCooldownSprite(cooldown, colorHex = 0x7ac8ff) {
+    const cssColor = '#' + colorHex.toString(16).padStart(6, '0');
     const canvas = document.createElement('canvas');
     canvas.width = 80; canvas.height = 80;
     const ctx = canvas.getContext('2d');
@@ -1321,10 +3092,10 @@ function createCooldownSprite(cooldown) {
     ctx.beginPath();
     ctx.arc(40, 40, 32, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#7ac8ff';
+    ctx.strokeStyle = cssColor;
     ctx.lineWidth = 5;
     ctx.stroke();
-    ctx.fillStyle = '#7ac8ff';
+    ctx.fillStyle = cssColor;
     ctx.font = 'bold 42px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1334,7 +3105,6 @@ function createCooldownSprite(cooldown) {
     texture.anisotropy = 4;
     const mat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    // ★ 縮小冷卻標籤（原本 0.42 → 0.24），並往棋子靠攏
     sprite.scale.set(0.24, 0.24, 1);
     sprite.position.set(0.32, 0.95, 0);
     sprite.renderOrder = 1000;
@@ -1362,6 +3132,14 @@ function createPieces3D() {
                     const cdSprite = createCooldownSprite(cd);
                     obj.add(cdSprite);
                     obj.userData.cooldownSprite = cdSprite;
+                }
+                // ★ 皇后復活冷卻（紫色，另一側）
+                const cdRev = piece.reviveCooldown || 0;
+                if (cdRev > 0) {
+                    const revSprite = createCooldownSprite(cdRev, 0xc38bff);
+                    revSprite.position.set(-0.32, 0.95, 0);
+                    obj.add(revSprite);
+                    obj.userData.reviveCooldownSprite = revSprite;
                 }
                 piecesGroup.add(obj);
                 pieceObjects[`${r},${c}`] = obj;
@@ -1412,6 +3190,81 @@ function showFloatingDamage(row, col, damage) {
     setTimeout(() => {
         if (el.parentNode) el.parentNode.removeChild(el);
     }, 1050);
+}
+
+function showFloatingHeal(row, col, amount) {
+    const pos = get3DPosition(row, col, 1.0);
+    pos.project(camera);
+    const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (pos.y * -0.5 + 0.5) * window.innerHeight;
+    const el = document.createElement('div');
+    el.textContent = `+${amount}`;
+    el.style.position = 'absolute';
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.style.color = '#2ecc71';
+    el.style.fontWeight = '900';
+    el.style.fontSize = '28px';
+    el.style.textShadow = '0 0 10px black, 0 0 10px black, 0 0 18px #2ecc71';
+    el.style.transform = 'translate(-50%, -50%)';
+    el.style.transition = 'all 1.1s cubic-bezier(0.25, 1, 0.5, 1)';
+    document.getElementById('damageOverlay').appendChild(el);
+    setTimeout(() => {
+        el.style.transform = 'translate(-50%, -110px) scale(1.35)';
+        el.style.opacity = '0';
+    }, 50);
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 1150);
+}
+
+// ============================================================
+//  ★ Queen speech bubble — a small message pops above the queen
+// ============================================================
+function showQueenSpeech(row, col, text, duration = 2400) {
+    if (!camera || !renderer) return;
+
+    // Anchor the bubble a bit above the queen's head
+    const pos = get3DPosition(row, col, 1.55);
+    pos.project(camera);
+    const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (pos.y * -0.5 + 0.5) * window.innerHeight;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'queen-speech-bubble';
+    bubble.textContent = text;
+    bubble.style.left = `${x}px`;
+    bubble.style.top = `${y}px`;
+    document.body.appendChild(bubble);
+
+    // ★ Speak the line at the same moment the bubble appears
+    speakQueenLine(text);
+
+    // Animate in on the next frame (so transition fires)
+    requestAnimationFrame(() => bubble.classList.add('visible'));
+
+    // Keep the bubble glued to the queen while the camera may still be easing
+    let rafId = null;
+    const start = performance.now();
+    const track = () => {
+        if (!bubble.parentNode) return;
+        const p = get3DPosition(row, col, 1.55);
+        p.project(camera);
+        bubble.style.left = ((p.x * 0.5 + 0.5) * window.innerWidth) + 'px';
+        bubble.style.top = ((p.y * -0.5 + 0.5) * window.innerHeight) + 'px';
+        if (performance.now() - start < duration + 400) {
+            rafId = requestAnimationFrame(track);
+        }
+    };
+    rafId = requestAnimationFrame(track);
+
+    // Fade out and remove
+    setTimeout(() => {
+        bubble.classList.remove('visible');
+        bubble.classList.add('fading');
+        if (rafId) cancelAnimationFrame(rafId);
+        setTimeout(() => {
+            if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
+        }, 420);
+    }, duration);
 }
 
 function get3DPosition(r, c, yOffset = 0) {
@@ -1509,12 +3362,27 @@ function showAbilityHighlights(targets, selectedR, selectedC) {
     };
 
     for (const target of targets) {
+        const abilityId = target.ability && target.ability.id;
+        const isHeal = abilityId === 'heal';
+        const isRevive = abilityId === 'revive';
+        const mainColor = isHeal ? 0x2ecc71 : (isRevive ? 0xb06cff : 0xe8c547);
+        const ringColor = isHeal ? 0xa8ffcc : (isRevive ? 0xe0b3ff : 0xe8c547);
+
         const zone = new THREE.Group();
         zone.position.set(target.c - 3.5, 0, 3.5 - target.r);
-        zone.userData = { row: target.r, col: target.c, type: 'ability-target' };
+        zone.userData = {
+            row: target.r, col: target.c, type: 'ability-target',
+            abilityId: abilityId || null,
+        };
 
-        zone.add(makePulse(new THREE.CircleGeometry(0.44, 24), 0xe8c547, 0.25, 0.55, 0.032));
-        zone.add(makePulse(new THREE.RingGeometry(0.40, 0.46, 24), 0xe8c547, 0.65, 1.00, 0.040));
+        zone.add(makePulse(new THREE.CircleGeometry(0.44, 24), mainColor, 0.25, 0.55, 0.032));
+        zone.add(makePulse(new THREE.RingGeometry(0.40, 0.46, 24), ringColor, 0.65, 1.00, 0.040));
+
+        if (isHeal || isRevive) {
+            // 地上的十字標記
+            zone.add(makePulse(new THREE.PlaneGeometry(0.13, 0.50), 0xffffff, 0.45, 0.85, 0.044));
+            zone.add(makePulse(new THREE.PlaneGeometry(0.50, 0.13), 0xffffff, 0.45, 0.85, 0.045));
+        }
 
         if (casterType === 'pawn') {
             const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -2557,6 +4425,416 @@ function executeBishopAbility(fromR, fromC, toR, toC, ability, isRemote = false)
         }
     };
     animateJump();
+}
+
+// ============================================================
+//  ★ 皇后「治癒」技能
+// ============================================================
+function executeQueenHeal(fromR, fromC, toR, toC, ability, isRemote = false) {
+    if (isAnimating) return;
+    const caster = gameState.getPiece(fromR, fromC);
+    const target = gameState.getPiece(toR, toC);
+    if (!caster || !target) return;
+    if (target.color !== caster.color) return;
+
+    isAnimating = true;
+    gameState.putOnSkillCooldown(caster, 'heal');
+
+    if (currentMode === 'multiplayer' && peerConnection?.open && !isRemote) {
+        sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, 0, 0, null);
+    }
+
+    const healAmount = ability.healAmount || 100;
+    const amount = Math.min(healAmount, target.maxHp - target.hp);
+    target.hp = Math.min(target.maxHp, target.hp + healAmount);
+
+    spawnHealEffect(toR, toC);
+    showFloatingHeal(toR, toC, amount);
+    updateHealthVisuals(toR, toC, target.hp, target.maxHp);
+
+    gameState.moveHistory.push({
+        type: 'ability', abilityName: ability.name,
+        fromR, fromC, targetR: toR, targetC: toC,
+        damageDealt: 0, healAmount: amount,
+    });
+
+    setTimeout(() => {
+        gameState.flipTurn();
+        deselectPiece();
+        isAnimating = false;
+        syncPiecesAfterMove();
+        switchTimer(gameState.turn);
+        checkGameStatus();
+        updateTurnIndicator();
+        if (!gameOverFlag) {
+            updateCameraTargets();
+            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                aiThinking = true;
+                setTimeout(makeAIMove, 500);
+            }
+        }
+    }, 680);
+}
+
+// 治癒視覺：綠色光柱 + 地面擴散環 + 上升粒子
+function spawnHealEffect(row, col) {
+    const center = get3DPosition(row, col, 0);
+    const group = new THREE.Group();
+    group.position.set(center.x, 0, center.z);
+    scene.add(group);
+
+    const startTime = clock.getElapsedTime();
+    const DURATION = 1.0;
+
+    // ── 地面擴散環 ──
+    const rings = [];
+    for (let i = 0; i < 2; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+            color: i === 0 ? 0x2ecc71 : 0xa8ffcc,
+            transparent: true, opacity: 0, depthWrite: false,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.34, 40), mat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.04 + i * 0.008;
+        group.add(ring);
+        rings.push({ mesh: ring, delay: i * 0.12 });
+    }
+
+    // ── 光柱 ──
+    const colMat = new THREE.MeshBasicMaterial({
+        color: 0x6dffb0, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.5, 2.2, 20, 1, true), colMat);
+    column.position.y = 1.1;
+    group.add(column);
+
+    // ── 上升粒子 ──
+    const particles = [];
+    for (let i = 0; i < 34; i++) {
+        const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.035, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(0.36 + Math.random() * 0.08, 0.9, 0.6 + Math.random() * 0.25),
+            transparent: true, opacity: 0, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.08 + Math.random() * 0.34;
+        p.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+        p.userData = {
+            vel: new THREE.Vector3(Math.cos(a) * 0.25, 1.1 + Math.random() * 1.6, Math.sin(a) * 0.25),
+            delay: Math.random() * 0.25,
+            life: 0.6 + Math.random() * 0.45,
+        };
+        group.add(p);
+        particles.push(p);
+    }
+
+    const loop = () => {
+        const t = clock.getElapsedTime() - startTime;
+        if (t >= DURATION) {
+            scene.remove(group);
+            group.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) n.material.dispose();
+            });
+            return;
+        }
+
+        for (const r of rings) {
+            const rt = Math.max(0, Math.min(1, (t - r.delay) / (DURATION - r.delay)));
+            r.mesh.material.opacity = 0.85 * (1 - rt);
+            r.mesh.scale.setScalar(1 + rt * 3.2);
+        }
+
+        const ct = Math.min(1, t / (DURATION * 0.6));
+        colMat.opacity = 0.45 * Math.sin(Math.PI * ct);
+        column.rotation.y += 0.06;
+
+        for (const p of particles) {
+            const pt = t - p.userData.delay;
+            if (pt < 0 || pt > p.userData.life) { p.visible = false; continue; }
+            p.visible = true;
+            p.position.addScaledVector(p.userData.vel, 0.016);
+            p.userData.vel.y -= 0.02;
+            const lt = pt / p.userData.life;
+            p.material.opacity = (1 - lt) * 0.95;
+            p.scale.setScalar(1 - lt * 0.4);
+        }
+
+        requestAnimationFrame(loop);
+    };
+    loop();
+}
+
+// ============================================================
+//  ★ 皇后「復活」技能
+// ============================================================
+function executeQueenRevive(fromR, fromC, toR, toC, ability, reviveType = null, isRemote = false) {
+    if (isAnimating) return;
+    const caster = gameState.getPiece(fromR, fromC);
+    if (!caster) return;
+    if (gameState.getPiece(toR, toC)) return;   // 必須是空格
+
+    const dead = gameState.getDeadPieces(caster.color);
+    if (dead.length === 0) return;
+
+    // 選擇要復活的棋子
+    let chosen = null;
+    if (reviveType) chosen = dead.find(d => d.type === reviveType) || null;
+    if (!chosen) {
+        let bestVal = -1;
+        for (const d of dead) {
+            const v = PIECE_VALUES[d.type] || 0;
+            if (v > bestVal) { bestVal = v; chosen = d; }
+        }
+    }
+    if (!chosen) return;
+
+    isAnimating = true;
+    gameState.putOnSkillCooldown(caster, 'revive');
+
+    if (currentMode === 'multiplayer' && peerConnection?.open && !isRemote) {
+        sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, 0, 0, chosen.type);
+    }
+
+    // ── 建立新棋子（滿血） ──
+    const newPiece = {
+        id: ++_pieceIdCounter,
+        type: chosen.type,
+        color: caster.color,
+        hasMoved: true,
+        hp: 100, maxHp: 100,
+        skillCooldown: 0, reviveCooldown: 0,
+        justUsedSkill: false, justUsedRevive: false,
+    };
+    gameState.board[toR][toC] = newPiece;
+    gameState.initialPieces.push({ id: newPiece.id, type: chosen.type, color: caster.color });
+
+    gameState.moveHistory.push({
+        type: 'ability', abilityName: ability.name,
+        fromR, fromC, targetR: toR, targetC: toC,
+        reviveType: chosen.type,
+    });
+
+    // ── 重建 3D 並播放甦生動畫 ──
+    syncPiecesAfterMove();
+    spawnReviveEffect(toR, toC);
+
+    // ★ 皇后說話：「Your duty is not over!」
+    showQueenSpeech(fromR, fromC, 'Your duty is not over!');
+
+    const obj = pieceObjects[`${toR},${toC}`];
+    const baseRotY = obj ? obj.rotation.y : 0;
+    if (obj) {
+        obj.scale.set(0.05, 0.05, 0.05);
+        obj.position.y = -1.1;
+        obj.rotation.y = baseRotY - Math.PI * 2;
+    }
+
+    const startTime = clock.getElapsedTime();
+    const REVIVE_ANIM = 0.9;
+
+    const finish = () => {
+        gameState.flipTurn();
+        deselectPiece();
+        isAnimating = false;
+        switchTimer(gameState.turn);
+        checkGameStatus();
+        updateTurnIndicator();
+        if (!gameOverFlag) {
+            updateCameraTargets();
+            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                aiThinking = true;
+                setTimeout(makeAIMove, 500);
+            }
+        }
+    };
+
+    const anim = () => {
+        const t = Math.min((clock.getElapsedTime() - startTime) / REVIVE_ANIM, 1);
+        const e = 1 - Math.pow(1 - t, 3);
+        if (obj) {
+            obj.position.y = -1.1 * (1 - e);
+            obj.scale.setScalar(0.05 + 0.95 * e);
+            obj.rotation.y = baseRotY - Math.PI * 2 * (1 - e);
+        }
+        if (t < 1) requestAnimationFrame(anim);
+        else {
+            if (obj) {
+                obj.position.y = 0;
+                obj.scale.set(1, 1, 1);
+                obj.rotation.y = baseRotY;
+            }
+            finish();
+        }
+    };
+    anim();
+}
+
+// 復活視覺：紫色天光 + 金環 + 大量上升光點
+function spawnReviveEffect(row, col) {
+    const center = get3DPosition(row, col, 0);
+    const group = new THREE.Group();
+    group.position.set(center.x, 0, center.z);
+    scene.add(group);
+
+    const startTime = clock.getElapsedTime();
+    const DURATION = 1.35;
+
+    // 外層光柱
+    const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.55, 4.0, 24, 1, true), beamMat);
+    beam.position.y = 2.0;
+    group.add(beam);
+
+    // 內層核心
+    const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.18, 4.0, 16, 1, true), coreMat);
+    core.position.y = 2.0;
+    group.add(core);
+
+    // 地面衝擊環
+    const rings = [];
+    for (let i = 0; i < 3; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+            color: i % 2 === 0 ? 0xb06cff : 0xffe27a,
+            transparent: true, opacity: 0, depthWrite: false,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.3, 40), mat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.05;
+        group.add(ring);
+        rings.push({ mesh: ring, delay: i * 0.15 });
+    }
+
+    // 上升光點
+    const particles = [];
+    for (let i = 0; i < 56; i++) {
+        const pg = new THREE.SphereGeometry(0.025 + Math.random() * 0.04, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(
+                0.72 + Math.random() * 0.13, 0.95, 0.6 + Math.random() * 0.3
+            ),
+            transparent: true, opacity: 0, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.1 + Math.random() * 0.42;
+        p.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+        p.userData = {
+            vel: new THREE.Vector3(Math.cos(a) * 0.3, 1.4 + Math.random() * 1.8, Math.sin(a) * 0.3),
+            delay: Math.random() * 0.35,
+            life: 0.7 + Math.random() * 0.5,
+        };
+        group.add(p);
+        particles.push(p);
+    }
+
+    // 底部閃光
+    const flashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const flash = new THREE.Mesh(new THREE.CircleGeometry(0.55, 28), flashMat);
+    flash.rotation.x = -Math.PI / 2;
+    flash.position.y = 0.07;
+    group.add(flash);
+
+    const loop = () => {
+        const t = clock.getElapsedTime() - startTime;
+        if (t >= DURATION) {
+            scene.remove(group);
+            group.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) n.material.dispose();
+            });
+            return;
+        }
+        const prog = t / DURATION;
+
+        beamMat.opacity = 0.5 * Math.sin(Math.PI * Math.min(prog / 0.75, 1));
+        coreMat.opacity = 0.85 * Math.sin(Math.PI * Math.min(prog / 0.6, 1));
+        beam.rotation.y += 0.03;
+        core.rotation.y -= 0.05;
+
+        for (const r of rings) {
+            const rt = Math.max(0, Math.min(1, (t - r.delay) / (DURATION - r.delay)));
+            r.mesh.material.opacity = 0.85 * (1 - rt);
+            r.mesh.scale.setScalar(1 + rt * 4.0);
+        }
+
+        flashMat.opacity = Math.max(0, 0.85 - prog * 2.2);
+
+        for (const p of particles) {
+            const pt = t - p.userData.delay;
+            if (pt < 0 || pt > p.userData.life) { p.visible = false; continue; }
+            p.visible = true;
+            p.position.addScaledVector(p.userData.vel, 0.016);
+            p.userData.vel.y -= 0.015;
+            const lt = pt / p.userData.life;
+            p.material.opacity = (1 - lt) * 0.95;
+            p.scale.setScalar(1 - lt * 0.35);
+        }
+
+        requestAnimationFrame(loop);
+    };
+    loop();
+}
+
+// ============================================================
+//  ★ 皇后復活選擇視窗
+// ============================================================
+function showReviveChooser() {
+    if (!pendingRevive || !gameState || !selectedPiece) { pendingRevive = null; return; }
+    const dead = gameState.getDeadPieces(selectedPiece.piece.color);
+    if (dead.length === 0) { pendingRevive = null; return; }
+
+    const counts = new Map();
+    for (const d of dead) counts.set(d.type, (counts.get(d.type) || 0) + 1);
+
+    const entries = [...counts.entries()]
+        .sort((a, b) => (PIECE_VALUES[b[0]] || 0) - (PIECE_VALUES[a[0]] || 0));
+
+    const GLYPH = { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' };
+    const container = document.getElementById('reviveChoices');
+    container.innerHTML = '';
+
+    for (const [type, count] of entries) {
+        const btn = document.createElement('button');
+        btn.className = 'promotion-btn';
+        btn.innerHTML =
+            `<span style="line-height:1;">${GLYPH[type] || '?'}</span>` +
+            `<span class="revive-count">×${count}</span>`;
+        btn.onclick = () => chooseRevive(type);
+        container.appendChild(btn);
+    }
+
+    document.getElementById('reviveOverlay').classList.remove('hidden');
+}
+
+function chooseRevive(type) {
+    document.getElementById('reviveOverlay').classList.add('hidden');
+    if (!pendingRevive) return;
+    const { fromR, fromC, toR, toC } = pendingRevive;
+    pendingRevive = null;
+    attemptAbility(fromR, fromC, toR, toC, QUEEN_REVIVE_ABILITY, false, type);
+}
+
+function cancelRevive() {
+    pendingRevive = null;
+    const el = document.getElementById('reviveOverlay');
+    if (el) el.classList.add('hidden');
 }
 
 // ★ 視覺：主教「熔岩裂地」技能特效
@@ -3727,7 +6005,12 @@ function selectPiece(row, col) {
 
     const hasAbility = pieceHasAbility(piece);
     const hasTargets = abilityTargets.length > 0;
-    const cooldown = piece.skillCooldown || 0;
+    let cooldown = piece.skillCooldown || 0;
+    if (piece.type === 'queen') {
+        const c1 = piece.skillCooldown || 0;
+        const c2 = piece.reviveCooldown || 0;
+        cooldown = hasTargets ? 0 : ((c1 > 0 && c2 > 0) ? Math.min(c1, c2) : 0);
+    }
     hideCannonRange();
 
     if (hasAbility) updateActionBar(true, hasTargets, cooldown);
@@ -3743,6 +6026,7 @@ function selectPiece(row, col) {
 }
 
 function deselectPiece() {
+    if (pendingRevive) cancelRevive();
     if (isAiming) cancelAiming();
     if (knightAbilityActive) {
         knightAbilityActive = false;
@@ -4207,9 +6491,21 @@ function createCrossExplosion(row, col, damage, selfDamage, callback) {
     animateBoom();
 }
 
-function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = false) {
+function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = false, reviveType = null) {
     if (isAnimating) return;
     const piece = gameState.getPiece(fromR, fromC);
+
+    // ★ 皇后 — 治癒
+    if (piece && piece.type === 'queen' && ability.id === 'heal') {
+        executeQueenHeal(fromR, fromC, targetR, targetC, ability, isRemote);
+        return;
+    }
+
+    // ★ 皇后 — 復活
+    if (piece && piece.type === 'queen' && ability.id === 'revive') {
+        executeQueenRevive(fromR, fromC, targetR, targetC, ability, reviveType, isRemote);
+        return;
+    }
 
     if (piece && piece.type === 'pawn' && ability.name === '冲锋爆炸') {
         executePawnAbility(fromR, fromC, targetR, targetC, ability, isRemote);
@@ -4446,7 +6742,7 @@ function toggleFreeCamera() {
 //  INPUT HANDLING
 // ============================================================
 function processInput(clientX, clientY) {
-    if (isAnimating || aiThinking || gameOverFlag || !!pendingPromotion || suppressClick) return;
+    if (isAnimating || aiThinking || gameOverFlag || !!pendingPromotion || pendingRevive || suppressClick) return;
     if (currentMode === 'multiplayer' && !isPlayerTurn()) return;
 
     if (knightAbilityActive) {
@@ -4562,13 +6858,16 @@ function processInput(clientX, clientY) {
             attemptMove(selectedPiece.row, selectedPiece.col, data.row, data.col);
         } else if (data.type === 'ability-target' && actionMode === 'attack') {
             const target = abilityTargets.find(t => t.r === data.row && t.c === data.col);
-            if (target) attemptAbility(selectedPiece.row, selectedPiece.col, target.r, target.c, target.ability);
+            if (target) handleAbilityTargetClick(target);
+        } else if (data.type === 'square' && actionMode === 'attack' && selectedPiece) {
+            const target = abilityTargets.find(t => t.r === data.row && t.c === data.col);
+            if (target) handleAbilityTargetClick(target);
         } else if (data.type === 'piece') {
             const piece = gameState.getPiece(data.row, data.col);
             if (actionMode === 'attack' && selectedPiece) {
                 const target = abilityTargets.find(t => t.r === data.row && t.c === data.col);
                 if (target) {
-                    attemptAbility(selectedPiece.row, selectedPiece.col, target.r, target.c, target.ability);
+                    handleAbilityTargetClick(target);
                     return;
                 }
             }
@@ -4582,11 +6881,26 @@ function processInput(clientX, clientY) {
 }
 
 function handleSquareClick(row, col) {
-    if (actionMode === 'move') attemptMove(selectedPiece.row, selectedPiece.col, row, col);
-    else if (actionMode === 'attack') {
-        const target = abilityTargets.find(t => t.r === row && t.c === col);
-        if (target) attemptAbility(selectedPiece.row, selectedPiece.col, target.r, target.c, target.ability);
+    const target = abilityTargets.find(t => t.r === row && t.c === col);
+    if (target && actionMode === 'attack') {
+        handleAbilityTargetClick(target);
+        return;
     }
+    if (actionMode === 'move') attemptMove(selectedPiece.row, selectedPiece.col, row, col);
+}
+
+// ★ 統一的技能目標點擊處理（皇后復活需要先彈出選擇視窗）
+function handleAbilityTargetClick(target) {
+    const abilityId = target.ability && target.ability.id;
+    if (abilityId === 'revive') {
+        pendingRevive = {
+            fromR: target.fromR, fromC: target.fromC,
+            toR: target.r, toC: target.c,
+        };
+        showReviveChooser();
+        return;
+    }
+    attemptAbility(target.fromR, target.fromC, target.r, target.c, target.ability);
 }
 
 function onClick(e) {
@@ -4789,6 +7103,7 @@ function showMultiplayerSetup() {
 }
 
 function backToMenu() {
+    if (pendingRevive) cancelRevive();
     stopTimer();
     destroyPeer();
     hideRemoteAim();
@@ -5103,11 +7418,33 @@ function setupPeerConnection() {
 
         if (data.type === 'ability') {
             const abilityName = data.abilityName || '普通攻擊 (Strike)';
-            const damage = data.damage || 40;
+            const damage = (data.damage !== undefined && data.damage !== null) ? data.damage : 40;
             const selfDamage = data.selfDamage || 0;
             const targets = data.targets || [{ r: data.targetR, c: data.targetC }];
             const fromR = data.fromR;
             const fromC = data.fromC;
+
+            // ★ 皇后治癒
+            if (abilityName === '治癒 (Heal)' && targets.length > 0) {
+                executeQueenHeal(
+                    fromR, fromC, targets[0].r, targets[0].c,
+                    { id: 'heal', name: abilityName, damage: 0, healAmount: 100 },
+                    true
+                );
+                return;
+            }
+
+            // ★ 皇后復活
+            if (abilityName === '復活 (Revive)' && targets.length > 0) {
+                executeQueenRevive(
+                    fromR, fromC, targets[0].r, targets[0].c,
+                    { id: 'revive', name: abilityName, damage: 0 },
+                    data.reviveType || null,
+                    true
+                );
+                return;
+            }
+
             if (abilityName === '冲锋爆炸' && targets.length > 0) {
                 const ability = { name: abilityName, damage, selfDamage };
                 const firstTarget = targets[0];
@@ -5259,7 +7596,7 @@ function sendMoveToPeer(fromR, fromC, toR, toC, promotion) {
     if (peerConnection?.open) peerConnection.send({ type: 'move', fromR, fromC, toR, toC, promotion });
 }
 
-function sendAbilityToPeer(fromR, fromC, targets, abilityName, damage, selfDamage) {
+function sendAbilityToPeer(fromR, fromC, targets, abilityName, damage, selfDamage, reviveType) {
     if (peerConnection?.open) {
         const targetList = Array.isArray(targets) ? targets : [targets];
         peerConnection.send({
@@ -5267,8 +7604,9 @@ function sendAbilityToPeer(fromR, fromC, targets, abilityName, damage, selfDamag
             fromR, fromC,
             targets: targetList,
             abilityName: abilityName || '普通攻擊 (Strike)',
-            damage: damage || 40,
-            selfDamage: selfDamage || 0
+            damage: damage ?? 40,
+            selfDamage: selfDamage || 0,
+            reviveType: reviveType || null,
         });
     }
 }
@@ -5515,6 +7853,9 @@ window.addEventListener('load', () => {
     setTimeout(() => window.chessHelp(), 200);
 });
 
+window.chooseRevive = chooseRevive;
+window.cancelRevive = cancelRevive;
+
 // ============================================================
 //  ★ Optional Debug Helpers
 // ============================================================
@@ -5609,6 +7950,7 @@ window.clearBoard = function () {
 // ============================================================
 window.onload = () => {
     initThree();
+    initQueenVoice();
     hideRemoteAim();
     updateActionButtonStates();
     if (IS_MOBILE) setupMobileCannonControls();

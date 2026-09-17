@@ -94,12 +94,24 @@ const WIKI_PIECES = {
     },
     queen: {
         name: '皇后 (Queen)', glyph: '♛',
-        skillName: '尚未實裝',
-        description: '皇后在目前版本中尚未擁有特殊技能。',
-        damage: 0, selfDamage: 0, cooldown: 1,
-        board: () => ({
-            caster: { r: 4, c: 4, type: 'queen', color: 'white', icon: '♛' },
-        }),
+        skillName: '治癒 (Heal) ／ 復活 (Revive)',
+        description: '皇后是唯一擁有兩種技能的棋子。\n【治癒】治療自身移動範圍內（每條射線上的第一個）受損的友方棋子 100 點生命，冷卻 2 回合。\n【復活】將一名已陣亡的友方棋子以滿血復活於自身周圍 8 格內的任一空格，冷卻 8 回合。',
+        damage: 0, heal: 100, selfDamage: 0, cooldown: '2 / 8',
+        board: () => {
+            const caster = { r: 4, c: 4 };
+            const reviveZone = [];
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    reviveZone.push({ r: caster.r + dr, c: caster.c + dc });
+                }
+            }
+            return {
+                caster: { ...caster, type: 'queen', color: 'white', icon: '♛' },
+                damage: reviveZone,                                  // 🔴 復活放置區
+                path: [{ r: 2, c: 4 }, { r: 4, c: 2 }],              // 🟡 治癒目標
+            };
+        },
     },
     king: {
         name: '國王 (King)', glyph: '♚',
@@ -150,8 +162,14 @@ function selectWikiPiece(type) {
 
     document.getElementById('wikiPieceName').textContent = data.name;
     document.getElementById('wikiSkillName').textContent = data.skillName;
-    document.getElementById('wikiDescription').textContent = data.description;
-    document.getElementById('wikiDamage').textContent = data.damage > 0 ? `${data.damage}` : '—';
+    document.getElementById('wikiDescription').innerHTML =
+        String(data.description).replace(/\n/g, '<br>');
+    const dmgBadge = document.getElementById('wikiDamageBadge');
+    if (data.heal) {
+        dmgBadge.innerHTML = `💚 治療 <b id="wikiDamage">+${data.heal}</b>`;
+    } else {
+        dmgBadge.innerHTML = `💥 傷害 <b id="wikiDamage">${data.damage > 0 ? data.damage : '—'}</b>`;
+    }
     document.getElementById('wikiCooldown').textContent = data.cooldown;
 
     const selfBadge = document.getElementById('wikiSelfDamageBadge');
@@ -459,7 +477,7 @@ function playPieceEffect(type) {
     wikiEffectRoot.add(makeWikiGround());
 
     const info = WIKI_PIECES[type];
-    if (!info || type === 'queen' || type === 'king') {
+    if (!info || type === 'king') {
         // No effect — show a hint model sitting still
         const model = createPieceModel(type, 'white', 100, 100, PIECE_PARAMS[type] || {});
         model.position.set(0, 0, 0.5);
@@ -471,6 +489,98 @@ function playPieceEffect(type) {
     if (type === 'rook') setupRookEffect();
     if (type === 'knight') setupKnightEffect();
     if (type === 'bishop') setupBishopEffect();
+    if (type === 'queen') setupQueenEffect();
+}
+
+// ── Queen effect (heal demo) ──────────────────────────────────
+function setupQueenEffect() {
+    const CYCLE = 3600;
+    wikiLoop(CYCLE, () => {
+        clearEffectScene();
+        wikiEffectRoot.add(makeWikiGround());
+
+        const queen = createPieceModel('queen', 'white', 100, 100, PIECE_PARAMS.queen || {});
+        queen.position.set(-0.9, 0, 0.9);
+        wikiEffectRoot.add(queen);
+
+        const ally = createPieceModel('pawn', 'white', 100, 100, PIECE_PARAMS.pawn || {});
+        ally.position.set(0.6, 0, -0.6);
+        wikiEffectRoot.add(ally);
+
+        // 讓友方看起來「受傷」
+        const dim = (hex) => ally.traverse(n => {
+            if (n.isMesh && n.material) n.material.color.setHex(hex);
+        });
+        dim(0x8f8878);
+
+        const beamGroup = new THREE.Group();
+        beamGroup.position.set(0.6, 0, -0.6);
+        beamGroup.visible = false;
+        wikiEffectRoot.add(beamGroup);
+
+        const beamMat = new THREE.MeshBasicMaterial({
+            color: 0x6dffb0, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        });
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 2.4, 20, 1, true), beamMat);
+        beam.position.y = 1.2;
+        beamGroup.add(beam);
+
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x2ecc71, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.34, 32), ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.05;
+        beamGroup.add(ring);
+
+        const particles = [];
+        for (let i = 0; i < 28; i++) {
+            const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.03, 5, 5);
+            const pm = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(0.36 + Math.random() * 0.08, 0.9, 0.65),
+                transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const p = new THREE.Mesh(pg, pm);
+            const a = Math.random() * Math.PI * 2;
+            const r = 0.08 + Math.random() * 0.3;
+            p.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+            p.userData.vel = new THREE.Vector3(Math.cos(a) * 0.2, 1.0 + Math.random() * 1.2, Math.sin(a) * 0.2);
+            p.userData.delay = Math.random() * 0.4;
+            beamGroup.add(p);
+            particles.push(p);
+        }
+
+        const startT = performance.now();
+        const BEAM_START = 450;
+        const DURATION = 2000;
+        let restored = false;
+
+        const animate = () => {
+            const t = performance.now() - startT;
+            const bt = t - BEAM_START;
+            if (bt >= 0) {
+                beamGroup.visible = true;
+                const k = Math.min(bt / (DURATION - BEAM_START), 1);
+                beamMat.opacity = 0.45 * Math.sin(Math.PI * k);
+                ringMat.opacity = 0.85 * (1 - k);
+                ring.scale.setScalar(1 + k * 2.6);
+
+                for (const p of particles) {
+                    const pt = bt / 1000 - p.userData.delay;
+                    if (pt < 0 || pt > 1) { p.visible = false; continue; }
+                    p.visible = true;
+                    p.position.addScaledVector(p.userData.vel, 0.016);
+                    p.material.opacity = (1 - pt) * 0.9;
+                }
+
+                if (!restored && k > 0.6) { restored = true; dim(0xf5f0e1); }
+            }
+            if (t < DURATION) requestAnimationFrame(animate);
+        };
+        animate();
+    });
 }
 
 // ── Individual effect players ──
