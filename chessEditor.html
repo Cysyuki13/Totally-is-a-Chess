@@ -1012,6 +1012,9 @@
         let pieceGroups = {};
         let selectedPart = null; // { type, partId }
         let partIdCounter = 1000;
+        // ★ 高亮輔助（選中部件的金色外框 + 材質參考）
+        let highlightBoxHelper = null;
+        let highlightMeshRef = null;
 
         const container = document.getElementById('sceneContainer');
 
@@ -1112,6 +1115,8 @@
             if (!mesh) return;
             writePartTransform(type, selectedPart.partId, mesh);
             syncPartInputs(type);
+            // ★ 同步更新金色外框
+            if (highlightBoxHelper && highlightMeshRef === mesh) highlightBoxHelper.update();
         }
 
         function attachGizmo() {
@@ -1155,6 +1160,21 @@
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
+
+            // ★ 選中部件的金色外框：脈動 + 追蹤部件位置
+            if (highlightBoxHelper && highlightMeshRef) {
+                const t = performance.now() * 0.005;
+                const pulse = 0.55 + 0.45 * Math.sin(t);   // 0.1 .. 1.0
+
+                if (highlightMeshRef.material && highlightMeshRef.material.emissive) {
+                    highlightMeshRef.material.emissiveIntensity = 0.35 + 1.1 * pulse;
+                }
+                if (highlightBoxHelper.material) {
+                    highlightBoxHelper.material.opacity = 0.5 + 0.5 * pulse;
+                }
+                highlightBoxHelper.update();   // keep the box glued to the part
+            }
+
             renderer.render(scene, camera);
         }
 
@@ -1333,6 +1353,7 @@
             return group;
         }
 
+        // ★ 建立部件幾何體（含新增形狀：圓錐台、多面體、環、平面）
         function createGeometry(type, params) {
             switch (type) {
                 case 'box':
@@ -1340,12 +1361,42 @@
                 case 'sphere':
                     return new THREE.SphereGeometry(params.radius || 0.15, 16, 16);
                 case 'cylinder':
-                    return new THREE.CylinderGeometry(params.radiusTop || 0.15, params.radiusBottom || 0.15, params.height ||
-                        0.3, 16);
+                    return new THREE.CylinderGeometry(
+                        params.radiusTop || 0.15,
+                        params.radiusBottom || 0.15,
+                        params.height || 0.3,
+                        16
+                    );
                 case 'cone':
                     return new THREE.ConeGeometry(params.radius || 0.15, params.height || 0.3, 16);
                 case 'torus':
                     return new THREE.TorusGeometry(params.radius || 0.15, params.tube || 0.05, 12, 16);
+                // ★ 新增：圓錐台 —— 上下半徑不同的圓柱
+                case 'frustum':
+                    return new THREE.CylinderGeometry(
+                        params.radiusTop ?? 0.08,
+                        params.radiusBottom ?? 0.18,
+                        params.height || 0.3,
+                        params.segments || 16
+                    );
+                // ★ 新增：柏拉圖多面體
+                case 'tetrahedron':
+                    return new THREE.TetrahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'octahedron':
+                    return new THREE.OctahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'dodecahedron':
+                    return new THREE.DodecahedronGeometry(params.radius || 0.2, params.detail || 0);
+                case 'icosahedron':
+                    return new THREE.IcosahedronGeometry(params.radius || 0.2, params.detail || 0);
+                // ★ 新增：平面環 / 平面
+                case 'ring':
+                    return new THREE.RingGeometry(
+                        params.innerRadius ?? 0.1,
+                        params.outerRadius ?? 0.22,
+                        params.thetaSegments || 24
+                    );
+                case 'plane':
+                    return new THREE.PlaneGeometry(params.width || 0.3, params.height || 0.3);
                 default:
                     return new THREE.BoxGeometry(0.2, 0.2, 0.2);
             }
@@ -1580,6 +1631,13 @@
                   <option value="cylinder">圓柱</option>
                   <option value="cone">圓錐</option>
                   <option value="torus">圓環</option>
+                  <option value="frustum">圓錐台 (Frustum)</option>
+                  <option value="tetrahedron">四面體</option>
+                  <option value="octahedron">八面體</option>
+                  <option value="dodecahedron">十二面體</option>
+                  <option value="icosahedron">二十面體</option>
+                  <option value="ring">平面環</option>
+                  <option value="plane">平面</option>
                 </select>
                 <button class="btn btn-success btn-sm" onclick="addPartToPiece('${type}')">➕ 添加</button>
               </div>
@@ -1683,6 +1741,8 @@
                         getRangeVal(`partSZ_${type}`, 1)
                     );
                     writePartTransform(type, selectedPart.partId, mesh);
+                    // ★ 同步更新金色外框
+                    if (highlightBoxHelper && highlightMeshRef === mesh) highlightBoxHelper.update();
                 };
 
                 ['partX', 'partY', 'partZ', 'partRX', 'partRY', 'partRZ', 'partSX', 'partSY', 'partSZ']
@@ -1807,21 +1867,67 @@
             return group.userData.parts[partId] || null;
         }
 
+        // ★ 強化版選中高亮：脈動金色自發光 + 金色外框（永遠置頂）
         function highlightPart(type, partId) {
+            // ── 1. 先清除舊的高亮 ──
             for (const t of PIECE_TYPES) {
                 const g = pieceGroups[t];
                 if (!g) continue;
-                for (const [id, mesh] of Object.entries(g.userData.parts || {})) {
+                for (const mesh of Object.values(g.userData.parts || {})) {
                     if (mesh.material && mesh.material.emissive) {
                         mesh.material.emissive.setHex(0x000000);
+                        mesh.material.emissiveIntensity = 1;
                     }
                 }
             }
-            const mesh = getPartMesh(type, partId);
-            if (mesh && mesh.material && mesh.material.emissive) {
-                mesh.material.emissive.setHex(0xe8c547);
-                mesh.material.emissiveIntensity = 0.3;
+            if (highlightBoxHelper) {
+                scene.remove(highlightBoxHelper);
+                if (highlightBoxHelper.geometry) highlightBoxHelper.geometry.dispose();
+                if (highlightBoxHelper.material) highlightBoxHelper.material.dispose();
+                highlightBoxHelper = null;
             }
+            highlightMeshRef = null;
+
+            // ── 2. 對新部件套用高亮 ──
+            const mesh = getPartMesh(type, partId);
+            if (!mesh) return;
+
+            // 亮金自發光（會脈動）
+            if (mesh.material && mesh.material.emissive) {
+                mesh.material.emissive.setHex(0xffcc33);
+                mesh.material.emissiveIntensity = 0.9;
+            }
+
+            // 金色線框方框，永遠畫在最上層
+            highlightBoxHelper = new THREE.BoxHelper(mesh, 0xffd700);
+            highlightBoxHelper.material.depthTest = false;      // 蓋過所有物件
+            highlightBoxHelper.material.transparent = true;
+            highlightBoxHelper.material.opacity = 0.95;
+            highlightBoxHelper.renderOrder = 999;
+            scene.add(highlightBoxHelper);
+
+            highlightMeshRef = mesh;
+        }
+
+        // ★ 清除高亮（取消選取時）
+        function clearPartHighlight() {
+            for (const t of PIECE_TYPES) {
+                const g = pieceGroups[t];
+                if (!g) continue;
+                for (const mesh of Object.values(g.userData.parts || {})) {
+                    if (mesh.material && mesh.material.emissive) {
+                        mesh.material.emissive.setHex(0x000000);
+                        mesh.material.emissiveIntensity = 1;
+                    }
+                }
+            }
+            if (highlightBoxHelper) {
+                scene.remove(highlightBoxHelper);
+                if (highlightBoxHelper.geometry) highlightBoxHelper.geometry.dispose();
+                if (highlightBoxHelper.material) highlightBoxHelper.material.dispose();
+                highlightBoxHelper = null;
+            }
+            highlightMeshRef = null;
         }
 
         function updatePartControls() {
@@ -1849,8 +1955,23 @@
                 case 'cylinder': geoParams = { radiusTop: 0.15, radiusBottom: 0.15, height: 0.3 }; break;
                 case 'cone': geoParams = { radius: 0.15, height: 0.3 }; break;
                 case 'torus': geoParams = { radius: 0.15, tube: 0.05 }; break;
+                // ★ 新增形狀
+                case 'frustum': geoParams = { radiusTop: 0.08, radiusBottom: 0.18, height: 0.3, segments: 16 }; break;
+                case 'tetrahedron': geoParams = { radius: 0.2, detail: 0 }; break;
+                case 'octahedron': geoParams = { radius: 0.2, detail: 0 }; break;
+                case 'dodecahedron': geoParams = { radius: 0.2, detail: 0 }; break;
+                case 'icosahedron': geoParams = { radius: 0.2, detail: 0 }; break;
+                case 'ring': geoParams = { innerRadius: 0.1, outerRadius: 0.22, thetaSegments: 24 }; break;
+                case 'plane': geoParams = { width: 0.3, height: 0.3 }; break;
                 default: geoParams = { width: 0.2, height: 0.2, depth: 0.2 };
             }
+
+            // ★ 給新部件一個友善的預設名稱
+            const SHAPE_NAMES = {
+                box: 'Box', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', torus: 'Torus',
+                frustum: 'Frustum', tetrahedron: 'Tetra', octahedron: 'Octa',
+                dodecahedron: 'Dodeca', icosahedron: 'Icosa', ring: 'Ring', plane: 'Plane'
+            };
 
             const partData = {
                 type: shapeType,
@@ -1860,7 +1981,7 @@
                 position: { x: 0, y: 0.2, z: 0 },
                 rotation: { x: 0, y: 0, z: 0 },
                 scale: { x: 1, y: 1, z: 1 },
-                name: shapeType.charAt(0).toUpperCase() + shapeType.slice(1),
+                name: SHAPE_NAMES[shapeType] || shapeType,
             };
             params.parts[id] = partData;
 
@@ -1887,6 +2008,7 @@
             showToast('✅ 已添加 ' + partData.name);
         }
 
+        // ★ 擴充版：辨識新增形狀（用於複製內建部件）
         function inferGeometryInfo(mesh) {
             const geo = mesh.geometry;
             if (!geo) return null;
@@ -1897,6 +2019,18 @@
                 case 'SphereGeometry':
                     return { type: 'sphere', geometryParams: { radius: p.radius } };
                 case 'CylinderGeometry':
+                    // 上下半徑不同 → 視為圓錐台
+                    if (Math.abs((p.radiusTop ?? 0) - (p.radiusBottom ?? 0)) > 1e-4) {
+                        return {
+                            type: 'frustum',
+                            geometryParams: {
+                                radiusTop: p.radiusTop,
+                                radiusBottom: p.radiusBottom,
+                                height: p.height,
+                                segments: p.radialSegments
+                            }
+                        };
+                    }
                     return {
                         type: 'cylinder',
                         geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height }
@@ -1905,6 +2039,25 @@
                     return { type: 'cone', geometryParams: { radius: p.radius, height: p.height } };
                 case 'TorusGeometry':
                     return { type: 'torus', geometryParams: { radius: p.radius, tube: p.tube } };
+                case 'TetrahedronGeometry':
+                    return { type: 'tetrahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'OctahedronGeometry':
+                    return { type: 'octahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'DodecahedronGeometry':
+                    return { type: 'dodecahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'IcosahedronGeometry':
+                    return { type: 'icosahedron', geometryParams: { radius: p.radius, detail: p.detail } };
+                case 'RingGeometry':
+                    return {
+                        type: 'ring',
+                        geometryParams: {
+                            innerRadius: p.innerRadius,
+                            outerRadius: p.outerRadius,
+                            thetaSegments: p.thetaSegments
+                        }
+                    };
+                case 'PlaneGeometry':
+                    return { type: 'plane', geometryParams: { width: p.width, height: p.height } };
                 default:
                     return null;
             }
@@ -2017,6 +2170,7 @@
             if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
+                clearPartHighlight();   // ★ 清除高亮
             }
             updatePartsListUI();
             updatePartControls();
@@ -2064,7 +2218,10 @@
         function resetPiece(type) {
             currentParams[type] = JSON.parse(JSON.stringify(DEFAULT_PARAMS[type]));
             const wasActive = document.querySelector(`.accordion-item[data-type="${type}"]`)?.classList.contains('active');
-            if (selectedPart && selectedPart.type === type) selectedPart = null;
+            if (selectedPart && selectedPart.type === type) {
+                selectedPart = null;
+                clearPartHighlight();
+            }
             buildPanel();
             if (wasActive) {
                 const item = document.querySelector(`.accordion-item[data-type="${type}"]`);
@@ -2081,6 +2238,7 @@
             currentParams = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
             selectedPart = null;
             if (transformControls) transformControls.detach();
+            clearPartHighlight();
             buildPanel();
             rebuildAllPieces();
             const first = document.querySelector('.accordion-item');
@@ -2212,6 +2370,7 @@
                 currentParams = imported;
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
+                clearPartHighlight();
 
                 partIdCounter = 1000;
                 for (const t of PIECE_TYPES) {
@@ -2343,6 +2502,7 @@
             if (selectedPart && !getPartMesh(selectedPart.type, selectedPart.partId)) {
                 selectedPart = null;
                 if (transformControls) transformControls.detach();
+                clearPartHighlight();
             }
 
             // 展開對應的棋子手風琴
@@ -2459,6 +2619,7 @@
         window.undo = undo;
         window.redo = redo;
         window.showToast = showToast;
+        window.clearPartHighlight = clearPartHighlight;
     </script>
 </body>
 
