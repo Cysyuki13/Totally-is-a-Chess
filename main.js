@@ -4183,6 +4183,161 @@ function spawnKnightDashWind(fromR, fromC, landingR, landingC, duration) {
 }
 
 // ============================================================
+//  ★ Knight Ghost Squad — 4 spectral mini-knights in an ARROW
+//    formation pointing along the dash direction.
+//    Main knight = tip of the arrow; ghosts = trailing wings
+//    (inner pair closer+tighter, outer pair further+wider).
+//    Pure visual — NO collision, NO damage, NO game effect.
+// ============================================================
+function spawnKnightGhostSquad(pieceObj, color, dashDuration, fromPos, toPos) {
+    const squadGroup = new THREE.Group();
+    scene.add(squadGroup);
+
+    // ── Travel direction (world X/Z) + its perpendicular "right" ──
+    const travel = new THREE.Vector3().subVectors(toPos, fromPos);
+    travel.y = 0;
+    if (travel.lengthSq() < 1e-6) travel.set(0, 0, 1);   // safety
+    travel.normalize();
+    // Rotate travel -90° around Y → right-hand perpendicular
+    const right = new THREE.Vector3(-travel.z, 0, travel.x);
+
+    // ── Arrow formation: 2 wings per side, trailing behind the knight ──
+    //    Order matters for the staggered fade-in:
+    //      [0] inner-left, [1] inner-right,
+    //      [2] outer-left, [3] outer-right
+    const INNER_BACK = 0.32;   // how far behind the tip the inner pair sits
+    const INNER_SIDE = 0.34;   // lateral spread of the inner pair
+    const OUTER_BACK = 0.72;   // further back
+    const OUTER_SIDE = 0.68;   // wider spread
+
+    const offsets = [
+        travel.clone().multiplyScalar(-INNER_BACK).add(right.clone().multiplyScalar(-INNER_SIDE)),
+        travel.clone().multiplyScalar(-INNER_BACK).add(right.clone().multiplyScalar(INNER_SIDE)),
+        travel.clone().multiplyScalar(-OUTER_BACK).add(right.clone().multiplyScalar(-OUTER_SIDE)),
+        travel.clone().multiplyScalar(-OUTER_BACK).add(right.clone().multiplyScalar(OUTER_SIDE)),
+    ];
+
+    // All ghosts face the travel direction (local +Z → travel)
+    const facingYaw = Math.atan2(travel.x, travel.z);
+
+    const ghosts = [];
+    const ghostTint = new THREE.Color(0x9fe8ff);   // spectral cyan
+
+    for (let i = 0; i < 4; i++) {
+        const ghost = createPieceModel(
+            'knight', color, 100, 100, PIECE_PARAMS.knight || {}
+        );
+
+        // Strip health bar sprite (defensive; full-HP should have none)
+        if (ghost.userData.hpSprite) {
+            ghost.remove(ghost.userData.hpSprite);
+            ghost.userData.hpSprite = null;
+        }
+
+        // Ghostify → transparent, additive, cyan-tinted, no shadows
+        ghost.traverse(n => {
+            if (!n.isMesh || !n.material || !n.material.color) return;
+            n.material = n.material.clone();
+            n.material.transparent = true;
+            n.material.opacity = 0.55;
+            n.material.depthWrite = false;
+            n.material.blending = THREE.AdditiveBlending;
+            n.material.color.lerp(ghostTint, 0.65);
+            if (n.material.emissive) {
+                n.material.emissive = ghostTint.clone();
+                n.material.emissiveIntensity = 0.6;
+            }
+            n.castShadow = false;
+            n.receiveShadow = false;
+        });
+
+        ghost.rotation.y = facingYaw;
+        ghost.scale.setScalar(0.001);       // invisible until pop-in
+        ghost.renderOrder = 5;
+
+        ghost.userData.offset = offsets[i];
+        // Stagger so the arrow "assembles" outward from the tip:
+        //   inner pair first, then outer pair.
+        ghost.userData.spawnDelay = (i < 2 ? 0.00 : 0.06) + (i % 2) * 0.03;
+        ghost.userData.baseOpacity = 0.55;
+
+        squadGroup.add(ghost);
+        ghosts.push(ghost);
+    }
+
+    const state = {
+        group: squadGroup,
+        ghosts,
+        startTime: clock.getElapsedTime(),
+        dashDuration,
+        disposed: false,
+        fadingOut: false,
+        fadeStartTime: 0,
+    };
+
+    // ── Follow loop: glue the squad to the main knight + flicker + fade ──
+    const track = () => {
+        if (state.disposed) return;
+        const now = clock.getElapsedTime();
+        const t = now - state.startTime;
+
+        const fade = state.fadingOut
+            ? Math.max(0, 1 - (now - state.fadeStartTime) / 0.28)
+            : 1;
+
+        for (const g of ghosts) {
+            const off = g.userData.offset;
+            const localT = Math.max(0, Math.min(1,
+                (t - g.userData.spawnDelay) / 0.12));
+
+            const targetScale = 0.5 * localT * fade;
+            g.scale.setScalar(Math.max(0.001, targetScale));
+
+            // Ride in formation relative to the knight's current position
+            g.position.set(
+                pieceObj.position.x + off.x,
+                pieceObj.position.y + 0.05,
+                pieceObj.position.z + off.z
+            );
+
+            const flicker = 0.82 + 0.18 * Math.sin(t * 28 + g.userData.spawnDelay * 40);
+            const alpha = g.userData.baseOpacity * fade * flicker;
+            g.traverse(n => {
+                if (n.isMesh && n.material) n.material.opacity = alpha;
+            });
+        }
+
+        requestAnimationFrame(track);
+    };
+    requestAnimationFrame(track);
+
+    return state;
+}
+
+function fadeOutKnightGhostSquad(state) {
+    if (!state || state.disposed || state.fadingOut) return;
+    state.fadingOut = true;
+    state.fadeStartTime = clock.getElapsedTime();
+    // Dispose after the fade completes
+    setTimeout(() => disposeKnightGhostSquad(state), 320);
+}
+
+function disposeKnightGhostSquad(state) {
+    if (!state || state.disposed) return;
+    state.disposed = true;
+    if (state.group) {
+        scene.remove(state.group);
+        state.group.traverse(n => {
+            if (n.geometry) n.geometry.dispose();
+            if (n.material) {
+                if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                else n.material.dispose();
+            }
+        });
+    }
+}
+
+// ============================================================
 //  ★ 執行騎士技能（移動 + 擊退 / 撞牆）
 // ============================================================
 function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOption, isRemote = false) {
@@ -4203,17 +4358,18 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
     const duration = 0.35;
     const startTime = clock.getElapsedTime();
 
-    // ★ 只有「真正施放特殊技能」（有擊退目標 → knockbackOption 存在）時
-    //   才播放衝刺旋風特效。
-    //   - 本地白方施放：knockbackOption 一定有值
-    //   - 本地黑方（client）施放：同上
-    //   - AI 施放時，若落點 3×3 內有敵人 → knockbackOption 有值；沒有敵人 → null
-    //   - 遠端收到 knight_move 時，若對方有帶 knockback 資料 → 有值
-    //   普通移動（無 push）走的路徑不會觸發 dash。
+    // ★ GHOST — spawn the spectral squad + dash wind on real ability casts
+    let ghostSquad = null;
     if (knockbackOption) {
         spawnKnightDashWind(fromR, fromC, landingR, landingC, duration);
+        ghostSquad = spawnKnightGhostSquad(
+            pieceObj,
+            pieceObj.userData.color || 'white',
+            duration,
+            startPos,       // ← added
+            targetPos       // ← added
+        );
     }
-
     // 只有本地玩家才送出網路訊息（避免回音迴圈）
     if (currentMode === 'multiplayer' && peerConnection?.open && !isRemote) {
         peerConnection.send({
@@ -4233,6 +4389,10 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
     }
 
     const finishAll = () => {
+        // ★ GHOST — safety: if fade never triggered (early exit), do it now
+        if (ghostSquad && !ghostSquad.fadingOut && !ghostSquad.disposed) {
+            fadeOutKnightGhostSquad(ghostSquad);
+        }
         isAnimating = false;
         syncPiecesAfterMove();
         deselectPiece();
@@ -4262,14 +4422,15 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
 
             gameState.makeMove(fromR, fromC, landingR, landingC, null);
 
-            // ★ 只要這次是「特殊技能」路徑（帶 knockback），就讓騎士進入冷卻。
-            //   普通移動不會走這條函式，因此不觸發冷卻。
             if (knockbackOption) {
                 const landedKnight = gameState.getPiece(landingR, landingC);
                 if (landedKnight && landedKnight.type === 'knight') {
                     gameState.putOnSkillCooldown(landedKnight);
                 }
             }
+
+            // ★ GHOST — the moment the push begins, dissolve the squad
+            if (ghostSquad) fadeOutKnightGhostSquad(ghostSquad);
 
             if (knockbackOption) {
                 const enemyPiece = gameState.getPiece(knockbackOption.r, knockbackOption.c);
