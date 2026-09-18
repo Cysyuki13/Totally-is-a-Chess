@@ -3,7 +3,15 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TotallyIsAChess" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="format-detection" content="telephone=no" />
+
     <title>TotallyIsAChess</title>
     <link rel="icon" type="image/png" href="Chess_icon.png" />
     <link rel="stylesheet" href="style.css" />
@@ -397,6 +405,110 @@
             <div class="btn-row" style="margin-top:16px;">
                 <button class="btn" onclick="restartGame()">🔄 再玩一局</button>
                 <button class="btn btn-secondary" onclick="backToMenu()">🏠 主選單</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  DOMAIN EXPANSION — prompt / animation / VS / battle          -->
+    <!-- ============================================================ -->
+
+    <!-- 1) Prompt dialog -->
+    <div class="overlay hidden" id="domainPromptOverlay">
+        <div class="panel" style="max-width: 500px;">
+            <h2>👑 領域展開 <span style="font-size:0.7em;opacity:0.6;">Domain Expansion</span></h2>
+            <p>你的國王正被將軍！</p>
+            <p style="opacity:0.85;font-size:0.92rem;">
+                啟動領域展開，與將軍的棋子進行猜拳對決。<br>
+                <span style="color:#ff8a70;">⚠️ 對決敗北將直接輸掉整場對局。</span>
+            </p>
+            <p style="opacity:0.7;font-size:0.85rem;margin-top:10px;">
+                剩餘次數：<strong id="domainPromptUses">3</strong>
+                ／ 冷卻剩餘：<strong id="domainPromptCd">0</strong> 步
+            </p>
+            <div class="btn-row" style="margin-top:16px;">
+                <button class="btn" onclick="acceptDomainExpansion()">✨ 展開領域</button>
+                <button class="btn btn-secondary" onclick="declineDomainExpansion()">✕ 放棄</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2) Domain expansion animation -->
+    <div id="domainExpansionOverlay" class="domain-overlay hidden">
+        <div class="domain-circle" id="domainCircle"></div>
+        <div class="domain-flash" id="domainFlash"></div>
+        <div class="domain-text" id="domainText">
+            <div class="domain-title">領 域 展 開</div>
+            <div class="domain-subtitle">DOMAIN EXPANSION</div>
+        </div>
+    </div>
+
+    <!-- 3) VS screen -->
+    <div id="vsOverlay" class="vs-overlay hidden">
+        <div class="vs-bg-split vs-bg-red"></div>
+        <div class="vs-bg-split vs-bg-blue"></div>
+        <div class="vs-shards"></div>
+        <div class="vs-clash-flash"></div>
+        <div class="vs-side vs-left">
+            <canvas class="vs-canvas" id="vsCanvasLeft"></canvas>
+            <div class="vs-label" id="vsLabelLeft">WHITE</div>
+        </div>
+        <div class="vs-divider">
+            <div class="vs-vs-flash"></div>
+            <div class="vs-vs">VS</div>
+        </div>
+        <div class="vs-side vs-right">
+            <canvas class="vs-canvas" id="vsCanvasRight"></canvas>
+            <div class="vs-label" id="vsLabelRight">BLACK</div>
+        </div>
+    </div>
+
+    <!-- 4) Battle UI (arena style) -->
+    <div id="battleOverlay" class="battle-overlay hidden">
+        <div class="battle-stage">
+            <!-- Opponent top-right -->
+            <div class="battle-combatant battle-opponent">
+                <div class="battle-sprite">
+                    <canvas id="battleOpponentCanvas"></canvas>
+                </div>
+                <div class="battle-stats battle-stats-right">
+                    <div class="battle-name" id="battleOpponentName">Opponent</div>
+                    <div class="battle-hearts" id="battleOpponentHearts"></div>
+                </div>
+                <!-- ★ Shows what the opponent picked (rock/paper/scissors) -->
+                <div class="battle-choice-bubble" id="battleOpponentChoiceBubble"></div>
+            </div>
+
+            <!-- Player bottom-left -->
+            <div class="battle-combatant battle-player">
+                <div class="battle-sprite">
+                    <canvas id="battlePlayerCanvas"></canvas>
+                </div>
+                <div class="battle-stats battle-stats-left">
+                    <div class="battle-name" id="battlePlayerName">King</div>
+                    <div class="battle-hearts" id="battlePlayerHearts"></div>
+                </div>
+            </div>
+
+            <!-- Bottom bar -->
+            <div class="battle-bottom">
+                <div class="battle-message-box">
+                    <div class="battle-message" id="battleMessage">選擇你的出拳！</div>
+                </div>
+                <div class="battle-menu" id="battleMenu">
+                    <button class="battle-menu-btn" data-choice="rock">
+                        <span class="battle-menu-icon">🪨</span>
+                        <span class="battle-menu-label">石頭</span>
+                    </button>
+                    <button class="battle-menu-btn" data-choice="paper">
+                        <span class="battle-menu-icon">📄</span>
+                        <span class="battle-menu-label">布</span>
+                    </button>
+                    <button class="battle-menu-btn" data-choice="scissors">
+                        <span class="battle-menu-icon">✂️</span>
+                        <span class="battle-menu-label">剪刀</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

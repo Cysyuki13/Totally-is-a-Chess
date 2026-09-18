@@ -94,9 +94,15 @@ const WIKI_PIECES = {
     },
     queen: {
         name: '皇后 (Queen)', glyph: '♛',
-        skillName: '治癒 (Heal) ／ 復活 (Revive)',
-        description: '皇后是唯一擁有兩種技能的棋子。\n【治癒】治療自身移動範圍內（每條射線上的第一個）受損的友方棋子 100 點生命，冷卻 2 回合。\n【復活】將一名已陣亡的友方棋子以滿血復活於自身周圍 8 格內的任一空格，冷卻 8 回合。',
-        damage: 0, heal: 100, selfDamage: 0, cooldown: '2 / 8',
+        skillName: '① 治癒 (Heal) ／ ② 復活 (Revive)',
+        description:
+            '皇后是<strong>唯一同時擁有兩種特殊技能</strong>的棋子。\n' +
+            '\n【① 治癒 Heal】— 冷卻 2 回合\n' +
+            '   治療自身移動範圍內（每條射線上的第一個）受損的友方棋子 <b>100</b> 點生命。\n' +
+            '\n【② 復活 Revive】— 冷卻 10 回合\n' +
+            '   將一名<strong>當前陣亡</strong>的友方棋子以滿血復活於自身周圍 8 格內的任一空格。\n' +
+            '   已被復活過的棋子必須再次陣亡，才能再次被復活。',
+        damage: 0, heal: 100, selfDamage: 0, cooldown: '2 / 10',
         board: () => {
             const caster = { r: 4, c: 4 };
             const reviveZone = [];
@@ -115,12 +121,29 @@ const WIKI_PIECES = {
     },
     king: {
         name: '國王 (King)', glyph: '♚',
-        skillName: '尚未實裝',
-        description: '國王在目前版本中尚未擁有特殊技能。',
-        damage: 0, selfDamage: 0, cooldown: 1,
-        board: () => ({
-            caster: { r: 4, c: 4, type: 'king', color: 'white', icon: '♚' },
-        }),
+        skillName: '領域展開 (Domain Expansion)',
+        description:
+            '當國王被將軍時，可展開<b>漆黑領域</b>，與將軍者進行猜拳對決。\n' +
+            '\n【使用條件】\n' +
+            '   • 僅當己方國王被將軍時才能發動\n' +
+            '   • 每場對局最多使用 <b>3</b> 次\n' +
+            '   • 每次使用後需等待 <b>10</b> 回合冷卻\n' +
+            '\n【對決規則】\n' +
+            '   國王有 <b>2</b> 顆心，將軍者有 <b>1</b> 顆心。\n' +
+            '   • 國王獲勝 → 將軍者當場消滅，對局繼續\n' +
+            '   • 國王落敗 → 直接輸掉整場對局\n' +
+            '   • 平手 → 重擲，雙方皆不掉血',
+        damage: 0, selfDamage: 0, cooldown: '10 回合 / 3 次',
+        board: () => {
+            // Visualize: king in the center, a checker on the side
+            const caster = { r: 4, c: 4 };
+            const checker = { r: 4, c: 0 };
+            return {
+                caster: { ...caster, type: 'king', color: 'white', icon: '♚' },
+                damage: [checker],   // enemy checker highlighted
+                path: [],            // whole board is the domain, skip for clarity
+            };
+        },
     },
 };
 
@@ -477,8 +500,7 @@ function playPieceEffect(type) {
     wikiEffectRoot.add(makeWikiGround());
 
     const info = WIKI_PIECES[type];
-    if (!info || type === 'king') {
-        // No effect — show a hint model sitting still
+    if (!info) {
         const model = createPieceModel(type, 'white', 100, 100, PIECE_PARAMS[type] || {});
         model.position.set(0, 0, 0.5);
         wikiEffectRoot.add(model);
@@ -490,97 +512,316 @@ function playPieceEffect(type) {
     if (type === 'knight') setupKnightEffect();
     if (type === 'bishop') setupBishopEffect();
     if (type === 'queen') setupQueenEffect();
+    if (type === 'king') setupKingEffect();   // ★ NEW
 }
 
-// ── Queen effect (heal demo) ──────────────────────────────────
+// ── Queen effect — alternates between HEAL and REVIVE ──────────
+//    Every full loop we flip to the other demo so viewers see both
+//    of the queen's skills without leaving the wiki page.
+let _queenDemoPhase = 0;      // 0 = heal, 1 = revive
+
 function setupQueenEffect() {
-    const CYCLE = 3600;
+    const CYCLE = 4000;       // a bit longer — two demos per "cycle pair"
+    _queenDemoPhase = 0;      // start on Heal each time the tab is opened
+
     wikiLoop(CYCLE, () => {
         clearEffectScene();
         wikiEffectRoot.add(makeWikiGround());
 
-        const queen = createPieceModel('queen', 'white', 100, 100, PIECE_PARAMS.queen || {});
-        queen.position.set(-0.9, 0, 0.9);
-        wikiEffectRoot.add(queen);
+        if (_queenDemoPhase === 0) {
+            playQueenHealDemo();
+        } else {
+            playQueenReviveDemo();
+        }
+        _queenDemoPhase = 1 - _queenDemoPhase;
 
-        const ally = createPieceModel('pawn', 'white', 100, 100, PIECE_PARAMS.pawn || {});
-        ally.position.set(0.6, 0, -0.6);
-        wikiEffectRoot.add(ally);
+        // Update the small on-canvas label
+        updateQueenSkillLabel(_queenDemoPhase === 0 ? 'heal' : 'revive');
+    });
+}
 
-        // 讓友方看起來「受傷」
-        const dim = (hex) => ally.traverse(n => {
-            if (n.isMesh && n.material) n.material.color.setHex(hex);
+// Small helper so a label sits at the top of the wiki effect canvas
+function updateQueenSkillLabel(which) {
+    const container = document.getElementById('wikiEffect');
+    if (!container) return;
+    let label = container.querySelector('.wiki-effect-label');
+    if (!label) {
+        label = document.createElement('div');
+        label.className = 'wiki-effect-label';
+        container.appendChild(label);
+    }
+    if (which === 'heal') {
+        label.textContent = '① 治癒 Heal';
+        label.style.color = '#a8ffcc';
+        label.style.borderColor = 'rgba(168, 255, 204, 0.6)';
+    } else {
+        label.textContent = '② 復活 Revive';
+        label.style.color = '#e0b3ff';
+        label.style.borderColor = 'rgba(224, 179, 255, 0.6)';
+    }
+    // Restart the CSS animation so it re-pops on each switch
+    label.style.animation = 'none';
+    void label.offsetWidth;
+    label.style.animation = 'wikiEffectLabelPop 0.5s ease-out';
+}
+
+// ── Demo A: Heal (original queen heal animation) ───────────────
+function playQueenHealDemo() {
+    const queen = createPieceModel('queen', 'white', 100, 100, PIECE_PARAMS.queen || {});
+    queen.position.set(-0.9, 0, 0.9);
+    wikiEffectRoot.add(queen);
+
+    const ally = createPieceModel('pawn', 'white', 100, 100, PIECE_PARAMS.pawn || {});
+    ally.position.set(0.6, 0, -0.6);
+    wikiEffectRoot.add(ally);
+
+    // Ally starts out "damaged"
+    const dim = (hex) => ally.traverse(n => {
+        if (n.isMesh && n.material) n.material.color.setHex(hex);
+    });
+    dim(0x8f8878);
+
+    const beamGroup = new THREE.Group();
+    beamGroup.position.set(0.6, 0, -0.6);
+    beamGroup.visible = false;
+    wikiEffectRoot.add(beamGroup);
+
+    const beamMat = new THREE.MeshBasicMaterial({
+        color: 0x6dffb0, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 2.4, 20, 1, true), beamMat);
+    beam.position.y = 1.2;
+    beamGroup.add(beam);
+
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x2ecc71, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.34, 32), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.05;
+    beamGroup.add(ring);
+
+    const particles = [];
+    for (let i = 0; i < 28; i++) {
+        const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.03, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(0.36 + Math.random() * 0.08, 0.9, 0.65),
+            transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
         });
-        dim(0x8f8878);
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.08 + Math.random() * 0.3;
+        p.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+        p.userData.vel = new THREE.Vector3(Math.cos(a) * 0.2, 1.0 + Math.random() * 1.2, Math.sin(a) * 0.2);
+        p.userData.delay = Math.random() * 0.4;
+        beamGroup.add(p);
+        particles.push(p);
+    }
 
-        const beamGroup = new THREE.Group();
-        beamGroup.position.set(0.6, 0, -0.6);
-        beamGroup.visible = false;
-        wikiEffectRoot.add(beamGroup);
+    const startT = performance.now();
+    const BEAM_START = 450;
+    const DURATION = 2000;
+    let restored = false;
 
-        const beamMat = new THREE.MeshBasicMaterial({
-            color: 0x6dffb0, transparent: true, opacity: 0,
-            depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    const animate = () => {
+        const t = performance.now() - startT;
+        const bt = t - BEAM_START;
+        if (bt >= 0) {
+            beamGroup.visible = true;
+            const k = Math.min(bt / (DURATION - BEAM_START), 1);
+            beamMat.opacity = 0.45 * Math.sin(Math.PI * k);
+            ringMat.opacity = 0.85 * (1 - k);
+            ring.scale.setScalar(1 + k * 2.6);
+
+            for (const p of particles) {
+                const pt = bt / 1000 - p.userData.delay;
+                if (pt < 0 || pt > 1) { p.visible = false; continue; }
+                p.visible = true;
+                p.position.addScaledVector(p.userData.vel, 0.016);
+                p.material.opacity = (1 - pt) * 0.9;
+            }
+
+            if (!restored && k > 0.6) { restored = true; dim(0xf5f0e1); }
+        }
+        if (t < DURATION) requestAnimationFrame(animate);
+    };
+    animate();
+}
+
+// ── Demo B: Revive (matches in-game effect) ────────────────────
+function playQueenReviveDemo() {
+    const queen = createPieceModel('queen', 'white', 100, 100, PIECE_PARAMS.queen || {});
+    queen.position.set(-0.9, 0, 0.9);
+    wikiEffectRoot.add(queen);
+
+    // The revived ally: a rook — "fallen warrior returns"
+    const REVIVE_POS = new THREE.Vector3(0.6, 0, -0.6);
+
+    // ── Ground rune circle ──
+    const runeGroup = new THREE.Group();
+    runeGroup.position.copy(REVIVE_POS);
+    runeGroup.position.y = 0.02;
+    wikiEffectRoot.add(runeGroup);
+
+    const runeOuterMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const runeOuter = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 48), runeOuterMat);
+    runeOuter.rotation.x = -Math.PI / 2;
+    runeGroup.add(runeOuter);
+
+    const runeInnerMat = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const runeInner = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.32, 40), runeInnerMat);
+    runeInner.rotation.x = -Math.PI / 2;
+    runeInner.position.y = 0.004;
+    runeGroup.add(runeInner);
+
+    // ── Sky beam ──
+    const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.55, 4.0, 24, 1, true), beamMat);
+    beam.position.set(REVIVE_POS.x, 2.0, REVIVE_POS.z);
+    wikiEffectRoot.add(beam);
+
+    const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.14, 4.0, 16, 1, true), coreMat);
+    core.position.set(REVIVE_POS.x, 2.0, REVIVE_POS.z);
+    wikiEffectRoot.add(core);
+
+    // ── Shock rings ──
+    const rings = [];
+    for (let i = 0; i < 3; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+            color: i % 2 === 0 ? 0xb06cff : 0xffe27a,
+            transparent: true, opacity: 0, depthWrite: false,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
         });
-        const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 2.4, 20, 1, true), beamMat);
-        beam.position.y = 1.2;
-        beamGroup.add(beam);
+        const r = new THREE.Mesh(new THREE.RingGeometry(0.14, 0.22, 40), mat);
+        r.rotation.x = -Math.PI / 2;
+        r.position.set(REVIVE_POS.x, 0.05 + i * 0.006, REVIVE_POS.z);
+        wikiEffectRoot.add(r);
+        rings.push({ mesh: r, delay: i * 0.15 });
+    }
 
-        const ringMat = new THREE.MeshBasicMaterial({
-            color: 0x2ecc71, transparent: true, opacity: 0,
-            depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    // ── Rising spiral motes ──
+    const motes = [];
+    for (let i = 0; i < 48; i++) {
+        const pg = new THREE.SphereGeometry(0.02 + Math.random() * 0.03, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(
+                0.72 + Math.random() * 0.13, 0.95, 0.6 + Math.random() * 0.3
+            ),
+            transparent: true, opacity: 0, depthWrite: false,
+            blending: THREE.AdditiveBlending,
         });
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.34, 32), ringMat);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.05;
-        beamGroup.add(ring);
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.05 + Math.random() * 0.38;
+        p.position.set(REVIVE_POS.x + Math.cos(a) * r, 0.05, REVIVE_POS.z + Math.sin(a) * r);
+        p.userData = {
+            baseAngle: a,
+            baseRadius: r,
+            angularSpeed: 1.6 + Math.random() * 2.4,
+            riseSpeed: 1.1 + Math.random() * 1.9,
+            delay: Math.random() * 0.35,
+            life: 0.8 + Math.random() * 0.55,
+        };
+        wikiEffectRoot.add(p);
+        motes.push(p);
+    }
 
-        const particles = [];
-        for (let i = 0; i < 28; i++) {
-            const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.03, 5, 5);
-            const pm = new THREE.MeshBasicMaterial({
-                color: new THREE.Color().setHSL(0.36 + Math.random() * 0.08, 0.9, 0.65),
-                transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
-            });
-            const p = new THREE.Mesh(pg, pm);
-            const a = Math.random() * Math.PI * 2;
-            const r = 0.08 + Math.random() * 0.3;
-            p.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
-            p.userData.vel = new THREE.Vector3(Math.cos(a) * 0.2, 1.0 + Math.random() * 1.2, Math.sin(a) * 0.2);
-            p.userData.delay = Math.random() * 0.4;
-            beamGroup.add(p);
-            particles.push(p);
+    // ── Materialize flash ──
+    const flashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const flash = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), flashMat);
+    flash.rotation.x = -Math.PI / 2;
+    flash.position.set(REVIVE_POS.x, 0.08, REVIVE_POS.z);
+    wikiEffectRoot.add(flash);
+
+    // ── The piece that will be revived ──
+    const revived = createPieceModel('rook', 'white', 100, 100, PIECE_PARAMS.rook || {});
+    revived.position.set(REVIVE_POS.x, -1.0, REVIVE_POS.z);
+    revived.scale.setScalar(0.05);
+    revived.rotation.y = -Math.PI * 2;
+    wikiEffectRoot.add(revived);
+
+    // ── Animate ──
+    const startT = performance.now();
+    const DURATION = 2200;
+    const MATERIALIZE_AT = 500;   // ms
+
+    const animate = () => {
+        const t = performance.now() - startT;
+        if (t >= DURATION) return;
+        const prog = t / DURATION;
+
+        // Rune circle
+        const runeFade = Math.min(t / 300, 1) * Math.max(0, 1 - prog * 1.05);
+        runeOuterMat.opacity = 0.85 * runeFade;
+        runeInnerMat.opacity = 0.95 * runeFade;
+        runeGroup.rotation.y += 0.04;
+
+        // Beams
+        const beamEnv = Math.sin(Math.PI * Math.min(prog / 0.8, 1));
+        beamMat.opacity = 0.55 * beamEnv;
+        coreMat.opacity = 0.9 * beamEnv;
+        beam.rotation.y += 0.03;
+        core.rotation.y -= 0.06;
+
+        // Rings
+        for (const r of rings) {
+            const rt = Math.max(0, Math.min(1, (t - r.delay) / (DURATION - r.delay)));
+            r.mesh.material.opacity = 0.85 * (1 - rt);
+            r.mesh.scale.setScalar(1 + rt * 4.5);
         }
 
-        const startT = performance.now();
-        const BEAM_START = 450;
-        const DURATION = 2000;
-        let restored = false;
+        // Motes
+        for (const p of motes) {
+            const pt = (t - p.userData.delay) / 1000;
+            if (pt < 0 || pt > p.userData.life) { p.visible = false; continue; }
+            p.visible = true;
+            const u = pt / p.userData.life;
+            const angle = p.userData.baseAngle + pt * p.userData.angularSpeed;
+            const r = p.userData.baseRadius * (1 - u * 0.3);
+            p.position.set(
+                REVIVE_POS.x + Math.cos(angle) * r,
+                0.05 + pt * p.userData.riseSpeed,
+                REVIVE_POS.z + Math.sin(angle) * r
+            );
+            p.material.opacity = (1 - u) * 0.95;
+            p.scale.setScalar(1 - u * 0.35);
+        }
 
-        const animate = () => {
-            const t = performance.now() - startT;
-            const bt = t - BEAM_START;
-            if (bt >= 0) {
-                beamGroup.visible = true;
-                const k = Math.min(bt / (DURATION - BEAM_START), 1);
-                beamMat.opacity = 0.45 * Math.sin(Math.PI * k);
-                ringMat.opacity = 0.85 * (1 - k);
-                ring.scale.setScalar(1 + k * 2.6);
+        // Materialize flash
+        const mf = Math.max(0, 1 - Math.abs(t - MATERIALIZE_AT) / 280);
+        flashMat.opacity = 0.9 * mf;
+        flash.scale.setScalar(1 + (1 - mf) * 1.8);
 
-                for (const p of particles) {
-                    const pt = bt / 1000 - p.userData.delay;
-                    if (pt < 0 || pt > 1) { p.visible = false; continue; }
-                    p.visible = true;
-                    p.position.addScaledVector(p.userData.vel, 0.016);
-                    p.material.opacity = (1 - pt) * 0.9;
-                }
+        // Piece pop-in
+        if (t > MATERIALIZE_AT) {
+            const pt = Math.min((t - MATERIALIZE_AT) / 900, 1);
+            const e = 1 - Math.pow(1 - pt, 3);
+            revived.position.y = -1.0 * (1 - e);
+            revived.scale.setScalar(0.05 + 0.95 * e);
+            revived.rotation.y = -Math.PI * 2 * (1 - e);
+        }
 
-                if (!restored && k > 0.6) { restored = true; dim(0xf5f0e1); }
-            }
-            if (t < DURATION) requestAnimationFrame(animate);
-        };
-        animate();
-    });
+        requestAnimationFrame(animate);
+    };
+    animate();
 }
 
 // ── Individual effect players ──
@@ -1305,6 +1546,136 @@ function spawnBishopLeapTrail(start, end, leapDurationSec) {
     loop();
 
     return state;
+}
+
+// ── King effect — slow black domain wave expanding from the king ──
+function setupKingEffect() {
+    const CYCLE = 4200;
+    wikiLoop(CYCLE, () => {
+        clearEffectScene();
+        wikiEffectRoot.add(makeWikiGround());
+
+        // King sits in the middle
+        const king = createPieceModel('king', 'white', 100, 100, PIECE_PARAMS.king || {});
+        king.position.set(0, 0, 0);
+        wikiEffectRoot.add(king);
+
+        // A "checker" piece on the far side (gets excluded from the tint)
+        const checker = createPieceModel('rook', 'black', 100, 100, PIECE_PARAMS.rook || {});
+        checker.position.set(0.6, 0, -0.6);
+        wikiEffectRoot.add(checker);
+
+        // ── Pure black expanding disc ──
+        const discMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 96), discMat);
+        disc.rotation.x = -Math.PI / 2;
+        disc.position.y = 0.04;
+        disc.scale.set(0.001, 0.001, 1);
+        disc.renderOrder = 5;
+        wikiEffectRoot.add(disc);
+
+        // ── Main black wavefront ring ──
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 96), ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.06;
+        ring.scale.set(0.001, 0.001, 1);
+        ring.renderOrder = 8;
+        wikiEffectRoot.add(ring);
+
+        // ── Purple rim-light on the wavefront edge ──
+        const rimMat = new THREE.MeshBasicMaterial({
+            color: 0x4a1a6a,
+            transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const rim = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.08, 96), rimMat);
+        rim.rotation.x = -Math.PI / 2;
+        rim.position.y = 0.07;
+        rim.scale.set(0.001, 0.001, 1);
+        rim.renderOrder = 9;
+        wikiEffectRoot.add(rim);
+
+        // ── Transparent shadow dome (half-sphere) ──
+        const domeGeo = new THREE.SphereGeometry(
+            1, 64, 32,
+            0, Math.PI * 2,
+            0, Math.PI / 2
+        );
+        const domeMat = new THREE.MeshBasicMaterial({
+            color: 0x05000a,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+        const dome = new THREE.Mesh(domeGeo, domeMat);
+        dome.position.y = 0.02;
+        dome.scale.setScalar(0.001);
+        dome.renderOrder = 6;
+        wikiEffectRoot.add(dome);
+
+        const domeInnerGeo = new THREE.SphereGeometry(
+            1, 48, 24,
+            0, Math.PI * 2,
+            0, Math.PI / 2
+        );
+        const domeInnerMat = new THREE.MeshBasicMaterial({
+            color: 0x2a0a4a,
+            transparent: true,
+            opacity: 0,
+            side: THREE.BackSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const domeInner = new THREE.Mesh(domeInnerGeo, domeInnerMat);
+        domeInner.position.y = 0.02;
+        domeInner.scale.setScalar(0.001);
+        domeInner.renderOrder = 7;
+        wikiEffectRoot.add(domeInner);
+
+        const startT = performance.now();
+        const DURATION = 3400;
+        const MAX_R = 3.6;
+
+        const animate = () => {
+            const t = performance.now() - startT;
+            if (t >= DURATION) return;
+            const p = Math.min(t / (DURATION - 400), 1);
+            // Slow quartic ease
+            const ease = 1 - Math.pow(1 - p, 4);
+            const r = MAX_R * ease;
+
+            // Transparent shadow dome
+            const domeR = Math.max(0.001, r * 1.15);
+            dome.scale.setScalar(domeR);
+            domeMat.opacity = 0.42 * Math.min(1, p * 1.5) * (1 - p * 0.15);
+
+            domeInner.scale.setScalar(domeR * 1.01);
+            domeInnerMat.opacity = 0.22 * Math.min(1, p * 1.8);
+
+            disc.scale.set(Math.max(0.001, r), Math.max(0.001, r), 1);
+            discMat.opacity = 0.72 * Math.min(1, p * 1.6);
+
+            ring.scale.set(Math.max(0.001, r), Math.max(0.001, r), 1);
+            ringMat.opacity = 0.95 * (1 - p * 0.2);
+
+            rim.scale.set(Math.max(0.001, r), Math.max(0.001, r), 1);
+            rimMat.opacity = 0.75 * Math.sin(Math.PI * Math.min(p * 1.1, 1));
+
+            requestAnimationFrame(animate);
+        };
+        animate();
+    });
 }
 
 // ============================================================

@@ -152,6 +152,120 @@ const CANNON_RANGE = 4;
 
 const IS_MOBILE = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
 
+// ============================================================
+//  ★ Mobile auto-fullscreen
+//  Browsers require a user gesture, so we hook the very first
+//  tap anywhere on the page. Android Chrome → real fullscreen.
+//  iPhone Safari → no Fullscreen API; we do the URL-bar-hide
+//  scroll trick instead (see IS_IPHONE below).
+// ============================================================
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_IPHONE = /iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !/iPad/.test(navigator.userAgent));
+const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+let _mobileFsAttempted = false;
+
+/**
+ * Request fullscreen + landscape lock. Must be called from inside a
+ * user-gesture handler (tap/click/touchstart).
+ */
+async function enterMobileFullscreen() {
+    if (IS_STANDALONE) return;                 // already app-mode
+
+    const el = document.documentElement;
+    try {
+        if (!document.fullscreenElement) {
+            if (el.requestFullscreen) {
+                await el.requestFullscreen({ navigationUI: 'hide' });
+            } else if (el.webkitRequestFullscreen) {
+                el.webkitRequestFullscreen();
+            } else if (el.mozRequestFullScreen) {
+                el.mozRequestFullScreen();
+            } else if (el.msRequestFullscreen) {
+                el.msRequestFullscreen();
+            }
+        }
+    } catch (err) {
+        // Silent — user gesture wasn't accepted, or API unsupported
+    }
+
+    // Orientation lock — only effective in real fullscreen, and not on iOS
+    try {
+        if (screen.orientation && screen.orientation.lock) {
+            await screen.orientation.lock('landscape').catch(() => { });
+        }
+    } catch (_) { }
+
+    // iPhone Safari has no Fullscreen API — hide the URL bar with a scroll nudge
+    if (IS_IOS && !IS_STANDALONE) {
+        window.scrollTo(0, 1);
+        setTimeout(() => window.scrollTo(0, 1), 120);
+    }
+}
+
+/** Attach the one-shot first-tap listener. Call once on page load. */
+function setupMobileAutoFullscreen() {
+    if (!IS_MOBILE || IS_STANDALONE) return;
+
+    const handler = () => {
+        if (_mobileFsAttempted) return;
+        _mobileFsAttempted = true;
+        enterMobileFullscreen();
+        document.removeEventListener('touchend', handler, true);
+        document.removeEventListener('click', handler, true);
+    };
+
+    // Capture phase → our handler runs *before* any game buttons
+    document.addEventListener('touchend', handler, { capture: true, passive: true });
+    document.addEventListener('click', handler, { capture: true, passive: true });
+
+    // Re-arm: if the user exits fullscreen (swipes out), the next tap restores it
+    const rearm = () => {
+        if (!document.fullscreenElement) _mobileFsAttempted = false;
+    };
+    document.addEventListener('fullscreenchange', rearm);
+    document.addEventListener('webkitfullscreenchange', rearm);
+    document.addEventListener('mozfullscreenchange', rearm);
+    document.addEventListener('MSFullscreenChange', rearm);
+
+    if (IS_IPHONE && !IS_STANDALONE) showIOSFullscreenHintOnce();
+}
+
+function showIOSFullscreenHintOnce() {
+    if (!IS_IPHONE || IS_STANDALONE) return;
+    try {
+        if (localStorage.getItem('iosFsHintShown') === '1') return;
+        localStorage.setItem('iosFsHintShown', '1');
+    } catch (_) { }
+
+    const hint = document.createElement('div');
+    hint.textContent = '📱 點「分享」→「加入主畫面」以獲得全螢幕體驗';
+    Object.assign(hint.style, {
+        position: 'fixed',
+        left: '50%',
+        bottom: '20px',
+        transform: 'translateX(-50%)',
+        zIndex: '500',
+        background: 'rgba(22,33,62,0.95)',
+        color: '#e8c547',
+        padding: '10px 18px',
+        borderRadius: '14px',
+        border: '2px solid #e8c547',
+        fontSize: '0.85rem',
+        fontWeight: '700',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        transition: 'opacity 0.4s',
+    });
+    document.body.appendChild(hint);
+    setTimeout(() => { hint.style.opacity = '0'; }, 6000);
+    setTimeout(() => hint.remove(), 6600);
+}
+
 let joystickState = {
     active: false, touchId: null, baseCenterX: 0, baseCenterY: 0,
     knobOffsetX: 0, knobOffsetY: 0, baseRadius: 55, moveSpeed: 4.5,
@@ -193,8 +307,8 @@ const SKILL_COOLDOWNS = {
     king: 1,
 };
 
-// ★ 皇后「復活」獨立冷卻（8 步）
-const QUEEN_REVIVE_COOLDOWN = 8;
+// ★ 皇后「復活」獨立冷卻（10 步）
+const QUEEN_REVIVE_COOLDOWN = 10;
 
 function getSkillCooldown(type) {
     return SKILL_COOLDOWNS[type] || 0;
@@ -723,6 +837,31 @@ const ABILITIES = {
         healAmount: 100,
         getTargets: (game, r, c) => getQueenHealTargets(game, r, c),
     },
+
+    // ★ NEW: King — Domain Expansion. Only offered when actually in check.
+    king: {
+        id: 'domain',
+        name: '領域展開 (Domain Expansion)',
+        damage: 0,
+        getTargets: (game, r, c) => {
+            const piece = game.getPiece(r, c);
+            if (!piece) return [];
+
+            // Uses exhausted?
+            if (kingSkillState.uses[piece.color] <= 0) return [];
+
+            // Cooldown?
+            const movesSince = game.fullMoveNumber - kingSkillState.lastUsedMove[piece.color];
+            if (movesSince < KING_DOMAIN_COOLDOWN) return [];
+
+            // Must actually be in check — this is what gates the button
+            if (!game.isInCheck(piece.color)) return [];
+
+            // Each checking piece is a valid "target"
+            return findCheckingPieces(piece.color, game).map(ch => ({ r: ch.r, c: ch.c }));
+        },
+    },
+
     default: {
         name: '普通攻擊 (Strike)',
         damage: 40,
@@ -952,6 +1091,14 @@ ChessGame.prototype.getLegalAbilities = function (r, c) {
         const landings = getKnightPushLandings(this, r, c);
         return landings.map(m => ({
             type: 'ability', fromR: r, fromC: c, r: m.r, c: m.c, ability: abilityDef
+        }));
+    }
+
+    // ★ King — Domain Expansion targets (= checking pieces)
+    if (piece.type === 'king') {
+        const targets = abilityDef.getTargets(this, r, c);
+        return targets.map(t => ({
+            type: 'ability', fromR: r, fromC: c, r: t.r, c: t.c, ability: abilityDef
         }));
     }
 
@@ -3142,6 +3289,28 @@ function createPieces3D() {
                     obj.userData.reviveCooldownSprite = revSprite;
                 }
                 piecesGroup.add(obj);
+
+                // ★ 國王 — 領域展開冷卻
+                //   The king uses kingSkillState (uses / lastUsedMove) instead of
+                //   the generic skillCooldown field. Show a sprite while the domain
+                //   is recharging, and a "no uses left" badge once exhausted.
+                if (piece.type === 'king' && typeof kingSkillState !== 'undefined') {
+                    const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[piece.color];
+                    const domainCd = Math.max(0, KING_DOMAIN_COOLDOWN - movesSince);
+                    const usesLeft = kingSkillState.uses[piece.color];
+
+                    if (domainCd > 0) {
+                        const cdSprite = createCooldownSprite(domainCd, 0xd9a6ff); // purple
+                        obj.add(cdSprite);
+                        obj.userData.cooldownSprite = cdSprite;
+                    } else if (usesLeft <= 0) {
+                        // 3 uses used up — grey "0" badge on the same slot
+                        const cdSprite = createCooldownSprite(0, 0x666666);
+                        obj.add(cdSprite);
+                        obj.userData.cooldownSprite = cdSprite;
+                    }
+                }
+
                 pieceObjects[`${r},${c}`] = obj;
                 updateHealthVisuals(r, c, piece.hp, piece.maxHp);
             }
@@ -3329,6 +3498,50 @@ function showValidMoveHighlights(moves, selectedR, selectedC) {
     const selRing = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 32, 1, true), selMat);
     selRing.position.set(selectedC - 3.5, 0.03, 3.5 - selectedR);
     highlightsGroup.add(selRing);
+}
+
+// ============================================================
+//  ★ Domain Expansion — glowing outline on the involved pieces
+// ============================================================
+function buildDomainGlowOutline(targetObj, color, thickness = 1.10) {
+    const added = [];
+    if (!targetObj) return added;
+    targetObj.traverse(n => {
+        if (!n.isMesh) return;
+        if (n.userData.isAir) return;
+        if (!n.geometry) return;
+        // Skip invisible meshes (e.g. health-bar sprite proxies)
+        if (n.material && n.material.transparent && n.material.opacity === 0) return;
+
+        const glowMat = new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.85,
+            side: THREE.BackSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const outline = new THREE.Mesh(n.geometry, glowMat);
+        // Same local transform as the source mesh, just slightly bigger.
+        outline.position.copy(n.position);
+        outline.quaternion.copy(n.quaternion);
+        outline.scale.copy(n.scale).multiplyScalar(thickness);
+        outline.userData._domainGlow = true;
+        outline.renderOrder = 998;
+        if (n.parent) n.parent.add(outline);
+        added.push(outline);
+    });
+    return added;
+}
+
+function disposeDomainGlowOutlines(outlines) {
+    if (!outlines) return;
+    for (const o of outlines) {
+        if (o.parent) o.parent.remove(o);
+        if (o.material && o.material.dispose) o.material.dispose();
+        // NOTE: geometry is shared with the source mesh → do NOT dispose it.
+    }
+    outlines.length = 0;
 }
 
 function showAbilityHighlights(targets, selectedR, selectedC) {
@@ -4752,10 +4965,17 @@ function executeQueenRevive(fromR, fromC, toR, toC, ability, reviveType = null, 
             if (v > bestVal) { bestVal = v; chosen = d; }
         }
     }
+
     if (!chosen) return;
 
     isAnimating = true;
     gameState.putOnSkillCooldown(caster, 'revive');
+
+    // ★ Consume this dead entry — it can't be revived a second time.
+    //   Once we create the brand-new piece below it gets its own ID,
+    //   so if IT dies later, that new ID will be the one in the list.
+    const _origIdx = gameState.initialPieces.findIndex(p => p.id === chosen.id);
+    if (_origIdx >= 0) gameState.initialPieces.splice(_origIdx, 1);
 
     if (currentMode === 'multiplayer' && peerConnection?.open && !isRemote) {
         sendAbilityToPeer(fromR, fromC, [{ r: toR, c: toC }], ability.name, 0, 0, chosen.type);
@@ -4835,7 +5055,17 @@ function executeQueenRevive(fromR, fromC, toR, toC, ability, reviveType = null, 
     anim();
 }
 
-// 復活視覺：紫色天光 + 金環 + 大量上升光點
+// ============================================================
+//  ★ 皇后「復活」技能 — 加強版視覺效果
+//   layering (bottom → top):
+//     1. ground rune circle   (dark + gold glow, slowly rotating)
+//     2. three expanding shock rings
+//     3. wide sky beam + core beam
+//     4. descending halo (drops from above to the ground)
+//     5. radial light rays around the beam
+//     6. upward-spiraling motes + falling sparkles
+//     7. bright materialize flash (peaks as the piece appears)
+// ============================================================
 function spawnReviveEffect(row, col) {
     const center = get3DPosition(row, col, 0);
     const group = new THREE.Group();
@@ -4843,27 +5073,54 @@ function spawnReviveEffect(row, col) {
     scene.add(group);
 
     const startTime = clock.getElapsedTime();
-    const DURATION = 1.35;
+    const DURATION = 1.6;         // extended for extra drama
+    const MATERIALIZE_AT = 0.35;  // piece starts appearing here
 
-    // 外層光柱
-    const beamMat = new THREE.MeshBasicMaterial({
-        color: 0xd9a6ff, transparent: true, opacity: 0, depthWrite: false,
-        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-    });
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.55, 4.0, 24, 1, true), beamMat);
-    beam.position.y = 2.0;
-    group.add(beam);
+    // ── 1. Ground rune circle ────────────────────────────────
+    const runeGroup = new THREE.Group();
+    runeGroup.position.y = 0.02;
+    group.add(runeGroup);
 
-    // 內層核心
-    const coreMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
-        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-    });
-    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.18, 4.0, 16, 1, true), coreMat);
-    core.position.y = 2.0;
-    group.add(core);
+    const runeOuter = new THREE.Mesh(
+        new THREE.RingGeometry(0.62, 0.72, 64),
+        new THREE.MeshBasicMaterial({
+            color: 0xd9a6ff, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+        })
+    );
+    runeOuter.rotation.x = -Math.PI / 2;
+    runeGroup.add(runeOuter);
 
-    // 地面衝擊環
+    const runeInner = new THREE.Mesh(
+        new THREE.RingGeometry(0.42, 0.47, 48),
+        new THREE.MeshBasicMaterial({
+            color: 0xffe27a, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+        })
+    );
+    runeInner.rotation.x = -Math.PI / 2;
+    runeInner.position.y = 0.004;
+    runeGroup.add(runeInner);
+
+    // Spokes (radial ticks)
+    const spokes = [];
+    const SPOKE_COUNT = 12;
+    for (let i = 0; i < SPOKE_COUNT; i++) {
+        const a = (i / SPOKE_COUNT) * Math.PI * 2;
+        const geo = new THREE.PlaneGeometry(0.10, 0.012);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xffe27a, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(Math.cos(a) * 0.55, 0.008, Math.sin(a) * 0.55);
+        m.rotation.x = -Math.PI / 2;
+        m.rotation.z = -a;
+        runeGroup.add(m);
+        spokes.push(m);
+    }
+
+    // ── 2. Shock rings (expand outward, staggered) ──────────
     const rings = [];
     for (let i = 0; i < 3; i++) {
         const mat = new THREE.MeshBasicMaterial({
@@ -4871,17 +5128,80 @@ function spawnReviveEffect(row, col) {
             transparent: true, opacity: 0, depthWrite: false,
             side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
         });
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.3, 40), mat);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.30, 48), mat);
         ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.05;
+        ring.position.y = 0.05 + i * 0.006;
         group.add(ring);
-        rings.push({ mesh: ring, delay: i * 0.15 });
+        rings.push({ mesh: ring, delay: i * 0.14 });
     }
 
-    // 上升光點
-    const particles = [];
-    for (let i = 0; i < 56; i++) {
-        const pg = new THREE.SphereGeometry(0.025 + Math.random() * 0.04, 5, 5);
+    // ── 3. Sky beam (wide) + core beam ──────────────────────
+    const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.62, 5.0, 32, 1, true),
+        beamMat
+    );
+    beam.position.y = 2.5;
+    group.add(beam);
+
+    const coreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const core = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.16, 5.0, 20, 1, true),
+        coreMat
+    );
+    core.position.y = 2.5;
+    group.add(core);
+
+    // ── 4. Descending halo ──────────────────────────────────
+    const haloMat = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0, depthWrite: false,
+        side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    });
+    const halo = new THREE.Mesh(new THREE.RingGeometry(0.30, 0.46, 48), haloMat);
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = 4.0;
+    group.add(halo);
+
+    const haloInner = new THREE.Mesh(
+        new THREE.RingGeometry(0.14, 0.20, 40),
+        new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        })
+    );
+    haloInner.rotation.x = -Math.PI / 2;
+    haloInner.position.y = 4.0;
+    group.add(haloInner);
+
+    // ── 5. Radial light rays (near the ground, spinning) ────
+    const rays = [];
+    const RAY_COUNT = 8;
+    for (let i = 0; i < RAY_COUNT; i++) {
+        const a = (i / RAY_COUNT) * Math.PI * 2;
+        const geo = new THREE.PlaneGeometry(1.4, 0.06);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xd9a6ff, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(Math.cos(a) * 0.35, 0.06, Math.sin(a) * 0.35);
+        m.rotation.x = -Math.PI / 2;
+        m.rotation.z = -a;
+        group.add(m);
+        rays.push(m);
+    }
+
+    // ── 6a. Rising spiral motes ─────────────────────────────
+    const motes = [];
+    const MOTE_COUNT = 72;
+    for (let i = 0; i < MOTE_COUNT; i++) {
+        const pg = new THREE.SphereGeometry(0.022 + Math.random() * 0.035, 5, 5);
         const pm = new THREE.MeshBasicMaterial({
             color: new THREE.Color().setHSL(
                 0.72 + Math.random() * 0.13, 0.95, 0.6 + Math.random() * 0.3
@@ -4891,27 +5211,63 @@ function spawnReviveEffect(row, col) {
         });
         const p = new THREE.Mesh(pg, pm);
         const a = Math.random() * Math.PI * 2;
-        const r = 0.1 + Math.random() * 0.42;
+        const r = 0.05 + Math.random() * 0.45;
         p.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
         p.userData = {
-            vel: new THREE.Vector3(Math.cos(a) * 0.3, 1.4 + Math.random() * 1.8, Math.sin(a) * 0.3),
+            baseAngle: a,
+            baseRadius: r,
+            angularSpeed: 1.6 + Math.random() * 2.4,
+            riseSpeed: 1.2 + Math.random() * 2.2,
             delay: Math.random() * 0.35,
-            life: 0.7 + Math.random() * 0.5,
+            life: 0.8 + Math.random() * 0.55,
         };
         group.add(p);
-        particles.push(p);
+        motes.push(p);
     }
 
-    // 底部閃光
+    // ── 6b. Falling sparkles ────────────────────────────────
+    const sparkles = [];
+    const SPARKLE_COUNT = 28;
+    for (let i = 0; i < SPARKLE_COUNT; i++) {
+        const pg = new THREE.SphereGeometry(0.02 + Math.random() * 0.025, 4, 4);
+        const pm = new THREE.MeshBasicMaterial({
+            color: 0xffe27a, transparent: true, opacity: 0, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.15 + Math.random() * 0.5;
+        p.position.set(Math.cos(a) * r, 3.2 + Math.random() * 0.8, Math.sin(a) * r);
+        p.userData = {
+            fallSpeed: 2.4 + Math.random() * 2.0,
+            delay: Math.random() * 0.5,
+            life: 1.0,
+        };
+        group.add(p);
+        sparkles.push(p);
+    }
+
+    // ── 7. Materialize flash ────────────────────────────────
     const flashMat = new THREE.MeshBasicMaterial({
         color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
         side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
     });
-    const flash = new THREE.Mesh(new THREE.CircleGeometry(0.55, 28), flashMat);
+    const flash = new THREE.Mesh(new THREE.CircleGeometry(0.8, 32), flashMat);
     flash.rotation.x = -Math.PI / 2;
-    flash.position.y = 0.07;
+    flash.position.y = 0.08;
     group.add(flash);
 
+    const flashSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55, 20, 20),
+        new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        })
+    );
+    flashSphere.position.y = 0.5;
+    group.add(flashSphere);
+
+    // ── Animation loop ──────────────────────────────────────
     const loop = () => {
         const t = clock.getElapsedTime() - startTime;
         if (t >= DURATION) {
@@ -4924,29 +5280,86 @@ function spawnReviveEffect(row, col) {
         }
         const prog = t / DURATION;
 
-        beamMat.opacity = 0.5 * Math.sin(Math.PI * Math.min(prog / 0.75, 1));
-        coreMat.opacity = 0.85 * Math.sin(Math.PI * Math.min(prog / 0.6, 1));
-        beam.rotation.y += 0.03;
-        core.rotation.y -= 0.05;
+        // Rune circle: fade in then fade out, slowly rotate
+        const runeFade = Math.min(t / 0.3, 1) * Math.max(0, 1 - prog * 1.1);
+        runeOuter.material.opacity = 0.85 * runeFade;
+        runeInner.material.opacity = 0.95 * runeFade;
+        for (const s of spokes) s.material.opacity = 0.75 * runeFade;
+        runeGroup.rotation.y += 0.035;
 
+        // Beams
+        const beamEnvelope = Math.sin(Math.PI * Math.min(prog / 0.8, 1));
+        beamMat.opacity = 0.55 * beamEnvelope;
+        coreMat.opacity = 0.95 * beamEnvelope;
+        beam.rotation.y += 0.025;
+        core.rotation.y -= 0.06;
+
+        // Halo descends from y=4.0 → y=0.05
+        const haloProg = Math.min(t / 0.75, 1);
+        const haloY = 4.0 * (1 - haloProg) + 0.05;
+        halo.position.y = haloY;
+        haloInner.position.y = haloY;
+        halo.material.opacity = 0.9 * Math.sin(Math.PI * Math.min(haloProg * 1.2, 1));
+        haloInner.material.opacity = 1.0 * Math.sin(Math.PI * Math.min(haloProg * 1.2, 1));
+        const haloScale = 1 + haloProg * 0.6;
+        halo.scale.setScalar(haloScale);
+        haloInner.scale.setScalar(haloScale);
+
+        // Radial rays (bright early, fade later)
+        const rayAlpha = Math.max(0, 1 - prog * 1.4) * Math.min(t / 0.2, 1);
+        for (const m of rays) {
+            m.material.opacity = 0.55 * rayAlpha;
+        }
+        // Slow spin of the ray group (rotate each individually around origin)
+        const raySpin = t * 0.6;
+        for (let i = 0; i < rays.length; i++) {
+            const a = (i / rays.length) * Math.PI * 2 + raySpin;
+            rays[i].position.set(Math.cos(a) * 0.35, 0.06, Math.sin(a) * 0.35);
+            rays[i].rotation.z = -a;
+        }
+
+        // Shock rings
         for (const r of rings) {
             const rt = Math.max(0, Math.min(1, (t - r.delay) / (DURATION - r.delay)));
             r.mesh.material.opacity = 0.85 * (1 - rt);
-            r.mesh.scale.setScalar(1 + rt * 4.0);
+            r.mesh.scale.setScalar(1 + rt * 5.0);
         }
 
-        flashMat.opacity = Math.max(0, 0.85 - prog * 2.2);
-
-        for (const p of particles) {
+        // Rising motes (spiral upward)
+        for (const p of motes) {
             const pt = t - p.userData.delay;
             if (pt < 0 || pt > p.userData.life) { p.visible = false; continue; }
             p.visible = true;
-            p.position.addScaledVector(p.userData.vel, 0.016);
-            p.userData.vel.y -= 0.015;
-            const lt = pt / p.userData.life;
-            p.material.opacity = (1 - lt) * 0.95;
-            p.scale.setScalar(1 - lt * 0.35);
+            const u = pt / p.userData.life;
+            const angle = p.userData.baseAngle + pt * p.userData.angularSpeed;
+            const r = p.userData.baseRadius * (1 - u * 0.3);
+            p.position.set(
+                Math.cos(angle) * r,
+                0.05 + pt * p.userData.riseSpeed,
+                Math.sin(angle) * r
+            );
+            p.material.opacity = (1 - u) * 0.95;
+            p.scale.setScalar(1 - u * 0.35);
         }
+
+        // Falling sparkles
+        for (const s of sparkles) {
+            const st = t - s.userData.delay;
+            if (st < 0 || st > s.userData.life) { s.visible = false; continue; }
+            s.visible = true;
+            s.position.y -= s.userData.fallSpeed * 0.016;
+            const u = st / s.userData.life;
+            s.material.opacity = (1 - u) * 0.9;
+            s.scale.setScalar(1 - u * 0.3);
+            if (s.position.y < 0.05) s.visible = false;
+        }
+
+        // Materialize flash — sharp peak near MATERIALIZE_AT
+        const mf = Math.max(0, 1 - Math.abs(t - MATERIALIZE_AT) / 0.25);
+        flash.material.opacity = 0.9 * mf;
+        flash.scale.setScalar(1 + (1 - mf) * 1.5);
+        flashSphere.material.opacity = 0.85 * mf;
+        flashSphere.scale.setScalar(1 + (1 - mf) * 2.2);
 
         requestAnimationFrame(loop);
     };
@@ -6166,11 +6579,26 @@ function selectPiece(row, col) {
 
     const hasAbility = pieceHasAbility(piece);
     const hasTargets = abilityTargets.length > 0;
+
+    // ★ Default cooldown comes from the piece's own skillCooldown field.
+    //   Queen has two skills — take the smaller of the two so the button
+    //   re-enables as soon as *either* skill is off cooldown.
     let cooldown = piece.skillCooldown || 0;
     if (piece.type === 'queen') {
         const c1 = piece.skillCooldown || 0;
         const c2 = piece.reviveCooldown || 0;
         cooldown = hasTargets ? 0 : ((c1 > 0 && c2 > 0) ? Math.min(c1, c2) : 0);
+    }
+
+    // ★ King — Domain Expansion uses kingSkillState
+    //   (10-move cooldown, 3 total uses per match).
+    if (piece.type === 'king') {
+        if (kingSkillState.uses[piece.color] <= 0) {
+            cooldown = 0;   // out of uses → targets empty, button stays disabled
+        } else {
+            const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[piece.color];
+            cooldown = Math.max(0, KING_DOMAIN_COOLDOWN - movesSince);
+        }
     }
     hideCannonRange();
 
@@ -6656,15 +7084,30 @@ function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = fals
     if (isAnimating) return;
     const piece = gameState.getPiece(fromR, fromC);
 
-    // ★ 皇后 — 治癒
-    if (piece && piece.type === 'queen' && ability.id === 'heal') {
-        executeQueenHeal(fromR, fromC, targetR, targetC, ability, isRemote);
+    // ★ King — Domain Expansion (triggered by the skill button, no prompt)
+    if (piece && piece.type === 'king' && ability.id === 'domain') {
+        if (!gameState.isInCheck(piece.color)) return;
+        if (kingSkillState.uses[piece.color] <= 0) return;
+        const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[piece.color];
+        if (movesSince < KING_DOMAIN_COOLDOWN) return;
+
+        const checker = findCheckingPieces(piece.color)
+            .find(ch => ch.r === targetR && ch.c === targetC);
+        if (!checker) return;
+
+        // Clear selection UI before the domain takes over the screen
+        deselectPiece();
+
+        // Reset the pending-prompt context (no longer used)
+        kingSkillState.context = { color: piece.color, checker };
+
+        acceptDomainExpansion(piece.color, checker);
         return;
     }
 
-    // ★ 皇后 — 復活
-    if (piece && piece.type === 'queen' && ability.id === 'revive') {
-        executeQueenRevive(fromR, fromC, targetR, targetC, ability, reviveType, isRemote);
+    // ★ 皇后 — 治癒
+    if (piece && piece.type === 'queen' && ability.id === 'heal') {
+        executeQueenHeal(fromR, fromC, targetR, targetC, ability, isRemote);
         return;
     }
 
@@ -6819,6 +7262,13 @@ function checkGameStatus() {
         if (currentMode === 'multiplayer') {
             if (peerConnection?.open) peerConnection.send({ type: 'gameover' });
         }
+        return;
+    }
+
+    // ★ KING PASSIVE — offer Domain Expansion whenever the
+    //   current side's king is in check.
+    if (!gameOverFlag && !kingSkillState.active) {
+        maybeOfferDomainExpansion();
     }
 }
 
@@ -6874,20 +7324,22 @@ function resetCameraForPlayer() {
     updateFreeCamButton();
 }
 
-function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-        const el = document.documentElement;
-        if (el.requestFullscreen) el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        else if (el.msRequestFullscreen) el.msRequestFullscreen();
-        if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').catch(() => { });
-        }
-    } else {
-        if (document.exitFullscreen) document.exitFullscreen();
+async function toggleFullscreen() {
+    // If we're already in fullscreen → exit (and unlock orientation)
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        try {
+            if (screen.orientation && screen.orientation.unlock) {
+                screen.orientation.unlock();
+            }
+        } catch (_) { }
+        if (document.exitFullscreen) await document.exitFullscreen().catch(() => { });
         else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
         else if (document.msExitFullscreen) document.msExitFullscreen();
+        return;
     }
+    // Otherwise → enter
+    _mobileFsAttempted = true;      // suppress the auto-listener for this tap
+    await enterMobileFullscreen();
 }
 
 function toggleFreeCamera() {
@@ -7145,8 +7597,11 @@ function onTouchMove(e) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const currentDist = Math.sqrt(dx * dx + dy * dy);
-        if (window._pinchStartDist && window._pinchStartDist > 0) {
-            const scale = currentDist / window._pinchStartDist;
+        if (window._pinchStartDist && window._pinchStartDist > 0 && currentDist > 0) {
+            // ★ INVERTED: pinch-out (fingers apart, currentDist > start)
+            //   → scale < 1 → smaller cameraRadius → zoom IN.
+            //   Pinch-in (fingers together) → zoom OUT.
+            const scale = window._pinchStartDist / currentDist;
             cameraRadius = Math.min(20, Math.max(4, window._pinchStartRadius * scale));
         }
         return;
@@ -7187,8 +7642,24 @@ function onTouchMove(e) {
 
 function onTouchEnd(e) {
     setTimeout(() => { touchActive = false; }, 200);
+
+    // ★ Remember whether this touchend came from a 2-finger pinch
+    const wasPinching = (window._pinchStartDist !== null);
+
     window._pinchStartDist = null;
     window._pinchStartRadius = null;
+
+    // ★ Pinch → single-finger transition:
+    //   re-anchor the drag reference to the *remaining* finger so the next
+    //   move doesn't compute `dx` against a stale position and jolt the camera.
+    //   Also mark dragMoved so the eventual touchend doesn't fire a stray tap.
+    if (wasPinching && e.touches && e.touches.length === 1) {
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        dragMoved = true;
+        return;
+    }
+
     if (!dragMoved && e.changedTouches.length > 0) {
         const touch = e.changedTouches[0];
         if (isAiming) {
@@ -7616,6 +8087,56 @@ function setupPeerConnection() {
             for (const t of targets) attemptAbility(fromR, fromC, t.r, t.c, ability, true);
             return;
         }
+        // ★ Opponent is expanding their domain — watch the animation
+        if (data.type === 'domain_start') {
+            const color = data.color;
+            const checkerPiece = gameState.board[data.checkerR][data.checkerC];
+            if (checkerPiece) {
+                kingSkillState.uses[color] = Math.max(0, kingSkillState.uses[color] - 1);
+                kingSkillState.lastUsedMove[color] = gameState.fullMoveNumber;
+                kingSkillState.active = true;
+                const checker = { r: data.checkerR, c: data.checkerC, piece: checkerPiece };
+                kingSkillState.context = { color, checker };
+                // Play the visuals only — the defender's side decides the outcome
+                startDomainExpansion(color, checker);
+            }
+            return;
+        }
+        // ★ Opponent picked their RPS choice — store it and try to resolve
+        if (data.type === 'domain_choice') {
+            onOpponentChoiceReceived(data.choice);
+            return;
+        }
+
+        if (data.type === 'domain_result') {
+            if (data.winner === 'attacker') {
+                // The attacker (us) won — the defender's king died
+                gameOverFlag = true;
+                stopTimer();
+                document.getElementById('gameOverOverlay').classList.remove('hidden');
+                document.getElementById('gameOverReason').textContent = '對手國王在領域對決中敗北';
+                document.getElementById('gameOverText').textContent = '你贏了!';
+                document.getElementById('gameOverText').className = 'game-over-text win';
+            } else if (data.winner === 'defender') {
+                // Our checker was killed — remove it from our board.
+                // Guarded so it's a no-op if our own kill animation
+                // already removed it.
+                const r = data.checkerR, c = data.checkerC;
+                if (r !== undefined && c !== undefined && gameState.board[r][c]) {
+                    gameState.board[r][c] = null;
+                    gameState.moveHistory.push({ type: 'domain_kill', r, c });
+                    syncPiecesAfterMove();
+                }
+                kingSkillState.active = false;
+                kingSkillState.context = null;
+                battleState = null;
+                isAnimating = false;
+                updateTurnIndicator();
+                checkGameStatus();
+            }
+            return;
+        }
+
         if (data.type === 'rematch') {
             document.getElementById('gameOverOverlay').classList.add('hidden');
             resetTimers(roomSettings.timePerPlayer);
@@ -8006,6 +8527,12 @@ window.chessHelp = function () {
 
     console.log('%c─────────────────────────────────────────', gold);
     console.log('%c輸入 chessHelp() 可再次顯示此列表', dim);
+
+    // ── Domain Expansion ──
+    console.log('%c👑 領域展開 (Domain Expansion)', gold);
+    console.log('  %cforceDomainExpansion(color?, type?)%c → 強制觸發國王領域展開', cmd, desc);
+    console.log('  %c                                    %c     color: "white" | "black" (預設當前回合)', dim, desc);
+    console.log('  %c                                    %c     type : 敵方棋子類型 (e.g. "queen", 預設隨機)', dim, desc);
 };
 
 // Auto-print the banner once on page load
@@ -8107,6 +8634,1444 @@ window.clearBoard = function () {
 };
 
 // ============================================================
+//  ★ Force Domain Expansion — developer console command
+// ────────────────────────────────────────────────────────────
+//  Usage:
+//    forceDomainExpansion()                 → current turn's king vs random enemy
+//    forceDomainExpansion('white')          → white king vs random black piece
+//    forceDomainExpansion('black', 'queen') → black king vs a random white queen
+//
+//  Notes:
+//   • Does NOT consume a use — safe to spam for testing.
+//   • Does NOT require the king to actually be in check.
+//   • Works in local / AI / multiplayer (broadcasts to peer if it's your side).
+// ============================================================
+window.forceDomainExpansion = function (color, targetType) {
+    if (!gameState) {
+        return console.warn('⚠️ 沒有進行中的遊戲');
+    }
+    if (kingSkillState.active) {
+        return console.warn('⚠️ 領域展開已經在進行中，請等它播完');
+    }
+
+    // Default to whichever side is currently on the clock
+    color = color || gameState.turn;
+    if (color !== 'white' && color !== 'black') {
+        return console.warn('⚠️ 用法: forceDomainExpansion("white" | "black" [, enemyType])');
+    }
+
+    const king = gameState.findKing(color);
+    if (!king) {
+        return console.warn(`⚠️ 找不到 ${color} 的國王`);
+    }
+
+    // Collect every enemy piece as a candidate "checker"
+    const enemy = color === 'white' ? 'black' : 'white';
+    const candidates = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = gameState.board[r][c];
+            if (!p || p.color !== enemy) continue;
+            if (targetType && p.type !== targetType) continue;
+            candidates.push({ r, c, piece: p });
+        }
+    }
+
+    if (candidates.length === 0) {
+        return console.warn(
+            targetType
+                ? `⚠️ 棋盤上找不到敵方 ${targetType}`
+                : '⚠️ 棋盤上沒有任何敵方棋子可以當作對手'
+        );
+    }
+
+    // Pick a random one
+    const checker = candidates[Math.floor(Math.random() * candidates.length)];
+
+    // ── Set up domain state (deliberately NOT decrementing uses) ──
+    kingSkillState.active = true;
+    kingSkillState.context = { color, checker };
+    kingSkillState.lastUsedMove[color] = gameState.fullMoveNumber;
+
+    // ── Broadcast to the remote peer if this is our side ──
+    if (currentMode === 'multiplayer' && peerConnection?.open && color === playerColor) {
+        peerConnection.send({
+            type: 'domain_start',
+            color,
+            checkerR: checker.r,
+            checkerC: checker.c,
+        });
+    }
+
+    console.log(
+        `%c👑 強制領域展開！%c  ${color.toUpperCase()} King  ⚔  ` +
+        `${checker.piece.color.toUpperCase()} ${checker.piece.type} ` +
+        `@ (${checker.r}, ${checker.c})`,
+        'color:#d9a6ff;font-weight:bold;font-size:14px;',
+        'color:#f0e6d3;font-family:monospace;'
+    );
+
+    startDomainExpansion(color, checker);
+};
+
+// ============================================================
+//  KING PASSIVE SKILL — Domain Expansion (領域展開)
+// ============================================================
+//
+//  • Passive — only triggers when the king is CHECKED.
+//  • 3 uses per match (per color).
+//  • 10 full-move cooldown between uses.
+//  • On activation:
+//       1. Domain expansion circle animation
+//       2. VS screen (white on right, black on left)
+//       3. Rock-paper-scissors battle screen
+// //       4. King = 2 hearts, checker = 1 heart
+//  • Result:
+//       - King loses all hearts → king's player loses the chess game.
+//       - Checker loses all hearts → checker dies, chess resumes.
+
+const KING_DOMAIN_MAX_USES = 3;
+const KING_DOMAIN_COOLDOWN = 10;   // in full moves
+
+const kingSkillState = {
+    uses: { white: KING_DOMAIN_MAX_USES, black: KING_DOMAIN_MAX_USES },
+    lastUsedMove: { white: -999, black: -999 },
+    active: false,
+    context: null,        // { color, checker: { r, c, piece } }
+};
+
+let battleState = null;
+let vsRenderers = { left: null, right: null };
+let battleRenderers = { player: null, opponent: null };
+
+// ── Find every enemy piece currently giving check to `color` ──
+function findCheckingPieces(color, game) {
+    const g = game || gameState;
+    const king = g.findKing(color);
+    if (!king) return [];
+    const enemy = color === 'white' ? 'black' : 'white';
+    const out = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = g.board[r][c];
+            if (!p || p.color !== enemy) continue;
+            const moves = g.getPseudoLegalMoves(r, c, g.board, true);
+            if (moves.some(m => m.r === king.r && m.c === king.c)) {
+                out.push({ r, c, piece: p });
+            }
+        }
+    }
+    return out;
+}
+
+// ── Passive trigger — called from checkGameStatus ──
+function maybeOfferDomainExpansion() {
+    if (gameOverFlag || kingSkillState.active) return;
+    if (currentMode === null) return;
+
+    const color = gameState.turn;
+    if (!gameState.isInCheck(color)) return;
+    if (kingSkillState.uses[color] <= 0) return;
+
+    const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[color];
+    if (movesSince < KING_DOMAIN_COOLDOWN) return;
+
+    const checkers = findCheckingPieces(color);
+    if (checkers.length === 0) return;
+
+    // ★ Multiplayer: BOTH sides are human → never auto-trigger.
+    //   The defender must click their own king's skill button.
+    if (currentMode === 'multiplayer') return;
+
+    // ★ Local hot-seat mode: also manual only (a human decides either side).
+    if (currentMode !== 'ai') return;
+
+    // ★ AI mode: only the AI's own king auto-triggers.
+    //   (If it's OUR king, we press the button ourselves.)
+    if (color === playerColor) return;
+
+    setTimeout(() => {
+        if (gameOverFlag || kingSkillState.active) return;
+        acceptDomainExpansion(color, checkers[0]);
+    }, 750);
+}
+
+function showDomainPrompt(color, checker) {
+    kingSkillState.context = { color, checker };
+    document.getElementById('domainPromptUses').textContent = kingSkillState.uses[color];
+    const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[color];
+    const cd = Math.max(0, KING_DOMAIN_COOLDOWN - movesSince);
+    document.getElementById('domainPromptCd').textContent = cd;
+    document.getElementById('domainPromptOverlay').classList.remove('hidden');
+}
+
+function acceptDomainExpansion(color, checker) {
+    document.getElementById('domainPromptOverlay').classList.add('hidden');
+
+    // Fall back to stored context if called with no args
+    if (!color) {
+        const ctx = kingSkillState.context;
+        if (!ctx) return;
+        color = ctx.color;
+        checker = ctx.checker;
+    }
+    if (!color || !checker) return;
+
+    // Consume a use + start cooldown
+    kingSkillState.uses[color]--;
+    kingSkillState.lastUsedMove[color] = gameState.fullMoveNumber;
+    kingSkillState.active = true;
+    kingSkillState.context = { color, checker };
+
+    // Notify remote
+    if (currentMode === 'multiplayer' && peerConnection?.open && color === playerColor) {
+        peerConnection.send({
+            type: 'domain_start',
+            color,
+            checkerR: checker.r,
+            checkerC: checker.c,
+        });
+    }
+
+    startDomainExpansion(color, checker);
+}
+
+function declineDomainExpansion() {
+    document.getElementById('domainPromptOverlay').classList.add('hidden');
+    kingSkillState.context = null;
+}
+
+// ── Domain expansion animation (3D) — BLACK DOMAIN ──
+// A wave of pure black energy expands slowly from the king's square,
+// tinting every other piece on the board as it passes — except the
+// checking piece(s) and the king himself. Then we hand off to the VS screen.
+function startDomainExpansion(color, checker) {
+    isAnimating = true;
+
+    const king = gameState.findKing(color);
+    if (!king) {
+        showVsScreen(color, checker);
+        return;
+    }
+
+    const kingPos = get3DPosition(king.r, king.c, 0);
+
+    // ★ BLACK DOMAIN palette
+    const waveColor = 0x000000;       // pure black wavefront
+    const discColor = 0x000000;       // pure black fill
+    const glowColor = 0x2a0a4a;       // dark purple glow accent
+    const pillarColor = 0x0a0a14;     // near-black pillars
+    const rimColor = 0x4a1a6a;        // subtle purple rim light
+    const darkColor = new THREE.Color(0x000000);
+
+    // ── 1. Ground disc — pure black fill behind the wave ──
+    const discGeo = new THREE.CircleGeometry(1, 128);
+    const discMat = new THREE.MeshBasicMaterial({
+        color: discColor,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(kingPos.x, 0.055, kingPos.z);
+    disc.scale.set(0.001, 0.001, 1);
+    disc.renderOrder = 5;
+    scene.add(disc);
+
+    // ── 2. Main expanding ring (black wavefront) ──
+    const ringGeo = new THREE.RingGeometry(0.85, 1.0, 128);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: waveColor,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(kingPos.x, 0.09, kingPos.z);
+    ring.scale.set(0.001, 0.001, 1);
+    ring.renderOrder = 10;
+    scene.add(ring);
+
+    // ── 3. Purple rim-light — thin bright ring riding on the wavefront edge ──
+    const rimGeo = new THREE.RingGeometry(1.0, 1.06, 128);
+    const rimMat = new THREE.MeshBasicMaterial({
+        color: rimColor,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.set(kingPos.x, 0.095, kingPos.z);
+    rim.scale.set(0.001, 0.001, 1);
+    rim.renderOrder = 11;
+    scene.add(rim);
+
+    // ── 4. Outer purple glow (additive, sits below the black ring) ──
+    const glowGeo = new THREE.RingGeometry(0.55, 1.45, 128);
+    const glowMat = new THREE.MeshBasicMaterial({
+        color: glowColor,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.set(kingPos.x, 0.075, kingPos.z);
+    glow.scale.set(0.001, 0.001, 1);
+    glow.renderOrder = 9;
+    scene.add(glow);
+
+    // ── 5. Vertical pillars riding the wavefront ──
+    const pillarGroup = new THREE.Group();
+    pillarGroup.position.set(kingPos.x, 0, kingPos.z);
+    scene.add(pillarGroup);
+    const PILLAR_COUNT = 16;
+    const pillars = [];
+    for (let i = 0; i < PILLAR_COUNT; i++) {
+        const angle = (i / PILLAR_COUNT) * Math.PI * 2;
+        const pg = new THREE.PlaneGeometry(0.12, 1.6);
+        const pm = new THREE.MeshBasicMaterial({
+            color: pillarColor,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+        const pillar = new THREE.Mesh(pg, pm);
+        pillar.position.set(1, 0.8, 0);
+        pillar.rotation.y = -angle;
+        pillarGroup.add(pillar);
+        pillars.push({ mesh: pillar, angle });
+    }
+
+    // ── 6. Bright flash at the king's position ──
+    const flashGeo = new THREE.SphereGeometry(0.55, 20, 20);
+    const flashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.set(kingPos.x, 0.4, kingPos.z);
+    scene.add(flash);
+
+    // ── 6b. TRANSPARENT SHADOW DOME (half-sphere / "domain bubble") ──
+    // A dark, translucent hemisphere that expands with the wave and
+    // acts as a shadow shell over everything inside the domain.
+    const DOME_W = 64, DOME_H = 32;
+
+    // Outer shell — the main shadow layer
+    const domeGeo = new THREE.SphereGeometry(
+        1, DOME_W, DOME_H,
+        0, Math.PI * 2,        // full revolution
+        0, Math.PI / 2         // top hemisphere only
+    );
+    const domeMat = new THREE.MeshBasicMaterial({
+        color: 0x05000a,        // near-black with a faint violet tinge
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide, // visible from outside AND inside
+        depthWrite: false,      // don't occlude the tinted pieces
+    });
+    const dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.position.set(kingPos.x, 0.02, kingPos.z);
+    dome.scale.setScalar(0.001);
+    dome.renderOrder = 6;
+    scene.add(dome);
+
+    // Inner shell — faint additive purple, backside only, gives the
+    // dome a "lit from within" feel without breaking the shadow look.
+    const domeInnerGeo = new THREE.SphereGeometry(
+        1, 48, 24,
+        0, Math.PI * 2,
+        0, Math.PI / 2
+    );
+    const domeInnerMat = new THREE.MeshBasicMaterial({
+        color: 0x2a0a4a,
+        transparent: true,
+        opacity: 0,
+        side: THREE.BackSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const domeInner = new THREE.Mesh(domeInnerGeo, domeInnerMat);
+    domeInner.position.set(kingPos.x, 0.02, kingPos.z);
+    domeInner.scale.setScalar(0.001);
+    domeInner.renderOrder = 7;
+    scene.add(domeInner);
+
+    // Ground rim — glowing edge where the dome meets the board
+    const domeRimGeo = new THREE.RingGeometry(0.97, 1.04, 96);
+    const domeRimMat = new THREE.MeshBasicMaterial({
+        color: 0x6a2a9a,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const domeRim = new THREE.Mesh(domeRimGeo, domeRimMat);
+    domeRim.rotation.x = -Math.PI / 2;
+    domeRim.position.set(kingPos.x, 0.06, kingPos.z);
+    domeRim.scale.set(0.001, 0.001, 1);
+    domeRim.renderOrder = 10;
+    scene.add(domeRim);
+
+    // ── 7. Collect pieces to tint (everything except king + checkers) ──
+    const exemptKeys = new Set();
+    exemptKeys.add(`${king.r},${king.c}`);
+    const allCheckers = findCheckingPieces(color);
+    for (const ch of allCheckers) exemptKeys.add(`${ch.r},${ch.c}`);
+    if (checker) exemptKeys.add(`${checker.r},${checker.c}`);
+
+    const piecesToTint = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const key = `${r},${c}`;
+            if (exemptKeys.has(key)) continue;
+            const obj = pieceObjects[key];
+            if (!obj) continue;
+
+            const worldPos = get3DPosition(r, c, 0);
+            const distFromKing = Math.hypot(worldPos.x - kingPos.x, worldPos.z - kingPos.z);
+
+            const savedMats = [];
+            obj.traverse(n => {
+                if (n.isMesh && n.material && n.material.color) {
+                    n.material = n.material.clone();
+                    savedMats.push({
+                        mesh: n,
+                        color: n.material.color.clone(),
+                        emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                    });
+                }
+            });
+
+            piecesToTint.push({
+                obj,
+                dist: distFromKing,
+                tintAmount: 0,
+                opacityAmount: 1,        // ★ NEW
+                savedMats,
+            });
+        }
+    }
+
+    // ★ Glow-outline the king + every checking piece (the two "involved" fighters)
+    const glowOutlineEntries = [];
+
+    // 1) King — gold halo
+    const kingObj = pieceObjects[`${king.r},${king.c}`];
+    if (kingObj) {
+        glowOutlineEntries.push(...buildDomainGlowOutline(kingObj, 0xffe27a, 1.12));
+    }
+
+    // 2) Every checker — pink/red halo
+    for (const ch of allCheckers) {
+        const chObj = pieceObjects[`${ch.r},${ch.c}`];
+        if (!chObj) continue;
+        glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
+    }
+    // Also the specific `checker` passed in, in case it's somehow not in allCheckers
+    if (checker) {
+        const ck = `${checker.r},${checker.c}`;
+        if (!allCheckers.some(ch => `${ch.r},${ch.c}` === ck)) {
+            const chObj = pieceObjects[ck];
+            if (chObj) {
+                glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
+            }
+        }
+    }
+
+    // ── 8. Animate — SLOW spread ──
+    const startTime = clock.getElapsedTime();
+    const EXPAND_DURATION = 3.5;      // ★ slower: was 1.3
+    const HOLD_DURATION = 0.7;        // ★ hold a bit longer at the end
+    const TOTAL_DURATION = EXPAND_DURATION + HOLD_DURATION;
+    const MAX_RADIUS = 14;
+    const TINT_RAMP = 0.9;            // wider ramp = smoother tint fade-in
+
+    const disposeAll = () => {
+        scene.remove(disc);
+        scene.remove(ring);
+        scene.remove(rim);
+        scene.remove(glow);
+        scene.remove(pillarGroup);
+        scene.remove(flash);
+        scene.remove(dome);
+        scene.remove(domeInner);
+        scene.remove(domeRim);
+        domeGeo.dispose(); domeMat.dispose();
+        domeInnerGeo.dispose(); domeInnerMat.dispose();
+        domeRimGeo.dispose(); domeRimMat.dispose();
+        disc.geometry.dispose(); discMat.dispose();
+        ring.geometry.dispose(); ringMat.dispose();
+        rim.geometry.dispose(); rimMat.dispose();
+        glow.geometry.dispose(); glowMat.dispose();
+        flash.geometry.dispose(); flashMat.dispose();
+        pillarGroup.traverse(n => {
+            if (n.geometry) n.geometry.dispose();
+            if (n.material) n.material.dispose();
+        });
+        // ★ Remove the glowing outlines from the two involved pieces
+        disposeDomainGlowOutlines(glowOutlineEntries);
+    };
+
+    const animateExpand = () => {
+        const elapsed = clock.getElapsedTime() - startTime;
+        if (elapsed >= TOTAL_DURATION) {
+            disposeAll();
+            showVsScreen(color, checker);
+            return;
+        }
+
+        const tRaw = Math.min(elapsed / EXPAND_DURATION, 1);
+        // smoother easing (quintic) for a heavier, slower feel
+        const ease = 1 - Math.pow(1 - tRaw, 4);
+        const radius = MAX_RADIUS * ease;
+
+        // Disc — pure black, darkens as it fills
+        disc.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+        discMat.opacity = 0.72 * Math.min(1, tRaw * 1.5);
+
+        // Main ring — black wavefront
+        ring.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+        const ringPulse = 0.85 + 0.15 * Math.sin(elapsed * 8);
+        ringMat.opacity = 0.95 * (1 - tRaw * 0.25) * ringPulse;
+
+        // Bright purple rim
+        rim.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+        rimMat.opacity = 0.75 * Math.sin(Math.PI * Math.min(tRaw * 1.1, 1));
+
+        // Outer purple glow
+        glow.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+        glowMat.opacity = 0.35 * (1 - tRaw * 0.4);
+
+        // Pillars
+        for (const p of pillars) {
+            const px = Math.cos(p.angle) * radius;
+            const pz = Math.sin(p.angle) * radius;
+            p.mesh.position.set(px, 0.8, pz);
+            p.mesh.material.opacity = Math.max(0, 0.9 * (1 - tRaw * 1.0));
+            p.mesh.scale.set(1, 0.6 + tRaw * 0.5, 1);
+        }
+
+        // ── Transparent shadow dome ──
+        // The dome grows with the wave but holds its opacity a touch
+        // longer so the "shadow settles" after the wave passes.
+        const domeR = Math.max(0.001, radius);
+        dome.scale.setScalar(domeR);
+        domeMat.opacity = 0.42 * Math.min(1, tRaw * 1.5) * (1 - tRaw * 0.15);
+
+        domeInner.scale.setScalar(domeR * 1.01);
+        domeInnerMat.opacity = 0.22 * Math.min(1, tRaw * 1.8);
+
+        domeRim.scale.set(domeR, domeR, 1);
+        domeRimMat.opacity =
+            0.7 * Math.min(1, tRaw * 1.4) * (1 - tRaw * 0.25);
+
+        // Flash — brief bright pop at the start
+        const flashT = Math.min(1, elapsed / 0.4);
+        flashMat.opacity = 0.95 * (1 - flashT);
+        flash.scale.setScalar(1 + flashT * 2.6);
+
+        // Tint pieces behind the wave; HIDE pieces still outside the shadow dome
+        const EDGE_SMOOTH = 0.4;    // fade-in width at the dome boundary
+        for (const p of piecesToTint) {
+            const behind = radius - p.dist;
+
+            let targetTint;
+            let targetOpacity;
+
+            if (behind < 0) {
+                // ── Outside the dome → hide (fade in as the dome reaches it) ──
+                targetTint = 0;
+                targetOpacity = Math.max(0, 1 + behind / EDGE_SMOOTH);
+            } else {
+                // ── Inside the dome → darken / dissolve into the shadow ──
+                targetTint = Math.min(1, behind / TINT_RAMP) * 0.92;
+                targetOpacity = 1 - targetTint * 0.9;
+            }
+
+            if (Math.abs(p.tintAmount - targetTint) > 0.005 ||
+                Math.abs(p.opacityAmount - targetOpacity) > 0.005) {
+
+                p.tintAmount = targetTint;
+                p.opacityAmount = targetOpacity;
+
+                for (const sm of p.savedMats) {
+                    const c1 = sm.color.clone();
+                    c1.lerp(darkColor, p.tintAmount);
+                    sm.mesh.material.color.copy(c1);
+                    if (sm.mesh.material.emissive && sm.emissive) {
+                        sm.mesh.material.emissive.copy(sm.emissive);
+                        sm.mesh.material.emissive.multiplyScalar(1 - p.tintAmount);
+                    }
+                    sm.mesh.material.opacity = targetOpacity;
+                    sm.mesh.material.transparent =
+                        targetOpacity < 0.99 || p.tintAmount > 0.01;
+                }
+            }
+        }
+
+        // ★ Slow breathing pulse on the king/checker glow outlines
+        const glowPulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(elapsed * 4.5));
+        for (const o of glowOutlineEntries) {
+            if (o.material) o.material.opacity = glowPulse;
+        }
+
+        requestAnimationFrame(animateExpand);
+    };
+    animateExpand();
+}
+
+// ── VS screen ──
+function showVsScreen(color, checker) {
+    const overlay = document.getElementById('vsOverlay');
+    overlay.classList.remove('hidden');
+
+    // ★ Player is LEFT, Opponent is RIGHT.
+    const leftColor = playerColor;
+    const rightColor = playerColor === 'white' ? 'black' : 'white';
+
+    const leftPiece = leftColor === color
+        ? { type: 'king', color: leftColor }
+        : { type: checker.piece.type, color: leftColor };
+
+    const rightPiece = rightColor === color
+        ? { type: 'king', color: rightColor }
+        : { type: checker.piece.type, color: rightColor };
+
+    if (vsRenderers.left) { vsRenderers.left.dispose(); vsRenderers.left = null; }
+    if (vsRenderers.right) { vsRenderers.right.dispose(); vsRenderers.right = null; }
+
+    vsRenderers.left = createMiniPieceRenderer(document.getElementById('vsCanvasLeft'), leftPiece.type, leftPiece.color);
+    vsRenderers.right = createMiniPieceRenderer(document.getElementById('vsCanvasRight'), rightPiece.type, rightPiece.color);
+
+    const lEl = document.getElementById('vsLabelLeft');
+    lEl.textContent = leftColor.toUpperCase();
+    lEl.className = 'vs-label vs-label-' + leftColor;
+    const rEl = document.getElementById('vsLabelRight');
+    rEl.textContent = rightColor.toUpperCase();
+    rEl.className = 'vs-label vs-label-' + rightColor;
+
+    overlay.classList.remove('animate');
+    void overlay.offsetWidth;
+    overlay.classList.add('animate');
+
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+        openBattleMenu(color, checker);
+    }, 3200); // Increased duration to let the new animations play out fully
+}
+
+// ── Battle UI ──
+function openBattleMenu(color, checker) {
+    document.getElementById('battleOverlay').classList.remove('hidden');
+    hideOpponentChoiceBubble();
+
+    // Is the king (defender) on this client?
+    const defenderIsLocal =
+        (color === playerColor) ||
+        (currentMode !== 'ai' && currentMode !== 'multiplayer');
+
+    battleState = {
+        defenderColor: color,
+        attackerColor: color === 'white' ? 'black' : 'white',
+        checker,
+        defenderHearts: 2,
+        attackerHearts: 1,
+        isDefenderLocal: defenderIsLocal,
+        busy: false,
+        over: false,
+        round: 0,
+        myChoice: null,
+        opponentChoice: null,
+    };
+
+    // ─────────────────────────────────────────────────────────
+    // ★ Bottom-left  → LOCAL player's own piece (always their color)
+    // ★ Top-right    → OPPONENT's piece (always the other color)
+    // ─────────────────────────────────────────────────────────
+    const myColor = playerColor;
+    const oppColor = playerColor === 'white' ? 'black' : 'white';
+
+    const playerPiece = myColor === color
+        ? { type: 'king', color: myColor }
+        : { type: checker.piece.type, color: myColor };
+
+    const opponentPiece = oppColor === color
+        ? { type: 'king', color: oppColor }
+        : { type: checker.piece.type, color: oppColor };
+
+    if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
+    if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
+
+    battleRenderers.player = createMiniPieceRenderer(
+        document.getElementById('battlePlayerCanvas'),
+        playerPiece.type, playerPiece.color
+    );
+    battleRenderers.opponent = createMiniPieceRenderer(
+        document.getElementById('battleOpponentCanvas'),
+        opponentPiece.type, opponentPiece.color
+    );
+
+    document.getElementById('battlePlayerName').textContent =
+        (playerPiece.color === 'white' ? '白方' : '黑方') + ' ' +
+        playerPiece.type.charAt(0).toUpperCase() + playerPiece.type.slice(1);
+    document.getElementById('battleOpponentName').textContent =
+        (opponentPiece.color === 'white' ? '白方' : '黑方') + ' ' +
+        opponentPiece.type.charAt(0).toUpperCase() + opponentPiece.type.slice(1);
+
+    renderBattleHearts();
+    setBattleMessage('選擇你的出拳！');
+    enableBattleButtons();
+}
+
+// Helper: re-enable the RPS buttons and rebind their handlers
+function enableBattleButtons() {
+    document.querySelectorAll('.battle-menu-btn').forEach(b => {
+        if (!b.dataset.choice) return;
+        b.disabled = false;
+        b.onclick = () => onBattleChoice(b.dataset.choice);
+    });
+}
+
+function renderBattleHearts() {
+    if (!battleState) return;
+    const mk = (n, total) => {
+        let s = '';
+        for (let i = 0; i < total; i++) {
+            s += i < n
+                ? '<span class="heart full">❤</span>'
+                : '<span class="heart empty">♡</span>';
+        }
+        return s;
+    };
+    // Local player's piece = bottom-left; opponent's = top-right
+    const myHearts = battleState.isDefenderLocal
+        ? battleState.defenderHearts
+        : battleState.attackerHearts;
+    const oppHearts = battleState.isDefenderLocal
+        ? battleState.attackerHearts
+        : battleState.defenderHearts;
+
+    const myMax = battleState.isDefenderLocal ? 2 : 1;
+    const oppMax = battleState.isDefenderLocal ? 1 : 2;
+
+    document.getElementById('battlePlayerHearts').innerHTML = mk(myHearts, myMax);
+    document.getElementById('battleOpponentHearts').innerHTML = mk(oppHearts, oppMax);
+}
+
+function setBattleMessage(msg) {
+    const el = document.getElementById('battleMessage');
+    if (el) el.textContent = msg;
+}
+
+// ★ Show a big badge of what the opponent chose next to their piece
+const BATTLE_GLYPHS = { rock: '🪨', paper: '📄', scissors: '✂️' };
+
+function showOpponentChoiceBubble(choice) {
+    const bubble = document.getElementById('battleOpponentChoiceBubble');
+    if (!bubble) return;
+    bubble.textContent = BATTLE_GLYPHS[choice] || '?';
+    // Force re-trigger of the pop animation
+    bubble.classList.remove('show');
+    void bubble.offsetWidth;
+    bubble.classList.add('show');
+}
+
+function hideOpponentChoiceBubble() {
+    const bubble = document.getElementById('battleOpponentChoiceBubble');
+    if (bubble) bubble.classList.remove('show');
+}
+
+function onBattleChoice(playerChoice) {
+    if (!battleState || battleState.over || battleState.busy) return;
+    if (battleState.myChoice) return;  // already picked this round
+
+    battleState.myChoice = playerChoice;
+
+    // Lock the buttons until the round resolves
+    document.querySelectorAll('.battle-menu-btn').forEach(b => b.disabled = true);
+    setBattleMessage('等待對手出拳...');
+
+    // Send our pick to the opponent
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        peerConnection.send({ type: 'domain_choice', choice: playerChoice });
+    }
+
+    // AI mode → the AI answers instantly
+    if (currentMode === 'ai') {
+        const opts = ['rock', 'paper', 'scissors'];
+        battleState.opponentChoice = opts[Math.floor(Math.random() * opts.length)];
+    }
+
+    tryResolveBattle();
+}
+
+// Called when the opponent's choice arrives over the wire
+function onOpponentChoiceReceived(choice) {
+    if (!battleState || battleState.over) return;
+    battleState.opponentChoice = choice;
+    tryResolveBattle();
+}
+
+// Resolve the round once both picks are known
+function tryResolveBattle() {
+    if (!battleState || battleState.over || battleState.busy) return;
+    if (!battleState.myChoice || !battleState.opponentChoice) return;
+
+    battleState.busy = true;
+    battleState.round++;
+
+    const myChoice = battleState.myChoice;
+    const oppChoice = battleState.opponentChoice;
+
+    // Clear for the next round (kept until busy=false)
+    battleState.myChoice = null;
+    battleState.opponentChoice = null;
+
+    showOpponentChoiceBubble(oppChoice);
+
+    // Determine who won in ROLE terms
+    const isKingMe = battleState.isDefenderLocal;
+    const kingChoice = isKingMe ? myChoice : oppChoice;
+    const checkerChoice = isKingMe ? oppChoice : myChoice;
+    const kingResult = rpsResult(kingChoice, checkerChoice);
+
+    // And from the local player's own perspective
+    const myResult = rpsResult(myChoice, oppChoice);
+
+    if (myResult === 'tie') {
+        setBattleMessage(`對手出了「${zhChoice(oppChoice)}」— 平手！再來一次。`);
+        setTimeout(() => {
+            battleState.busy = false;
+            if (battleState.over) return;
+            enableBattleButtons();
+            setBattleMessage('選擇你的出拳！');
+        }, 1400);
+        return;
+    }
+
+    // Apply damage to the loser
+    if (kingResult === 'win') battleState.attackerHearts--;
+    else if (kingResult === 'lose') battleState.defenderHearts--;
+    renderBattleHearts();
+
+    const youWon = myResult === 'win';
+    const myRole = isKingMe ? '國王' : '將軍者';
+    setBattleMessage(
+        `對手出了「${zhChoice(oppChoice)}」— ${myRole}${youWon ? '勝！' : '敗...'}`
+    );
+
+    setTimeout(() => {
+        if (battleState.defenderHearts <= 0) {
+            resolveDomainDefenderLose();
+            return;
+        }
+        if (battleState.attackerHearts <= 0) {
+            resolveDomainCheckerDies();
+            return;
+        }
+        // Continue to next round
+        battleState.busy = false;
+        const remaining = isKingMe ? battleState.defenderHearts : battleState.attackerHearts;
+        setBattleMessage(`剩餘生命：${remaining}。再來一局！`);
+        setTimeout(() => {
+            if (battleState.over) return;
+            enableBattleButtons();
+            setBattleMessage('選擇你的出拳！');
+        }, 1200);
+    }, 1400);
+}
+
+function rpsResult(a, b) {
+    if (a === b) return 'tie';
+    if ((a === 'rock' && b === 'scissors') ||
+        (a === 'paper' && b === 'rock') ||
+        (a === 'scissors' && b === 'paper')) return 'win';
+    return 'lose';
+}
+
+function zhChoice(c) {
+    return { rock: '石頭', paper: '布', scissors: '剪刀' }[c] || c;
+}
+
+function resolveDomainCheckerDies() {
+    battleState.over = true;
+    setBattleMessage('👑 國王勝！將軍者被消滅。');
+    setTimeout(() => {
+        document.getElementById('battleOverlay').classList.add('hidden');
+        if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
+        if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
+        const ctx = kingSkillState.context;
+        if (ctx) playKillAnimation(ctx.color, ctx.checker);
+    }, 1400);
+}
+
+function resolveDomainDefenderLose() {
+    battleState.over = true;
+    setBattleMessage('💀 國王生命耗盡...');
+    setTimeout(() => {
+        document.getElementById('battleOverlay').classList.add('hidden');
+        if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
+        if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
+
+        const defenderColor = battleState
+            ? battleState.defenderColor
+            : (kingSkillState.context?.color || 'white');
+        const winner = defenderColor === 'white' ? 'black' : 'white';
+
+        if (currentMode === 'multiplayer' && peerConnection?.open &&
+            defenderColor === playerColor) {
+            peerConnection.send({ type: 'domain_result', winner: 'attacker' });
+        }
+
+        kingSkillState.active = false;
+        kingSkillState.context = null;
+        battleState = null;
+        isAnimating = false;
+
+        gameOverFlag = true;
+        stopTimer();
+
+        document.getElementById('gameOverOverlay').classList.remove('hidden');
+        document.getElementById('gameOverReason').textContent = '國王在領域對決中敗北';
+        const text = document.getElementById('gameOverText');
+        if (currentMode === 'ai' || currentMode === 'multiplayer') {
+            if (winner === playerColor) { text.textContent = '你贏了!'; text.className = 'game-over-text win'; }
+            else { text.textContent = '你輸了...'; text.className = 'game-over-text lose'; }
+        } else {
+            text.textContent = (winner === 'white' ? '白方' : '黑方') + ' 獲勝!';
+            text.className = 'game-over-text win';
+        }
+    }, 1400);
+}
+
+// ── Kill animation (3D magic laser blast) + board cleanup ──
+function playKillAnimation(defenderColor, checker) {
+    isAnimating = true;
+
+    const king = gameState.findKing(defenderColor);
+    if (!king) {
+        // Safety fallback — skip visuals, resolve immediately
+        finalizeDomainKill(defenderColor, checker);
+        return;
+    }
+
+    const kingPos = get3DPosition(king.r, king.c, 0);
+    const checkerPos = get3DPosition(checker.r, checker.c, 0);
+
+    const kingObj = pieceObjects[`${king.r},${king.c}`];
+    const victimObj = pieceObjects[`${checker.r},${checker.c}`];
+
+    const ORB_HEIGHT = 1.55;   // where the orb charges above the king
+    const IMPACT_Y = 0.45;   // mid-body height of the target piece
+
+    const orbPos = new THREE.Vector3(kingPos.x, ORB_HEIGHT, kingPos.z);
+    const impactPos = new THREE.Vector3(checkerPos.x, IMPACT_Y, checkerPos.z);
+
+    // ── Track every object we spawn so we can clean them all up ──
+    const created = [];
+    const track = (obj) => { created.push(obj); return obj; };
+
+    // ── Snapshot the involved pieces' materials so we can animate them ──
+    const kingMats = [];
+    if (kingObj) {
+        kingObj.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                kingMats.push({
+                    mesh: n,
+                    color: n.material.color.clone(),
+                    emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                    emissiveIntensity: n.material.emissiveIntensity ?? 0,
+                });
+            }
+        });
+    }
+
+    const victimMats = [];
+    if (victimObj) {
+        victimObj.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                n.material.transparent = true;
+                victimMats.push({
+                    mesh: n,
+                    color: n.material.color.clone(),
+                    emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                });
+            }
+        });
+    }
+
+    const victimBasePos = victimObj ? victimObj.position.clone() : new THREE.Vector3();
+    const victimBaseScale = victimObj ? (victimObj.scale.x || 1) : 1;
+
+    // ═════════════════════════════════════════════════════════
+    //  1. CHARGING ORB  (three nested additive spheres)
+    // ═════════════════════════════════════════════════════════
+    const orbCoreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const orbCore = track(new THREE.Mesh(new THREE.SphereGeometry(0.16, 20, 20), orbCoreMat));
+    orbCore.position.copy(orbPos);
+    orbCore.renderOrder = 50;
+    scene.add(orbCore);
+
+    const orbGlowMat = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const orbGlow = track(new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 20), orbGlowMat));
+    orbGlow.position.copy(orbPos);
+    orbGlow.renderOrder = 49;
+    scene.add(orbGlow);
+
+    const orbAuraMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const orbAura = track(new THREE.Mesh(new THREE.SphereGeometry(0.55, 20, 20), orbAuraMat));
+    orbAura.position.copy(orbPos);
+    orbAura.renderOrder = 48;
+    scene.add(orbAura);
+
+    // ═════════════════════════════════════════════════════════
+    //  2. CHARGE-IN PARTICLES  (spiral in toward the orb)
+    // ═════════════════════════════════════════════════════════
+    const chargeParticles = [];
+    for (let i = 0; i < 40; i++) {
+        const pg = new THREE.SphereGeometry(0.022 + Math.random() * 0.022, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? 0xffe27a : 0xd9a6ff,
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const p = track(new THREE.Mesh(pg, pm));
+        p.position.copy(orbPos);
+        p.renderOrder = 51;
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.9 + Math.random() * 0.8;
+        const y = ORB_HEIGHT - 0.6 + Math.random() * 1.1;
+        p.userData = {
+            baseAngle: a,
+            baseRadius: r,
+            baseY: y,
+            spinSpeed: 4 + Math.random() * 5,
+            delay: Math.random() * 0.65,
+        };
+        scene.add(p);
+        chargeParticles.push(p);
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  3. LASER BEAM  (three concentric cylinders, king → target)
+    // ═════════════════════════════════════════════════════════
+    const beamDir = new THREE.Vector3().subVectors(impactPos, orbPos);
+    const beamLen = beamDir.length();
+    const beamMid = new THREE.Vector3().addVectors(orbPos, impactPos).multiplyScalar(0.5);
+    const beamQuat = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        beamDir.clone().normalize()
+    );
+
+    const beamCoreMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const beamCore = track(new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, beamLen, 12, 1, true),
+        beamCoreMat
+    ));
+    beamCore.position.copy(beamMid);
+    beamCore.quaternion.copy(beamQuat);
+    beamCore.renderOrder = 60;
+    scene.add(beamCore);
+
+    const beamMidMat = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const beamMidMesh = track(new THREE.Mesh(
+        new THREE.CylinderGeometry(0.16, 0.16, beamLen, 12, 1, true),
+        beamMidMat
+    ));
+    beamMidMesh.position.copy(beamMid);
+    beamMidMesh.quaternion.copy(beamQuat);
+    beamMidMesh.renderOrder = 59;
+    scene.add(beamMidMesh);
+
+    const beamOuterMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const beamOuter = track(new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.32, beamLen, 12, 1, true),
+        beamOuterMat
+    ));
+    beamOuter.position.copy(beamMid);
+    beamOuter.quaternion.copy(beamQuat);
+    beamOuter.renderOrder = 58;
+    scene.add(beamOuter);
+
+    // ═════════════════════════════════════════════════════════
+    //  4. IMPACT FLASH SPHERE  (at the victim)
+    // ═════════════════════════════════════════════════════════
+    const impactMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const impactSphere = track(new THREE.Mesh(
+        new THREE.SphereGeometry(0.4, 20, 20),
+        impactMat
+    ));
+    impactSphere.position.copy(impactPos);
+    impactSphere.renderOrder = 61;
+    scene.add(impactSphere);
+
+    // ═════════════════════════════════════════════════════════
+    //  5. GROUND SHOCKWAVE RING  (radial blast on the board)
+    // ═════════════════════════════════════════════════════════
+    const shockRingMat = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const shockRing = track(new THREE.Mesh(
+        new THREE.RingGeometry(0.30, 0.50, 48),
+        shockRingMat
+    ));
+    shockRing.rotation.x = -Math.PI / 2;
+    shockRing.position.copy(impactPos);
+    shockRing.position.y = 0.05;
+    shockRing.renderOrder = 55;
+    scene.add(shockRing);
+
+    // ═════════════════════════════════════════════════════════
+    //  6. EXPLOSION PARTICLES  (spawned the moment the beam lands)
+    // ═════════════════════════════════════════════════════════
+    const explosionParticles = [];
+    let explosionSpawned = false;
+
+    const spawnExplosion = () => {
+        for (let i = 0; i < 70; i++) {
+            const pg = new THREE.SphereGeometry(0.035 + Math.random() * 0.055, 5, 5);
+            const hue = 0.08 + Math.random() * 0.16;   // orange → gold → violet
+            const pm = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.35),
+                transparent: true, opacity: 1,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const p = track(new THREE.Mesh(pg, pm));
+            p.position.copy(impactPos);
+            p.renderOrder = 62;
+            const a = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            const speed = 2.2 + Math.random() * 4.8;
+            p.userData.vel = new THREE.Vector3(
+                Math.sin(phi) * Math.cos(a) * speed,
+                Math.abs(Math.cos(phi)) * speed * 1.25 + 1.3,
+                Math.sin(phi) * Math.sin(a) * speed
+            );
+            p.userData.bornAt = clock.getElapsedTime();
+            p.userData.life = 0.85 + Math.random() * 0.65;
+            scene.add(p);
+            explosionParticles.push(p);
+        }
+    };
+
+    // ═════════════════════════════════════════════════════════
+    //  TIMELINE
+    // ═════════════════════════════════════════════════════════
+    const t0 = clock.getElapsedTime();
+    const CHARGE_END = 1.20;   // charge build-up
+    const FIRE_AT = 1.20;   // beam fires
+    const IMPACT_AT = 1.28;   // beam hits target
+    const EXPLODE_END = 2.10;   // dissolve + explosion done
+    const TOTAL = 2.45;   // full cinematic length
+
+    const KING_GLOW = new THREE.Color(0xffe27a);
+    const KING_AURA = new THREE.Color(0xd9a6ff);
+    const VICTIM_WHITE = new THREE.Color(0xffffff);
+
+    const animate = () => {
+        const t = clock.getElapsedTime() - t0;
+
+        // ── King glow ramp (pulses faster as the charge builds) ──
+        if (kingMats.length > 0) {
+            const k = Math.min(1, t / CHARGE_END);
+            const pulse = 0.5 + 0.5 * Math.sin(t * 18);
+            for (const m of kingMats) {
+                const c = m.color.clone().lerp(KING_GLOW, k * 0.9);
+                m.mesh.material.color.copy(c);
+                if (m.mesh.material.emissive) {
+                    m.mesh.material.emissive.copy(KING_AURA)
+                        .multiplyScalar(k * (0.35 + pulse * 0.35));
+                    m.mesh.material.emissiveIntensity = 1;
+                }
+            }
+        }
+
+        // ── CHARGE PHASE: orb grows, particles spiral in ──
+        if (t < CHARGE_END) {
+            const k = Math.min(1, t / CHARGE_END);
+            const ease = 1 - Math.pow(1 - k, 3);
+
+            orbCoreMat.opacity = 0.95 * ease;
+            orbGlowMat.opacity = 0.75 * ease * (0.7 + 0.3 * Math.sin(t * 22));
+            orbAuraMat.opacity = 0.35 * ease;
+
+            orbCore.scale.setScalar(0.6 + 0.5 * ease);
+            orbGlow.scale.setScalar(0.8 + 0.4 * ease);
+            orbAura.scale.setScalar(0.85 + 0.35 * ease);
+
+            for (const p of chargeParticles) {
+                const pt = t - p.userData.delay;
+                if (pt < 0) { p.material.opacity = 0; continue; }
+                const lk = Math.min(1, pt / 0.85);
+                const angle = p.userData.baseAngle + pt * p.userData.spinSpeed;
+                const r = p.userData.baseRadius * (1 - lk) * (1 - lk * 0.2);
+                const y = p.userData.baseY + (ORB_HEIGHT - p.userData.baseY) * lk;
+                p.position.set(
+                    kingPos.x + Math.cos(angle) * r,
+                    y,
+                    kingPos.z + Math.sin(angle) * r
+                );
+                p.material.opacity = (1 - lk) * 0.95;
+                p.scale.setScalar(1 - lk * 0.5);
+            }
+        }
+
+        // ── FIRE PHASE: beam bursts outward ──
+        if (t >= FIRE_AT && t < FIRE_AT + 0.35) {
+            const ft = t - FIRE_AT;
+            const fade = Math.max(0, 1 - ft / 0.32);
+            const pulse = 0.85 + 0.15 * Math.sin(ft * 60);
+
+            beamCoreMat.opacity = 0.98 * fade * pulse;
+            beamMidMat.opacity = 0.80 * fade;
+            beamOuterMat.opacity = 0.40 * fade;
+
+            // Thickness wobble on the outer glow
+            const wob = 1 + 0.15 * Math.sin(ft * 40);
+            beamOuter.scale.set(wob, 1, wob);
+        } else if (t >= FIRE_AT + 0.35) {
+            beamCoreMat.opacity = 0;
+            beamMidMat.opacity = 0;
+            beamOuterMat.opacity = 0;
+        }
+
+        // ── Orb collapses the instant the beam fires ──
+        if (t >= FIRE_AT) {
+            const killK = Math.min(1, (t - FIRE_AT) / 0.15);
+            orbCoreMat.opacity = Math.max(0, 0.95 * (1 - killK));
+            orbGlowMat.opacity = Math.max(0, 0.75 * (1 - killK));
+            orbAuraMat.opacity = Math.max(0, 0.35 * (1 - killK));
+        }
+
+        // ── IMPACT TRIGGER ──
+        if (t >= IMPACT_AT && !explosionSpawned) {
+            explosionSpawned = true;
+            spawnExplosion();
+        }
+
+        // ── Impact flash sphere ──
+        if (t >= IMPACT_AT && t < IMPACT_AT + 0.55) {
+            const it = (t - IMPACT_AT) / 0.55;
+            impactMat.opacity = 0.98 * (1 - it) * (1 - it);
+            impactSphere.scale.setScalar(0.5 + it * 4.5);
+        } else if (t >= IMPACT_AT + 0.55) {
+            impactMat.opacity = 0;
+        }
+
+        // ── Ground shockwave ring ──
+        if (t >= IMPACT_AT && t < IMPACT_AT + 0.65) {
+            const st = (t - IMPACT_AT) / 0.65;
+            shockRingMat.opacity = 0.85 * (1 - st);
+            shockRing.scale.setScalar(1 + st * 6);
+        } else if (t >= IMPACT_AT + 0.65) {
+            shockRingMat.opacity = 0;
+        }
+
+        // ── VICTIM dissolve: flash white, then shrink + fade + drift up ──
+        if (t >= IMPACT_AT && victimMats.length > 0 && victimObj) {
+            const vt = Math.min(1, (t - IMPACT_AT) / (EXPLODE_END - IMPACT_AT));
+
+            // White-out flash
+            const whiteMix = Math.min(1, vt * 2.5);
+            for (const m of victimMats) {
+                const c = m.color.clone().lerp(VICTIM_WHITE, whiteMix);
+                m.mesh.material.color.copy(c);
+                if (m.mesh.material.emissive) {
+                    m.mesh.material.emissive.setRGB(1, 0.85, 0.55);
+                    m.mesh.material.emissiveIntensity = whiteMix * 1.8;
+                }
+            }
+
+            // Pop up + shrink + fade (starts after the flash peak)
+            if (vt > 0.35) {
+                const f = (vt - 0.35) / 0.65;
+                victimObj.position.y = victimBasePos.y + f * 0.55;
+                victimObj.position.x = victimBasePos.x + Math.sin(f * 15) * 0.04 * (1 - f);
+                victimObj.position.z = victimBasePos.z + Math.cos(f * 15) * 0.04 * (1 - f);
+                victimObj.scale.setScalar(Math.max(0.01, victimBaseScale * (1 - f * 0.9)));
+                for (const m of victimMats) {
+                    m.mesh.material.opacity = Math.max(0, 1 - f);
+                }
+            }
+        }
+
+        // ── Explosion particles ──
+        const now = clock.getElapsedTime();
+        for (const p of explosionParticles) {
+            const age = now - p.userData.bornAt;
+            if (age >= p.userData.life) { p.visible = false; continue; }
+            p.visible = true;
+            p.position.addScaledVector(p.userData.vel, 0.016);
+            p.userData.vel.y -= 0.18;
+            const lt = age / p.userData.life;
+            p.material.opacity = Math.max(0, 1 - lt) * (1 - lt);
+            p.scale.setScalar(1 - lt * 0.4);
+        }
+
+        // ── Advance timeline ──
+        if (t < TOTAL) {
+            requestAnimationFrame(animate);
+        } else {
+            disposeAll();
+            finalizeDomainKill(defenderColor, checker);
+        }
+    };
+
+    const disposeAll = () => {
+        for (const obj of created) {
+            if (obj.parent) obj.parent.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        }
+    };
+
+    animate();
+}
+
+// ── Apply the kill to the game state & resume play ──
+function finalizeDomainKill(defenderColor, checker) {
+    const r = checker.r, c = checker.c;
+    const victimPiece = gameState.board[r][c];
+
+    if (victimPiece) {
+        gameState.board[r][c] = null;
+        gameState.moveHistory.push({
+            type: 'domain_kill',
+            r, c,
+            piece: { ...victimPiece },
+        });
+    }
+
+    syncPiecesAfterMove();
+
+    // Broadcast result to the opponent
+    if (currentMode === 'multiplayer' && peerConnection?.open && defenderColor === playerColor) {
+        peerConnection.send({
+            type: 'domain_result',
+            winner: 'defender',
+            checkerR: r,
+            checkerC: c,
+        });
+    }
+
+    kingSkillState.active = false;
+    kingSkillState.context = null;
+    battleState = null;
+
+    // Release the input lock that startDomainExpansion set
+    isAnimating = false;
+
+    updateTurnIndicator();
+    checkGameStatus();
+
+    if (!gameOverFlag && currentMode === 'ai' && gameState.turn !== playerColor) {
+        aiThinking = true;
+        setTimeout(makeAIMove, 500);
+    }
+}
+
+// ── Mini 3D piece renderer for VS / battle screens ──
+function createMiniPieceRenderer(canvasEl, type, color) {
+    const rect = canvasEl.getBoundingClientRect();
+    const w = Math.max(rect.width || 260, 100);
+    const h = Math.max(rect.height || 260, 100);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(w, h, false);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 100);
+    camera.position.set(0, 1.0, 2.7);
+    camera.lookAt(0, 0.45, 0);
+
+    scene.add(new THREE.HemisphereLight(0xffeedd, 0x443322, 1.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 2.4);
+    dir.position.set(2, 4, 3);
+    scene.add(dir);
+    const rim = new THREE.DirectionalLight(0x8899cc, 1.2);
+    rim.position.set(-2, 1, -3);
+    scene.add(rim);
+
+    const model = createPieceModel(type, color, 100, 100, PIECE_PARAMS[type] || {});
+    scene.add(model);
+
+    let rafId = null;
+    const startT = performance.now();
+    const loop = () => {
+        rafId = requestAnimationFrame(loop);
+        const t = (performance.now() - startT) / 1000;
+        model.rotation.y = Math.sin(t * 0.7) * 0.4;
+        model.position.y = Math.sin(t * 1.4) * 0.03;
+        renderer.render(scene, camera);
+    };
+    loop();
+
+    const updateSize = () => {
+        const r = canvasEl.getBoundingClientRect();
+        const w2 = Math.max(r.width || 260, 100);
+        const h2 = Math.max(r.height || 260, 100);
+        renderer.setSize(w2, h2, false);
+        camera.aspect = w2 / h2;
+        camera.updateProjectionMatrix();
+    };
+    setTimeout(updateSize, 70);
+
+    return {
+        renderer, scene, camera, model, updateSize,
+        dispose() {
+            if (rafId) cancelAnimationFrame(rafId);
+            renderer.dispose();
+        }
+    };
+}
+
+// ============================================================
 //  BOOT
 // ============================================================
 window.onload = () => {
@@ -8115,6 +10080,9 @@ window.onload = () => {
     hideRemoteAim();
     updateActionButtonStates();
     if (IS_MOBILE) setupMobileCannonControls();
+
+    // ★ NEW — hook the first tap to enter fullscreen
+    setupMobileAutoFullscreen();
 
     // ★ Initialize AI mode toggle UI
     updateAIModeUI();

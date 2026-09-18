@@ -140,10 +140,24 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.wiki-badge.damage { color: #ff8a70; border-color: rgba(255, 138, 112, 0.4); }
-.wiki-badge.selfdamage { color: #d98cff; border-color: rgba(217, 140, 255, 0.4); }
-.wiki-badge.cooldown { color: #7ac8ff; border-color: rgba(122, 200, 255, 0.4); }
-.wiki-badge.hidden { display: none; }
+.wiki-badge.damage {
+    color: #ff8a70;
+    border-color: rgba(255, 138, 112, 0.4);
+}
+
+.wiki-badge.selfdamage {
+    color: #d98cff;
+    border-color: rgba(217, 140, 255, 0.4);
+}
+
+.wiki-badge.cooldown {
+    color: #7ac8ff;
+    border-color: rgba(122, 200, 255, 0.4);
+}
+
+.wiki-badge.hidden {
+    display: none;
+}
 
 .wiki-skill-name {
     color: var(--gold);
@@ -178,7 +192,9 @@
     gap: 10px;
 }
 
-.wiki-card-wide { flex: 1 1 100%; }
+.wiki-card-wide {
+    flex: 1 1 100%;
+}
 
 .wiki-card h3 {
     font-size: 0.95rem;
@@ -198,7 +214,9 @@
     touch-action: none;
 }
 
-.wiki-canvas-wrap:active { cursor: grabbing; }
+.wiki-canvas-wrap:active {
+    cursor: grabbing;
+}
 
 .wiki-canvas-wide {
     aspect-ratio: 16 / 9;
@@ -241,8 +259,13 @@
     transition: background 0.2s;
 }
 
-.wiki-board-cell.light { background: #d4b896; }
-.wiki-board-cell.dark  { background: #8b5e3c; }
+.wiki-board-cell.light {
+    background: #d4b896;
+}
+
+.wiki-board-cell.dark {
+    background: #8b5e3c;
+}
 
 .wiki-board-cell.caster::after {
     content: '';
@@ -281,24 +304,42 @@
 }
 
 @keyframes wikiLandPulse {
-    0%, 100% { transform: scale(1);   opacity: 1;   }
-    50%      { transform: scale(1.15); opacity: 0.65; }
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.15);
+        opacity: 0.65;
+    }
 }
 
 .wiki-board-cell .piece-icon {
     position: relative;
     z-index: 2;
     font-size: clamp(14px, 2.6vmin, 28px);
-    text-shadow: 0 0 6px rgba(0,0,0,0.6);
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
     pointer-events: none;
 }
 
-.wiki-board-cell .piece-icon.white { color: #f5f0e1; }
-.wiki-board-cell .piece-icon.black { color: #1a1a1a; }
+.wiki-board-cell .piece-icon.white {
+    color: #f5f0e1;
+}
+
+.wiki-board-cell .piece-icon.black {
+    color: #1a1a1a;
+}
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-    .wiki-layout { flex-direction: column; max-height: 95vh; }
+    .wiki-layout {
+        flex-direction: column;
+        max-height: 95vh;
+    }
+
     .wiki-sidebar {
         width: 100%;
         flex-direction: row;
@@ -309,10 +350,78 @@
         border-right: none;
         border-bottom: 1px solid rgba(232, 197, 71, 0.2);
     }
-    .wiki-sidebar h2, .wiki-subtitle, .wiki-back-btn { display: none; }
-    .wiki-tabs { flex-direction: row; flex: 0 0 auto; }
-    .wiki-tab { padding: 6px 10px; font-size: 0.8rem; }
-    .wiki-tab-glyph { font-size: 1.2rem; }
-    .wiki-main { padding: 14px; }
-    .wiki-header h1 { font-size: 1.3rem; }
+
+    .wiki-sidebar h2,
+    .wiki-subtitle,
+    .wiki-back-btn {
+        display: none;
+    }
+
+    .wiki-tabs {
+        flex-direction: row;
+        flex: 0 0 auto;
+    }
+
+    .wiki-tab {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+
+    .wiki-tab-glyph {
+        font-size: 1.2rem;
+    }
+
+    .wiki-main {
+        padding: 14px;
+    }
+
+    .wiki-header h1 {
+        font-size: 1.3rem;
+    }
+}
+
+/* ============================================================
+   Queen wiki — floating skill label on top of the effect canvas
+   ============================================================ */
+.wiki-effect-label {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    padding: 5px 16px;
+    border-radius: 20px;
+    background: rgba(10, 15, 35, 0.85);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    pointer-events: none;
+    text-shadow: 0 0 10px currentColor;
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* Make sure the wrapper establishes a positioning context */
+.wiki-canvas-wrap {
+    position: relative;
+}
+
+@keyframes wikiEffectLabelPop {
+    0% {
+        transform: translateX(-50%) translateY(-6px) scale(0.85);
+        opacity: 0;
+    }
+
+    60% {
+        transform: translateX(-50%) translateY(0) scale(1.06);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(-50%) translateY(0) scale(1);
+        opacity: 1;
+    }
 }

@@ -17,6 +17,21 @@
     box-sizing: border-box;
 }
 
+html,
+body {
+    /* Prevent pull-to-refresh + rubber-band on mobile */
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+    /* Kill tap highlight & long-press callout */
+    -webkit-touch-callout: none;
+}
+
+#gameCanvas,
+#gameCanvas canvas {
+    touch-action: none;
+    /* let the game handle all gestures */
+}
+
 body {
     font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
     background: var(--bg);
@@ -1453,4 +1468,1020 @@ body {
 .queen-speech-bubble.fading {
     opacity: 0;
     transform: translate(-50%, -135%) scale(0.95);
+}
+
+/* ============================================================
+   DOMAIN EXPANSION — King passive skill
+   ============================================================ */
+
+/* ── Prompt overlay ── */
+#domainPromptOverlay {
+    z-index: 400;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+#domainPromptOverlay .panel {
+    border-color: #d9a6ff;
+    box-shadow: 0 0 60px rgba(217, 166, 255, 0.35), 0 20px 60px rgba(0, 0, 0, 0.65);
+}
+
+#domainPromptOverlay h2 {
+    color: #d9a6ff;
+    text-shadow: 0 0 20px rgba(217, 166, 255, 0.55);
+}
+
+/* ── Full-screen domain animation ── */
+.domain-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 500;
+    background: #000;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.domain-overlay.hidden {
+    display: none;
+}
+
+.domain-circle {
+    --domain-color: #e8c547;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--domain-color) 0%, rgba(0, 0, 0, 0) 72%);
+    border: 4px solid var(--domain-color);
+    box-shadow: 0 0 90px var(--domain-color), inset 0 0 70px var(--domain-color);
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.9;
+    animation: domainCircleExpand 1.5s cubic-bezier(0.5, 0, 0.25, 1) forwards;
+    will-change: transform, opacity;
+}
+
+@keyframes domainCircleExpand {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0.9;
+    }
+
+    65% {
+        transform: translate(-50%, -50%) scale(8);
+        opacity: 0.75;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(34);
+        opacity: 1;
+    }
+}
+
+.domain-flash {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #fff;
+    opacity: 0;
+    animation: domainFlash 1.5s ease-out forwards;
+    pointer-events: none;
+}
+
+@keyframes domainFlash {
+    0% {
+        opacity: 0;
+    }
+
+    40% {
+        opacity: 0;
+    }
+
+    62% {
+        opacity: 0.92;
+    }
+
+    78% {
+        opacity: 0.18;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+.domain-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 3;
+    animation: domainTextPop 0.7s ease-out 0.45s both;
+    text-shadow: 0 0 30px currentColor;
+    color: #fff;
+}
+
+@keyframes domainTextPop {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.4);
+        letter-spacing: 4px;
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+        letter-spacing: 14px;
+    }
+}
+
+.domain-title {
+    font-size: 3.6rem;
+    font-weight: 900;
+    letter-spacing: 14px;
+    color: #e8c547;
+    text-shadow: 0 0 40px #e8c547, 0 0 90px #e8c547;
+}
+
+.domain-subtitle {
+    font-size: 0.95rem;
+    letter-spacing: 8px;
+    opacity: 0.75;
+    margin-top: 8px;
+    color: #fff;
+}
+
+/* ── VS screen ── */
+.vs-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 600;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 3vw;
+    overflow: hidden;
+    perspective: 1000px;
+}
+
+.vs-overlay.hidden {
+    display: none;
+}
+
+/* Dynamic Red / Blue Split Background */
+.vs-bg-split {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 60%;
+    z-index: 0;
+    opacity: 0;
+    transform: scaleX(0);
+    transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+}
+
+.vs-bg-red {
+    left: 0;
+    background:
+        radial-gradient(circle at 0% 50%, #000 0%, rgba(0, 0, 0, 0.85) 30%, transparent 70%),
+        repeating-linear-gradient(45deg, transparent, transparent 22px, rgba(255, 255, 255, 0.04) 22px, rgba(255, 255, 255, 0.04) 44px);
+    transform-origin: left center;
+}
+
+.vs-bg-blue {
+    right: 0;
+    background:
+        radial-gradient(circle at 100% 50%, #fff 0%, rgba(255, 255, 255, 0.85) 30%, transparent 70%),
+        repeating-linear-gradient(45deg, transparent, transparent 22px, rgba(0, 0, 0, 0.05) 22px, rgba(0, 0, 0, 0.05) 44px);
+    transform-origin: right center;
+}
+
+.vs-overlay.animate .vs-bg-split {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+/* Floating Geometric Shards */
+.vs-shards {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background-image:
+        radial-gradient(circle at 15% 20%, rgba(232, 197, 71, 0.15) 2px, transparent 2px),
+        radial-gradient(circle at 85% 80%, rgba(232, 197, 71, 0.15) 3px, transparent 3px),
+        radial-gradient(circle at 50% 50%, rgba(232, 197, 71, 0.10) 4px, transparent 4px);
+    background-size: 100px 100px, 150px 150px, 200px 200px;
+    animation: shardFloat 20s linear infinite;
+}
+
+@keyframes shardFloat {
+    0% {
+        background-position: 0 0, 0 0, 0 0;
+    }
+
+    100% {
+        background-position: 100px 100px, -150px 150px, 200px -200px;
+    }
+}
+
+/* Central Clash Shockwave */
+.vs-clash-flash {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 60%);
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.vs-overlay.animate .vs-clash-flash {
+    animation: clashShockwave 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+}
+
+@keyframes clashShockwave {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.5);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(2);
+        opacity: 0;
+    }
+}
+
+/* Sides */
+.vs-side {
+    flex: 1;
+    height: 82vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    z-index: 2;
+    position: relative;
+}
+
+.vs-overlay.animate .vs-side.vs-left {
+    animation: vsSideInLeft 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
+}
+
+.vs-overlay.animate .vs-side.vs-right {
+    animation: vsSideInRight 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+}
+
+@keyframes vsSideInLeft {
+    0% {
+        opacity: 0;
+        transform: translateX(-150px) scale(0.8);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+@keyframes vsSideInRight {
+    0% {
+        opacity: 0;
+        transform: translateX(150px) scale(0.8);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+/* Canvases */
+.vs-canvas {
+    width: 92%;
+    max-width: 420px;
+    height: 62%;
+    display: block;
+}
+
+/* Labels */
+.vs-label {
+    font-size: 1.7rem;
+    font-weight: 900;
+    letter-spacing: 6px;
+    margin-top: 10px;
+    padding: 6px 24px;
+    border-radius: 12px;
+    text-shadow: 0 0 22px currentColor;
+    background: rgba(0, 0, 0, 0.65);
+    transform: scale(0);
+    opacity: 0;
+}
+
+.vs-overlay.animate .vs-label {
+    animation: labelPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s forwards;
+}
+
+@keyframes labelPop {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.vs-label-black {
+    color: #7ac8ff;
+    border: 2px solid rgba(122, 200, 255, 0.55);
+    box-shadow: 0 0 30px rgba(122, 200, 255, 0.35);
+}
+
+.vs-label-white {
+    color: #f5f0e1;
+    border: 2px solid rgba(245, 240, 225, 0.55);
+    box-shadow: 0 0 30px rgba(245, 240, 225, 0.35);
+}
+
+/* VS Divider */
+.vs-divider {
+    position: relative;
+    flex: 0 0 auto;
+    width: 10vw;
+    height: 82vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 4;
+}
+
+.vs-vs {
+    font-size: 6.5rem;
+    font-weight: 900;
+    color: #ffffff;
+    -webkit-text-stroke: 4px #000;
+    paint-order: stroke fill;
+    text-shadow:
+        0 0 30px #fff,
+        0 0 60px #000,
+        0 0 100px #000;
+    letter-spacing: 6px;
+    z-index: 5;
+    transform: scale(5);
+    opacity: 0;
+    position: relative;
+}
+
+.vs-overlay.animate .vs-vs {
+    animation: vsTextSlam 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards;
+}
+
+@keyframes vsTextSlam {
+    0% {
+        transform: scale(5);
+        opacity: 0;
+        filter: blur(10px);
+    }
+
+    40% {
+        transform: scale(0.9);
+        opacity: 1;
+        filter: blur(0px);
+    }
+
+    60% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.vs-vs-flash {
+    position: absolute;
+    inset: -80%;
+    background: radial-gradient(circle,
+            #ffffff 0%,
+            rgba(232, 197, 71, 0.9) 20%,
+            rgba(232, 197, 71, 0.3) 40%,
+            transparent 65%);
+    opacity: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.vs-overlay.animate .vs-vs-flash {
+    animation: vsFlash 0.8s ease-out 0.5s forwards;
+}
+
+@keyframes vsFlash {
+    0% {
+        opacity: 0;
+        transform: scale(0.4);
+    }
+
+    40% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(1.5);
+    }
+}
+
+/* DOMAIN EXPANSION Text */
+.vs-domain-text {
+    position: absolute;
+    top: 15%;
+    left: 50%;
+    transform: translateX(-50%) scale(0);
+    font-size: 3.5rem;
+    font-weight: 900;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+    text-align: center;
+    line-height: 1.2;
+    letter-spacing: 8px;
+    text-shadow:
+        2px 2px 0 #000,
+        -2px -2px 0 #000,
+        2px -2px 0 #000,
+        -2px 2px 0 #000,
+        0 0 20px #ff2200;
+    z-index: 6;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.vs-overlay.animate .vs-domain-text {
+    animation: domainTextPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.9s forwards;
+}
+
+@keyframes domainTextPop {
+    0% {
+        transform: translateX(-50%) scale(0.3);
+        opacity: 0;
+    }
+
+    60% {
+        transform: translateX(-50%) scale(1.1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(-50%) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .vs-vs {
+        font-size: 4rem;
+    }
+
+    .vs-domain-text {
+        font-size: 2.2rem;
+        letter-spacing: 4px;
+    }
+
+    .vs-label {
+        font-size: 1.2rem;
+        padding: 4px 16px;
+    }
+
+    .vs-side {
+        height: 70vh;
+    }
+}
+
+/* ── Battle UI — monster-battler style layout + animated arena background ── */
+.battle-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 700;
+    background: radial-gradient(ellipse at center, #15153a 0%, #05051a 72%);
+    overflow: hidden;
+}
+
+.battle-overlay.hidden {
+    display: none;
+}
+
+/* ── Layer 1: breathing dual-glow (gold vs red) ── */
+.battle-overlay::before {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 22% 68%, rgba(232, 197, 71, 0.22) 0%, rgba(232, 197, 71, 0.06) 22%, transparent 48%),
+        radial-gradient(circle at 78% 32%, rgba(255, 80, 80, 0.22) 0%, rgba(255, 80, 80, 0.06) 22%, transparent 48%),
+        radial-gradient(circle at 50% 50%, rgba(122, 200, 255, 0.08) 0%, transparent 60%);
+    animation: battleGlowPulse 6s ease-in-out infinite;
+}
+
+@keyframes battleGlowPulse {
+
+    0%,
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 0.9;
+    }
+
+    50% {
+        transform: scale(1.15) rotate(3deg);
+        opacity: 1;
+    }
+}
+
+/* ── Layer 2: scrolling diagonal energy stripes ── */
+.battle-overlay::after {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    z-index: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(-35deg,
+            transparent 0,
+            transparent 50px,
+            rgba(232, 197, 71, 0.05) 50px,
+            rgba(232, 197, 71, 0.09) 55px,
+            transparent 55px,
+            transparent 110px);
+    animation: battleStripeScroll 3.2s linear infinite;
+}
+
+@keyframes battleStripeScroll {
+    from {
+        transform: translate(0, 0);
+    }
+
+    to {
+        transform: translate(110px, 80px);
+    }
+}
+
+/* ── Stage: content paints above the animated background ── */
+.battle-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* ── Layer 3: perspective grid floor (retro arena) ── */
+.battle-stage::before {
+    content: '';
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    bottom: 0;
+    height: 34vh;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.55;
+    background-image:
+        linear-gradient(180deg, transparent 0%, rgba(232, 197, 71, 0.10) 100%),
+        repeating-linear-gradient(90deg,
+            rgba(232, 197, 71, 0.22) 0px, rgba(232, 197, 71, 0.22) 1px,
+            transparent 1px, transparent 70px),
+        repeating-linear-gradient(0deg,
+            rgba(232, 197, 71, 0.22) 0px, rgba(232, 197, 71, 0.22) 1px,
+            transparent 1px, transparent 70px);
+    transform: perspective(500px) rotateX(65deg);
+    transform-origin: bottom center;
+    animation: gridFloorScroll 2.8s linear infinite;
+}
+
+@keyframes gridFloorScroll {
+    from {
+        background-position: 0 0, 0 0, 0 0;
+    }
+
+    to {
+        background-position: 0 0, 0 0, 0 70px;
+    }
+}
+
+/* ── Combatants — horizontal sprite + stat box ── */
+.battle-combatant {
+    position: absolute;
+    z-index: 2;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    pointer-events: none;
+    animation: battleCombatantIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.battle-opponent {
+    top: 5vh;
+    right: 3vw;
+    flex-direction: row-reverse;
+}
+
+.battle-player {
+    left: 3vw;
+    bottom: 27vh;
+    animation-delay: 0.18s;
+}
+
+@keyframes battleCombatantIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.7);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ── Sprites + pulsing glow behind each fighter ── */
+.battle-sprite {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.battle-sprite::before {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    border-radius: 50%;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(circle,
+            rgba(232, 197, 71, 0.55) 0%,
+            rgba(232, 197, 71, 0.15) 38%,
+            transparent 68%);
+    animation: combatantGlow 2.4s ease-in-out infinite;
+}
+
+.battle-opponent .battle-sprite::before {
+    background: radial-gradient(circle,
+            rgba(255, 80, 80, 0.55) 0%,
+            rgba(255, 80, 80, 0.15) 38%,
+            transparent 68%);
+    animation-delay: 0.3s;
+}
+
+@keyframes combatantGlow {
+
+    0%,
+    100% {
+        transform: scale(0.85);
+        opacity: 0.5;
+    }
+
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+}
+
+.battle-opponent .battle-sprite {
+    width: 170px;
+    height: 170px;
+}
+
+.battle-sprite canvas {
+    position: relative;
+    z-index: 1;
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+    filter: drop-shadow(0 0 22px rgba(232, 197, 71, 0.32));
+}
+
+/* ── Stat boxes ── */
+.battle-stats {
+    background: linear-gradient(180deg, rgba(22, 33, 62, 0.96), rgba(10, 15, 35, 0.96));
+    border: 3px solid #e8c547;
+    border-radius: 10px;
+    padding: 8px 16px;
+    min-width: 210px;
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.65),
+        0 0 22px rgba(232, 197, 71, 0.18);
+}
+
+.battle-name {
+    color: #e8c547;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    font-size: 1rem;
+    margin-bottom: 4px;
+    text-transform: capitalize;
+}
+
+.battle-hearts {
+    display: flex;
+    gap: 6px;
+}
+
+.heart {
+    font-size: 1.5rem;
+    line-height: 1;
+    transition: all 0.3s ease;
+}
+
+.heart.full {
+    color: #ff4466;
+    text-shadow: 0 0 12px #ff4466;
+}
+
+.heart.empty {
+    color: #444;
+    opacity: 0.5;
+}
+
+/* ── Bottom bar — message box + 2×2 menu ── */
+.battle-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
+    padding: 2vh 3vw 3vh;
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+    height: 23vh;
+    min-height: 150px;
+}
+
+.battle-message-box {
+    flex: 1.4;
+    background: linear-gradient(180deg, #fefefe, #e8e0d0);
+    border: 4px solid #1a1a2e;
+    border-radius: 12px;
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #e8c547;
+}
+
+.battle-message {
+    color: #1a1a2e;
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    line-height: 1.45;
+    font-family: 'Microsoft JhengHei', sans-serif;
+}
+
+.battle-menu {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+    max-width: 420px;
+}
+
+.battle-menu-btn {
+    background: linear-gradient(180deg, #fefefe, #e8e0d0);
+    border: 4px solid #1a1a2e;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-weight: 900;
+    font-size: 1rem;
+    color: #1a1a2e;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 0 #666, 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+
+.battle-menu-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #666, 0 10px 20px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, #ffffff, #f0e8d8);
+}
+
+.battle-menu-btn:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #666, 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.battle-menu-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.battle-menu-icon {
+    font-size: 1.7rem;
+    line-height: 1;
+}
+
+.battle-menu-label {
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+
+    /* Slightly calmer animations to keep phones cool */
+    .battle-overlay::before {
+        animation-duration: 8s;
+    }
+
+    .battle-overlay::after {
+        animation-duration: 4.5s;
+    }
+
+    .battle-stage::before {
+        animation-duration: 4s;
+        opacity: 0.4;
+    }
+
+    .battle-sprite::before {
+        animation-duration: 3.2s;
+    }
+
+    .battle-opponent {
+        top: 3vh;
+        right: 2vw;
+        gap: 8px;
+    }
+
+    .battle-player {
+        bottom: 24vh;
+        left: 2vw;
+        gap: 8px;
+    }
+
+    .battle-sprite {
+        width: 120px;
+        height: 120px;
+    }
+
+    .battle-opponent .battle-sprite {
+        width: 100px;
+        height: 100px;
+    }
+
+    .battle-stats {
+        min-width: 130px;
+        padding: 5px 10px;
+    }
+
+    .battle-name {
+        font-size: 0.78rem;
+        letter-spacing: 1px;
+    }
+
+    .heart {
+        font-size: 1.05rem;
+    }
+
+    .battle-bottom {
+        padding: 2vh 2vw;
+        gap: 8px;
+        min-height: 120px;
+    }
+
+    .battle-message-box {
+        padding: 10px 14px;
+    }
+
+    .battle-message {
+        font-size: 0.85rem;
+    }
+
+    .battle-menu {
+        gap: 5px;
+        max-width: 260px;
+    }
+
+    .battle-menu-btn {
+        border-width: 3px;
+        padding: 4px 6px;
+        gap: 4px;
+    }
+
+    .battle-menu-icon {
+        font-size: 1.2rem;
+    }
+
+    .battle-menu-label {
+        font-size: 0.72rem;
+        letter-spacing: 1px;
+    }
+}
+
+/* ============================================================
+   Battle — opponent's RPS choice bubble
+   ============================================================ */
+.battle-choice-bubble {
+    position: absolute;
+    top: 40%;
+    right: calc(100% + 16px);
+    /* fallback for older browsers without calc-on-right */
+    left: -110px;
+    right: auto;
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff6c9, #e8c547);
+    border: 4px solid #1a1a2e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3.2rem;
+    line-height: 1;
+    opacity: 0;
+    transform: scale(0.3) rotate(-40deg);
+    transition:
+        opacity 0.32s ease,
+        transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: none;
+    z-index: 5;
+    box-shadow:
+        0 0 40px rgba(232, 197, 71, 0.75),
+        0 6px 18px rgba(0, 0, 0, 0.55),
+        inset 0 0 14px rgba(255, 255, 255, 0.35);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.battle-choice-bubble.show {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+}
+
+/* Small tail on the right, pointing at the opponent's piece */
+.battle-choice-bubble::after {
+    content: '';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-left: 14px solid #e8c547;
+    filter: drop-shadow(0 0 6px rgba(232, 197, 71, 0.6));
+}
+
+@media (max-width: 768px) {
+    .battle-choice-bubble {
+        width: 64px;
+        height: 64px;
+        left: -78px;
+        font-size: 2.2rem;
+        border-width: 3px;
+    }
+
+    .battle-choice-bubble::after {
+        right: -10px;
+        border-top-width: 7px;
+        border-bottom-width: 7px;
+        border-left-width: 10px;
+    }
 }

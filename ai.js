@@ -87,8 +87,10 @@ function generateActions(game, color) {
             for (let c = 0; c < 8; c++) {
                 const p = game.getPiece(r, c);
                 if (!p || p.color !== color) continue;
-                // Knights use normal moves (executor handles push automatically)
-                if (p.type === 'knight') continue;
+                // Knights use normal moves (executor handles push automatically).
+                // Kings use Domain Expansion, which is auto-triggered when in
+                // check — it can't be simulated in the minimax tree.
+                if (p.type === 'knight' || p.type === 'king') continue;
 
                 for (const ab of game.getLegalAbilities(r, c)) {
                     const target = game.getPiece(ab.r, ab.c);
@@ -196,7 +198,7 @@ function applyAbilityToClone(game, action) {
     const ability = action.ability;
     const enemyColor = piece.color === 'white' ? 'black' : 'white';
 
-        // ── Queen "Heal" ──
+    // ── Queen "Heal" ──
     if (ability.id === 'heal') {
         const ally = game.getPiece(action.r, action.c);
         if (ally) ally.hp = Math.min(ally.maxHp, ally.hp + (ability.healAmount || 100));
@@ -484,7 +486,7 @@ function scoreActionImmediate(game, action, side, cfg) {
         const movingPiece = game.getPiece(action.fromR, action.fromC);
         const ab = action.ability;
 
-                // ★ Queen Heal
+        // ★ Queen Heal
         if (ab.id === 'heal') {
             const t = game.getPiece(action.r, action.c);
             if (t) {
