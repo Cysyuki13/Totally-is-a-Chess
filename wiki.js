@@ -43,7 +43,7 @@ const wikiModelDrag = {
 const WIKI_PIECES = {
     pawn: {
         name: '兵 (Pawn)', glyph: '♟',
-        skillName: '冲锋爆炸 (Charge Explosion)',
+        skillName: '衝鋒爆炸 (Charge Explosion)',
         description: '兵向前衝刺，在落點引爆十字爆炸。對落點上下左右四格的敵人各造成 25 點傷害，但自身也會受到 50 點反噬傷害。',
         damage: 25, selfDamage: 50, cooldown: 1,
         board: () => ({

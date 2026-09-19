@@ -2485,3 +2485,31 @@ body {
         border-left-width: 10px;
     }
 }
+
+/* ── Player's own choice bubble — mirrors the opponent's, on the right ── */
+.battle-choice-bubble-player {
+    left: calc(100% + 16px);
+    right: auto;
+    top: 40%;
+}
+
+/* Tail now points LEFT (toward the player's own piece) */
+.battle-choice-bubble-player::after {
+    right: auto;
+    left: -14px;
+    border-left: none;
+    border-right: 14px solid #e8c547;
+}
+
+@media (max-width: 768px) {
+    .battle-choice-bubble-player {
+        left: calc(100% + 10px);
+    }
+
+    .battle-choice-bubble-player::after {
+        left: -10px;
+        border-right-width: 10px;
+        border-top-width: 7px;
+        border-bottom-width: 7px;
+    }
+}

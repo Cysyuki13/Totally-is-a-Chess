@@ -246,7 +246,7 @@ function applyAbilityToClone(game, action) {
     }
 
     // ── Pawn "charge explosion": move + cross AoE + self-damage ──
-    if (piece.type === 'pawn' && ability.name === '冲锋爆炸') {
+    if (piece.type === 'pawn' && ability.name === '衝鋒爆炸') {
         const toR = action.r, toC = action.c;
 
         if (toR !== action.fromR || toC !== action.fromC) {

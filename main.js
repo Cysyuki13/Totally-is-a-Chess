@@ -752,7 +752,7 @@ ChessGame.prototype.putOnSkillCooldown = function (piece, abilityId) {
 // ============================================================
 const ABILITIES = {
     pawn: {
-        name: '冲锋爆炸',
+        name: '衝鋒爆炸',
         damage: 25,
         selfDamage: 50,
         getTargets: (game, r, c) => {
@@ -7111,7 +7111,7 @@ function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = fals
         return;
     }
 
-    if (piece && piece.type === 'pawn' && ability.name === '冲锋爆炸') {
+    if (piece && piece.type === 'pawn' && ability.name === '衝鋒爆炸') {
         executePawnAbility(fromR, fromC, targetR, targetC, ability, isRemote);
         return;
     }
@@ -7847,13 +7847,13 @@ function sendSettingsToPeer() {
 function handleDisconnect() {
     if (gameOverFlag) return;
     const waitingStatusEl = document.getElementById('waitingStatus');
-    if (waitingStatusEl) waitingStatusEl.textContent = '⚠️ 对手已断开连线';
+    if (waitingStatusEl) waitingStatusEl.textContent = '⚠️ 對手已斷開連線';
     if (gameStarted) {
         gameOverFlag = true;
         stopTimer();
         document.getElementById('gameOverOverlay').classList.remove('hidden');
-        document.getElementById('gameOverReason').textContent = '对手断线';
-        document.getElementById('gameOverText').textContent = '你赢了!';
+        document.getElementById('gameOverReason').textContent = '對手斷線';
+        document.getElementById('gameOverText').textContent = '你贏了!';
         document.getElementById('gameOverText').className = 'game-over-text win';
     }
 }
@@ -7873,14 +7873,14 @@ function createRoomWithSettings() {
     document.getElementById('roomSettings').classList.add('hidden');
     document.getElementById('waitingCodeDisplay').textContent = roomCode;
     document.getElementById('waitingOverlay').classList.remove('hidden');
-    document.getElementById('waitingStatus').textContent = '⏳ 正在初始化连线...';
+    document.getElementById('waitingStatus').textContent = '⏳ 正在初始化連線...';
     updateReadyUI();
 
     const hostId = PEER_ID_PREFIX + roomCode;
     peer = new Peer(hostId, { debug: 2, config: ICE_SERVERS });
 
     peer.on('open', (id) => {
-        document.getElementById('waitingStatus').textContent = '⏳ 等待对手加入...';
+        document.getElementById('waitingStatus').textContent = '⏳ 等待對手加入...';
     });
     peer.on('connection', (conn) => {
         if (peerConnection && peerConnection.open) {
@@ -7896,9 +7896,9 @@ function createRoomWithSettings() {
         document.getElementById('topBar').classList.remove('hidden');
     });
     peer.on('error', (err) => {
-        let msg = '⚠️ 创建房间失败：' + (err.type || err.message);
-        if (err.type === 'unavailable-id') msg = '⚠️ 房号冲突，请重新尝试';
-        else if (err.type === 'network') msg = '⚠️ 网络错误，请检查连线';
+        let msg = '⚠️ 創建房間失敗：' + (err.type || err.message);
+        if (err.type === 'unavailable-id') msg = '⚠️ 房號衝突，請重新嘗試';
+        else if (err.type === 'network') msg = '⚠️ 網路錯誤，請檢查連線';
         document.getElementById('waitingStatus').textContent = msg;
     });
     peer.on('disconnected', () => {
@@ -7913,7 +7913,7 @@ function createRoomWithSettings() {
 function joinRoom() {
     const code = document.getElementById('roomCodeInput').value.trim();
     if (!/^\d{4}$/.test(code)) {
-        document.getElementById('multiplayerStatus').textContent = '⚠️ 请输入完整的4位房号';
+        document.getElementById('multiplayerStatus').textContent = '⚠️ 請輸入完整的4位房號';
         return;
     }
     roomCode = code;
@@ -7923,23 +7923,23 @@ function joinRoom() {
     opponentReady = false;
     gameStarted = false;
     settingsReceived = false;
-    document.getElementById('multiplayerStatus').textContent = '⏳ 正在初始化连线...';
+    document.getElementById('multiplayerStatus').textContent = '⏳ 正在初始化連線...';
 
     destroyPeer();
     peer = new Peer({ debug: 2, config: ICE_SERVERS });
 
     peer.on('open', (id) => {
         const targetId = PEER_ID_PREFIX + code;
-        document.getElementById('multiplayerStatus').textContent = '🔄 正在连接到房号 ' + code + ' ...';
+        document.getElementById('multiplayerStatus').textContent = '🔄 正在連線到房號 ' + code + ' ...';
         const conn = peer.connect(targetId, { reliable: true });
         if (!conn) {
-            document.getElementById('multiplayerStatus').textContent = '⚠️ 无法建立连接，请确认房号';
+            document.getElementById('multiplayerStatus').textContent = '⚠️ 無法建立連線，請確認房號';
             return;
         }
         peerConnection = conn;
         setupPeerConnection();
         conn.on('open', () => {
-            document.getElementById('multiplayerStatus').textContent = '✅ 连接成功！等待房间设定...';
+            document.getElementById('multiplayerStatus').textContent = '✅ 連線成功！等待房間設定...';
             document.getElementById('waitingCodeDisplay').textContent = code;
             document.getElementById('waitingOverlay').classList.remove('hidden');
             document.getElementById('topBar').classList.remove('hidden');
@@ -7956,17 +7956,17 @@ function joinRoom() {
         if (settingsTimeout) clearTimeout(settingsTimeout);
         settingsTimeout = setTimeout(() => {
             if (!settingsReceived && !gameStarted) {
-                document.getElementById('waitingStatus').textContent = '⚠️ 等待房间设定超时，请确认房主仍在等待';
+                document.getElementById('waitingStatus').textContent = '⚠️ 等待房間設定超時，請確認房主仍在等待';
             }
         }, 15000);
     });
     peer.on('error', (err) => {
-        let msg = '⚠️ 连接失败: ' + (err.type || err.message);
-        if (err.type === 'peer-unavailable') msg = '⚠️ 找不到该房号，请确认对方已创建房间';
-        else if (err.type === 'network') msg = '⚠️ 网络错误，请检查连线';
+        let msg = '⚠️ 連線失敗: ' + (err.type || err.message);
+        if (err.type === 'peer-unavailable') msg = '⚠️ 找不到該房號，請確認對方已創建房間';
+        else if (err.type === 'network') msg = '⚠️ 網路錯誤，請檢查連線';
         document.getElementById('multiplayerStatus').textContent = msg;
         setTimeout(() => {
-            document.getElementById('multiplayerStatus').textContent = '请输入房号重新加入';
+            document.getElementById('multiplayerStatus').textContent = '請輸入房號重新加入';
         }, 3000);
     });
     peer.on('disconnected', () => {
@@ -8077,7 +8077,7 @@ function setupPeerConnection() {
                 return;
             }
 
-            if (abilityName === '冲锋爆炸' && targets.length > 0) {
+            if (abilityName === '衝鋒爆炸' && targets.length > 0) {
                 const ability = { name: abilityName, damage, selfDamage };
                 const firstTarget = targets[0];
                 if (firstTarget) executePawnAbility(fromR, fromC, firstTarget.r, firstTarget.c, ability, true);
@@ -8147,8 +8147,8 @@ function setupPeerConnection() {
             gameOverFlag = true;
             stopTimer();
             document.getElementById('gameOverOverlay').classList.remove('hidden');
-            document.getElementById('gameOverReason').textContent = '对手认输或投降';
-            document.getElementById('gameOverText').textContent = '你赢了!';
+            document.getElementById('gameOverReason').textContent = '對手認輸或投降';
+            document.getElementById('gameOverText').textContent = '你贏了!';
             document.getElementById('gameOverText').className = 'game-over-text win';
             return;
         }
@@ -8191,7 +8191,7 @@ function setupPeerConnection() {
         }
     });
     peerConnection.on('close', () => handleDisconnect());
-    peerConnection.on('error', (err) => console.error('❌ 数据通道错误:', err));
+    peerConnection.on('error', (err) => console.error('❌ 資料通道錯誤:', err));
 }
 
 function cancelWaiting() {
@@ -8308,6 +8308,7 @@ function startAIGame(difficulty) {
     roomSettings.timePerPlayer = 0;
 
     gameState = new ChessGame();
+    resetKingSkillState();
     gameOverFlag = false;
     aiThinking = false;
 
@@ -8355,6 +8356,7 @@ function restartGame() {
 function initNewGame() {
     document.getElementById('topBar').classList.remove('hidden');
     gameState = new ChessGame();
+    resetKingSkillState();
     gameOverFlag = false;
     selectedPiece = null;
     validMoves = [];
@@ -8737,8 +8739,18 @@ const kingSkillState = {
     uses: { white: KING_DOMAIN_MAX_USES, black: KING_DOMAIN_MAX_USES },
     lastUsedMove: { white: -999, black: -999 },
     active: false,
-    context: null,        // { color, checker: { r, c, piece } }
+    context: null,
 };
+
+// ★ NEW — call this whenever a fresh match starts
+function resetKingSkillState() {
+    kingSkillState.uses = { white: KING_DOMAIN_MAX_USES, black: KING_DOMAIN_MAX_USES };
+    kingSkillState.lastUsedMove = { white: -999, black: -999 };
+    kingSkillState.active = false;
+    kingSkillState.context = null;
+    // Any in-flight battle is also abandoned
+    battleState = null;
+}
 
 let battleState = null;
 let vsRenderers = { left: null, right: null };
@@ -9276,10 +9288,25 @@ function showVsScreen(color, checker) {
     }, 3200); // Increased duration to let the new animations play out fully
 }
 
+function showPlayerChoiceBubble(choice) {
+    const bubble = document.getElementById('battlePlayerChoiceBubble');
+    if (!bubble) return;
+    bubble.textContent = BATTLE_GLYPHS[choice] || '?';
+    bubble.classList.remove('show');
+    void bubble.offsetWidth;
+    bubble.classList.add('show');
+}
+
+function hidePlayerChoiceBubble() {
+    const bubble = document.getElementById('battlePlayerChoiceBubble');
+    if (bubble) bubble.classList.remove('show');
+}
+
 // ── Battle UI ──
 function openBattleMenu(color, checker) {
     document.getElementById('battleOverlay').classList.remove('hidden');
     hideOpponentChoiceBubble();
+    hidePlayerChoiceBubble();
 
     // Is the king (defender) on this client?
     const defenderIsLocal =
@@ -9403,6 +9430,9 @@ function onBattleChoice(playerChoice) {
 
     battleState.myChoice = playerChoice;
 
+    showPlayerChoiceBubble(playerChoice);
+
+
     // Lock the buttons until the round resolves
     document.querySelectorAll('.battle-menu-btn').forEach(b => b.disabled = true);
     setBattleMessage('等待對手出拳...');
@@ -9459,6 +9489,8 @@ function tryResolveBattle() {
         setTimeout(() => {
             battleState.busy = false;
             if (battleState.over) return;
+            hideOpponentChoiceBubble();
+            hidePlayerChoiceBubble();          // ★ NEW
             enableBattleButtons();
             setBattleMessage('選擇你的出拳！');
         }, 1400);
@@ -9491,6 +9523,8 @@ function tryResolveBattle() {
         setBattleMessage(`剩餘生命：${remaining}。再來一局！`);
         setTimeout(() => {
             if (battleState.over) return;
+            hideOpponentChoiceBubble();
+            hidePlayerChoiceBubble();          // ★ NEW
             enableBattleButtons();
             setBattleMessage('選擇你的出拳！');
         }, 1200);
