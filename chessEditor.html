@@ -1791,8 +1791,8 @@
                     mesh.userData.isAir = isAir;
 
                     if (isAir) {
-                        // ★ 半透明「挖空板」：永遠顯示在最上層，可穿透所有部件
-                        mesh.visible = true;
+                        // ★ 預設隱藏，僅在選中時才顯示（避免遮擋視線）
+                        mesh.visible = false;
                         mesh.material.transparent = true;
                         mesh.material.opacity = 0.16;
                         mesh.material.depthTest = false;
@@ -1811,11 +1811,12 @@
                                 depthWrite: false,
                             })
                         );
+
                         outline.name = '__airOutline_' + id;
                         outline.renderOrder = 999;
                         outline.frustumCulled = false;
                         outline.raycast = () => { };
-                        outline.visible = true;
+                        outline.visible = false;   // ★ 預設隱藏
                         outline.position.copy(mesh.position);
                         outline.rotation.copy(mesh.rotation);
                         outline.scale.copy(mesh.scale);
@@ -2267,6 +2268,15 @@
             if (highlightMeshRef && highlightMeshRef.material && highlightMeshRef.material.emissive) {
                 highlightMeshRef.material.emissiveIntensity = 0;
             }
+
+            // ★ 隱藏上一個空氣塊（本體 + 輪廓）
+            if (highlightMeshRef && highlightMeshRef.userData && highlightMeshRef.userData.isAir) {
+                highlightMeshRef.visible = false;
+                if (highlightMeshRef.userData.airOutline) {
+                    highlightMeshRef.userData.airOutline.visible = false;
+                }
+            }
+
             highlightMeshRef = null;
 
             if (!type || !partId) return;
@@ -2275,6 +2285,14 @@
             if (!mesh) return;
 
             highlightMeshRef = mesh;
+
+            // ★ 選中空氣塊時才顯示本體 + 輪廓
+            if (mesh.userData.isAir) {
+                mesh.visible = true;
+                if (mesh.userData.airOutline) {
+                    mesh.userData.airOutline.visible = true;
+                }
+            }
 
             highlightBoxHelper = new THREE.BoxHelper(mesh, 0xe8c547);
             highlightBoxHelper.material.depthTest = false;
