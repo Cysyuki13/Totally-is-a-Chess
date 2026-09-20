@@ -35,9 +35,6 @@
 
     <button id="globalFullscreenBtn" onclick="toggleFullscreen()" title="全屏 / Fullscreen" aria-label="全屏">⛶</button>
 
-    <!-- ★ 手機版：抽屜背景遮罩 -->
-    <div id="topBarBackdrop" onclick="hideTopBarDrawer()"></div>
-
     <div class="game-top-bar hidden" id="topBar">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <div class="turn-indicator">
@@ -59,24 +56,25 @@
             <span id="aiThinkingIndicator" class="ai-thinking hidden">🤖 AI 思考中...</span>
         </div>
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-            <button class="btn btn-danger" id="freeCamBtn" style="padding:6px 12px;font-size:0.8rem;"
-                onclick="toggleFreeCamera()">📷 自由</button>
-            <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="confirmRestart()">🔄
-                重開</button>
-            <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="backToMenu()">🏠
-                主選單</button>
-        </div>
+            <button class="btn btn-danger" id="freeCamBtn" ...>📷 自由</button>
+            <button class="btn btn-secondary" ... onclick="confirmRestart()">🔄 重開</button>
+            <button class="btn btn-secondary" ... onclick="backToMenu()">🏠 主選單</button>
 
-        <!-- ★ 手機版：收合／展開把手（只在移動端顯示） -->
-        <button class="topbar-handle" id="topBarHandle" onclick="toggleTopBar()" aria-label="切換選單">
-            <span class="topbar-handle-icon"></span>
-        </button>
+            <!-- ★ 新增：通用關閉鈕 -->
+            <button class="topbar-close-btn" id="topBarCloseBtn" onclick="closeTopBar()" ...>✕</button>
+        </div>
     </div>
+    <!-- ↑↑↑ 這一行 `</div>` 就是補上的：關閉 #topBar -->
+    <!-- ↓↓↓ 然後把 ☰ 按鈕移到外面 -->
+
+    <!-- ★ 浮動「開啟選單」鈕 -->
+    <button id="topBarReopenBtn" class="hidden" onclick="showTopBar()" ...>☰</button>
 
     <div id="actionBar">
         <button class="btn btn-action-move active" id="btnActionMove" onclick="setActionMode('move')">🚶 移動</button>
         <span class="action-label">|</span>
-        <button class="btn btn-action-attack" id="btnActionAttack" onclick="setActionMode('attack')">⚔️ 特殊技能</button>
+        <button class="btn btn-action-attack" id="btnActionAttack" onclick="setActionMode('attack')">⚔️
+            特殊技能</button>
         <span id="noTargetTip" class="no-target-tip hidden">(無目標)</span>
     </div>
 

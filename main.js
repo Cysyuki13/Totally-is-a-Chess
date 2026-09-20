@@ -1541,54 +1541,670 @@ const PIECE_PARAMS = {
         },
         "parts": {
             "body": {
-                "position": {
-                    "x": 0,
-                    "y": 0.21,
-                    "z": 0
-                },
-                "rotation": {
-                    "x": 0,
-                    "y": 0,
-                    "z": 0
-                },
-                "scale": {
-                    "x": 0.5,
-                    "y": 1.02,
-                    "z": 0.84
-                }
+                "deleted": true
             },
             "neck": {
-                "position": {
-                    "x": 0,
-                    "y": 0.54,
-                    "z": 0.13
-                },
-                "rotation": {
-                    "x": 0.22,
-                    "y": 0,
-                    "z": 0
-                },
-                "scale": {
-                    "x": 0.58,
-                    "y": 2.44,
-                    "z": 1.12
-                }
+                "deleted": true
             },
             "head": {
+                "deleted": true
+            },
+            "custom_1022": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
                 "position": {
                     "x": 0,
-                    "y": 0.76,
-                    "z": 0.25
+                    "y": 0.17,
+                    "z": 0
                 },
                 "rotation": {
-                    "x": -0.08,
+                    "x": 0,
                     "y": 0,
                     "z": 0
                 },
                 "scale": {
-                    "x": 0.98,
-                    "y": 1.2,
-                    "z": 1.76
+                    "x": 2,
+                    "y": 0.69,
+                    "z": 2
+                },
+                "name": "Sphere"
+            },
+            "custom_1023": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.3229,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.8,
+                    "z": 1.85
+                },
+                "name": "Cone"
+            },
+            "custom_1024": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.53,
+                    "z": -0.03
+                },
+                "rotation": {
+                    "x": -0.38,
+                    "y": 0.17,
+                    "z": -0.04
+                },
+                "scale": {
+                    "x": 0.92,
+                    "y": 1.77,
+                    "z": 0.92
+                },
+                "name": "Cylinder"
+            },
+            "custom_1030": {
+                "type": "octahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.0818,
+                    "y": 0.94,
+                    "z": -0.18
+                },
+                "rotation": {
+                    "x": -0.05,
+                    "y": 0.03,
+                    "z": 0.19
+                },
+                "scale": {
+                    "x": 0.43,
+                    "y": 1,
+                    "z": 0.63
+                },
+                "name": "Octa"
+            },
+            "custom_1031": {
+                "type": "octahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.0794,
+                    "y": 0.94,
+                    "z": -0.18
+                },
+                "rotation": {
+                    "x": -0.05,
+                    "y": 0.03,
+                    "z": -0.19
+                },
+                "scale": {
+                    "x": 0.43,
+                    "y": 1,
+                    "z": 0.63
+                },
+                "name": "Octa Copy"
+            },
+            "custom_1033": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.4314,
+                    "z": -0.0939
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box"
+            },
+            "custom_1034": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5162,
+                    "z": -0.1167
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy"
+            },
+            "custom_1035": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5942,
+                    "z": -0.1273
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy"
+            },
+            "custom_1036": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7013,
+                    "z": -0.1437
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy"
+            },
+            "custom_1037": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.6559,
+                    "z": -0.142
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy Copy"
+            },
+            "custom_1038": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7539,
+                    "z": -0.142
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy Copy Copy"
+            },
+            "custom_1040": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8542,
+                    "z": -0.1892
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.2543,
+                    "z": 0.6819
+                },
+                "name": "Box Copy Copy Copy Copy Copy Copy"
+            },
+            "custom_1041": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8718,
+                    "z": -0.133
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy Copy Copy Copy Copy"
+            },
+            "custom_1043": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.33,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.6,
+                    "y": 0.06,
+                    "z": 1.6
+                },
+                "name": "Cylinder"
+            },
+            "custom_1045": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.47,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.45,
+                    "y": 1,
+                    "z": 1.45
+                },
+                "name": "Cone"
+            },
+            "custom_1046": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.11,
+                    "y": 0.92,
+                    "z": 0.02
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.35,
+                    "y": 0.35,
+                    "z": 0.35
+                },
+                "name": "Sphere"
+            },
+            "custom_1047": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.1088,
+                    "y": 0.92,
+                    "z": 0.02
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.35,
+                    "y": 0.35,
+                    "z": 0.35
+                },
+                "name": "Sphere Copy"
+            },
+            "custom_1048": {
+                "type": "dodecahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.985,
+                    "z": -0.0815
+                },
+                "rotation": {
+                    "x": 0.2342,
+                    "y": -0.0241,
+                    "z": -0.0591
+                },
+                "scale": {
+                    "x": -0.1606,
+                    "y": 0.7488,
+                    "z": 1.174
+                },
+                "name": "Dodeca"
+            },
+            "custom_1049": {
+                "type": "icosahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5253,
+                    "z": -0.0958
+                },
+                "rotation": {
+                    "x": -0.1055,
+                    "y": 0,
+                    "z": -0.04
+                },
+                "scale": {
+                    "x": 0.9458,
+                    "y": 1.725,
+                    "z": 0.9099
+                },
+                "name": "Icosa"
+            },
+            "custom_1052": {
+                "type": "air",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7179,
+                    "z": 0.3185
+                },
+                "rotation": {
+                    "x": 0.25,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.7,
+                    "y": 0.13,
+                    "z": 0.51
+                },
+                "name": "Air"
+            },
+            "custom_1056": {
+                "type": "air",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.6574,
+                    "z": 0.3201
+                },
+                "rotation": {
+                    "x": -0.456,
+                    "y": 0.0381,
+                    "z": 0.0083
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 0.1215,
+                    "z": 0.3373
+                },
+                "name": "Air Copy"
+            },
+            "custom_1064": {
+                "type": "dodecahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5887,
+                    "z": -0.0514
+                },
+                "rotation": {
+                    "x": -0.468,
+                    "y": 0.091,
+                    "z": 0.0164
+                },
+                "scale": {
+                    "x": 1.0629,
+                    "y": 2.18,
+                    "z": 0.8604
+                },
+                "name": "Dodeca"
+            },
+            "custom_1065": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.04,
+                    "y": 0.75,
+                    "z": 0.37
+                },
+                "rotation": {
+                    "x": 1.64,
+                    "y": 0.02,
+                    "z": -0.07
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.1,
+                    "z": 0.1
+                },
+                "name": "Cylinder"
+            },
+            "custom_1066": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.04,
+                    "y": 0.75,
+                    "z": 0.37
+                },
+                "rotation": {
+                    "x": 1.64,
+                    "y": 0.02,
+                    "z": -0.07
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.1,
+                    "z": 0.1
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1070": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.18,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -3.14,
+                    "y": -0.29,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.45,
+                    "y": 1,
+                    "z": 1.45
+                },
+                "name": "Cone Copy"
+            },
+            "custom_2000": {
+                "type": "frustum",
+                "name": "Frustum",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8282,
+                    "z": 0.0959
+                },
+                "rotation": {
+                    "x": 1.95,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.928,
+                    "y": 1.95,
+                    "z": 0.72
                 }
             }
         }
@@ -1613,30 +2229,29 @@ const PIECE_PARAMS = {
                 "deleted": true
             },
             "custom_1000": {
-                "type": "air",
-                "name": "Air Cut",
+                "type": "cone",
                 "geometryParams": {
-                    "width": 0.3,
-                    "height": 0.3,
-                    "depth": 0.3
+                    "radius": 0.15,
+                    "height": 0.3
                 },
                 "roughness": 0.5,
                 "metalness": 0.2,
                 "position": {
-                    "x": 0.1163,
-                    "y": 0.927,
+                    "x": 0.002,
+                    "y": 0.2385,
                     "z": 0
                 },
                 "rotation": {
                     "x": 0,
                     "y": 0,
-                    "z": 0.4762
+                    "z": 0
                 },
                 "scale": {
-                    "x": 1,
-                    "y": 0.09,
-                    "z": 1
-                }
+                    "x": 1.9999,
+                    "y": 0.9193,
+                    "z": 1.9931
+                },
+                "name": "Cone"
             },
             "custom_1001": {
                 "type": "cylinder",
@@ -1963,6 +2578,32 @@ const PIECE_PARAMS = {
                     "z": 0.8503
                 },
                 "name": "Cylinder Copy Copy"
+            },
+            "custom_2000": {
+                "type": "air",
+                "name": "Air Cut",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.0439,
+                    "y": 0.9095,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -0.6966
+                },
+                "scale": {
+                    "x": 0.5051,
+                    "y": 0.0664,
+                    "z": 0.5818
+                }
             }
         }
     },
@@ -7396,40 +8037,39 @@ function updateTurnIndicator() {
 }
 
 // ============================================================
-//  Mobile Top Bar Drawer
+//  Top Bar — show / hide / close (universal, all devices)
 // ============================================================
-let topBarDrawerOpen = false;
+//   showTopBar()  → 顯示選單（遊戲開始 / 回到對局時由遊戲邏輯呼叫）
+//   hideTopBar()  → 隱藏選單（例如回主選單時由遊戲邏輯呼叫）
+//   closeTopBar() → 玩家按下 ✕ ，隱藏選單但保留 ☰ 可以叫回來
+//   updateTopBarReopenBtn() → 依目前狀態決定 ☰ 要不要出現
+// ============================================================
 
-function toggleTopBar() {
-    if (topBarDrawerOpen) hideTopBarDrawer();
-    else showTopBarDrawer();
+function showTopBar() {
+    document.getElementById('topBar')?.classList.remove('hidden');
+    updateTopBarReopenBtn();
 }
 
-function showTopBarDrawer() {
+function hideTopBar() {
+    document.getElementById('topBar')?.classList.add('hidden');
+    updateTopBarReopenBtn();
+}
+
+/** 玩家按 ✕ */
+function closeTopBar() {
+    document.getElementById('topBar')?.classList.add('hidden');
+    updateTopBarReopenBtn();
+}
+
+/** ☰ 只在「遊戲中 + 選單被關掉」時顯示 */
+function updateTopBarReopenBtn() {
+    const reopen = document.getElementById('topBarReopenBtn');
     const bar = document.getElementById('topBar');
-    if (!bar || bar.classList.contains('hidden')) return;
-    topBarDrawerOpen = true;
-    bar.classList.add('mobile-visible');
-    document.getElementById('topBarBackdrop')?.classList.add('active');
-}
+    if (!reopen || !bar) return;
 
-function hideTopBarDrawer() {
-    topBarDrawerOpen = false;
-    document.getElementById('topBar')?.classList.remove('mobile-visible');
-    document.getElementById('topBarBackdrop')?.classList.remove('active');
+    const shouldShow = !!currentMode && bar.classList.contains('hidden');
+    reopen.classList.toggle('hidden', !shouldShow);
 }
-
-/** 遊戲結束 / 回主選單時，順手把抽屜收起 */
-function updateTopBarToggleVisibility() {
-    const bar = document.getElementById('topBar');
-    if (!bar) return;
-    if (bar.classList.contains('hidden')) hideTopBarDrawer();
-}
-
-// 螢幕轉向 / 尺寸變化時，把抽屜關掉，避免殘留半開狀態
-window.addEventListener('resize', () => {
-    if (topBarDrawerOpen) hideTopBarDrawer();
-});
 
 function updateTurnMessage() {
     const el = document.getElementById('checkWarning');
@@ -10275,8 +10915,7 @@ window.onload = () => {
     // ★ Initialize AI mode toggle UI
     updateAIModeUI();
 
-    updateTopBarToggleVisibility();
-
+    updateTopBarReopenBtn();
 
     // ★ ESC closes the restart confirmation modal
     window.addEventListener('keydown', (e) => {

@@ -937,191 +937,6 @@ body {
 }
 
 /* ============================================================
-   Mobile Top Bar Drawer — pop-out with peek handle
-   ============================================================ */
-
-/* 把手：桌機完全隱藏 */
-.topbar-handle {
-    display: none;
-}
-
-@media (max-width: 768px) {
-
-    /* ── 手機版：把 topBar 變成「只露出把手」的彈出式選單 ── */
-    .game-top-bar {
-        flex-direction: column;
-        align-items: stretch;
-        padding: 12px 0 0 0;
-        gap: 8px;
-
-        max-height: 80vh;
-        max-height: 80dvh;
-        overflow-y: auto;
-        overflow-x: hidden;
-
-        /* ★ 收起狀態：元素往上推，只留下底部 44px 的把手 */
-        transform: translateY(calc(-100% + 44px));
-        transition:
-            transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-            box-shadow 0.35s ease;
-
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-        border-bottom: 2px solid rgba(232, 197, 71, 0.3);
-        border-radius: 0 0 14px 14px;
-    }
-
-    /* ★ 展開狀態 */
-    .game-top-bar.mobile-visible {
-        transform: translateY(0);
-        box-shadow: 0 14px 44px rgba(0, 0, 0, 0.78);
-    }
-
-    /* 每一行自己的左右內距（原本掛在容器上的） */
-    .game-top-bar>div {
-        padding-left: 16px;
-        padding-right: 60px;
-    }
-
-    /* 第一行（回合/計時/提示） */
-    .game-top-bar>div:nth-child(1) {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-    }
-
-    /* 第二行（按鈕組）— 加一條分隔線 */
-    .game-top-bar>div:nth-child(2) {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 6px;
-        padding-top: 8px;
-        border-top: 1px solid rgba(232, 197, 71, 0.2);
-    }
-
-    /* ══════════════════════════════════════════════
-       ★ 把手本體
-       ══════════════════════════════════════════════ */
-    .topbar-handle {
-        order: 999;
-        /* 永遠排在最後（視覺底部） */
-        flex: 0 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        width: 100%;
-        height: 44px;
-        margin: 4px 0 0 0;
-
-        background: transparent;
-        border: none;
-        border-top: 1px solid rgba(232, 197, 71, 0.25);
-        border-radius: 0 0 12px 12px;
-
-        color: var(--gold);
-        font-family: inherit;
-        cursor: pointer;
-
-        -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
-        user-select: none;
-        -webkit-user-select: none;
-
-        transition:
-            background 0.25s ease,
-            border-color 0.25s ease,
-            color 0.25s ease;
-    }
-
-    /* ── Hover 效果（滑鼠 / 觸控筆） ── */
-    .topbar-handle:hover {
-        background: rgba(232, 197, 71, 0.12);
-        border-top-color: rgba(232, 197, 71, 0.55);
-        color: #f7e07a;
-    }
-
-    .topbar-handle:hover .topbar-handle-icon {
-        filter: drop-shadow(0 0 10px rgba(232, 197, 71, 0.95));
-    }
-
-    /* ── 按下回饋 ── */
-    .topbar-handle:active {
-        background: rgba(232, 197, 71, 0.22);
-    }
-
-    /* ── 箭頭（純 CSS chevron） ── */
-    .topbar-handle-icon {
-        display: block;
-        width: 13px;
-        height: 13px;
-        border-right: 3px solid currentColor;
-        border-bottom: 3px solid currentColor;
-        border-radius: 1px;
-
-        /* 收起時 → 朝下（提示：點我展開） */
-        transform: rotate(45deg);
-        transition:
-            transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-            filter 0.25s ease;
-        filter: drop-shadow(0 0 5px rgba(232, 197, 71, 0.55));
-    }
-
-    /* 展開時 → 朝上（提示：點我收起） */
-    .game-top-bar.mobile-visible .topbar-handle-icon {
-        transform: rotate(-135deg);
-    }
-
-    /* ★ 收起狀態下的呼吸發光，暗示「這裡可以點」 */
-    .game-top-bar:not(.mobile-visible) .topbar-handle-icon {
-        animation: handleBreathe 2.1s ease-in-out infinite;
-    }
-
-    @keyframes handleBreathe {
-
-        0%,
-        100% {
-            opacity: 0.55;
-            filter: drop-shadow(0 0 2px rgba(232, 197, 71, 0.3));
-        }
-
-        50% {
-            opacity: 1;
-            filter: drop-shadow(0 0 12px rgba(232, 197, 71, 0.95));
-        }
-    }
-
-    /* 字級微調 */
-    .turn-indicator {
-        font-size: 0.85rem;
-        gap: 6px;
-    }
-
-    .timer-display {
-        font-size: 0.8rem;
-        padding: 3px 10px;
-        gap: 4px;
-    }
-
-    .timer-item .time {
-        min-width: 36px;
-    }
-}
-
-/* 極窄螢幕（短邊手機） */
-@media (max-width: 480px) {
-    .game-top-bar {
-        padding-top: 10px;
-    }
-
-    .game-top-bar>div:nth-child(2) .btn {
-        padding: 5px 10px !important;
-        font-size: 0.72rem !important;
-    }
-}
-
-/* ============================================================
    Animated chess background for menus
    ============================================================ */
 .overlay {
@@ -2623,138 +2438,6 @@ body {
 }
 
 /* ============================================================
-   Mobile Top Bar Drawer
-   ============================================================ */
-
-/* Toggle button — 預設桌面隱藏，只在手機遊戲中顯示 */
-#topBarToggle {
-    display: none;
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    z-index: 300;
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    border: 2px solid var(--gold);
-    background: rgba(22, 33, 62, 0.92);
-    color: var(--gold);
-    font-size: 1.4rem;
-    font-weight: 900;
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    font-family: inherit;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
-    pointer-events: auto;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-#topBarToggle.active {
-    background: var(--gold);
-    color: #1a1a2e;
-}
-
-#topBarToggle:active {
-    transform: scale(0.93);
-}
-
-/* 抽屜背後遮罩 */
-#topBarBackdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: 4;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-}
-
-#topBarBackdrop.active {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-@media (max-width: 768px) {
-
-    /* 手機版：把 topBar 變成從上方滑入的抽屜 */
-    .game-top-bar {
-        flex-direction: column;
-        align-items: stretch;
-        padding: 12px 60px 12px 16px;
-        /* 右邊留給全屏按鈕 */
-        gap: 8px;
-        max-height: 80vh;
-        max-height: 80dvh;
-        overflow-y: auto;
-        transform: translateY(-110%);
-        transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-        border-bottom: 2px solid rgba(232, 197, 71, 0.3);
-    }
-
-    .game-top-bar.mobile-visible {
-        transform: translateY(0);
-    }
-
-    /* 第一行（回合/計時/提示） */
-    .game-top-bar>div:first-child {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-    }
-
-    /* 第二行（按鈕組）— 加一條分隔線 */
-    .game-top-bar>div:last-child {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 6px;
-        padding-top: 8px;
-        border-top: 1px solid rgba(232, 197, 71, 0.2);
-    }
-
-    /* 字級微調（沿用原本的行動版設定，這裡再收斂一點） */
-    .turn-indicator {
-        font-size: 0.85rem;
-        gap: 6px;
-    }
-
-    .timer-display {
-        font-size: 0.8rem;
-        padding: 3px 10px;
-        gap: 4px;
-    }
-
-    .timer-item .time {
-        min-width: 36px;
-    }
-}
-
-/* 極窄螢幕（短邊手機）— 抽屜內容再縮一點 */
-@media (max-width: 480px) {
-    .game-top-bar {
-        padding: 10px 56px 10px 14px;
-    }
-
-    .game-top-bar>div:last-child .btn {
-        padding: 5px 10px !important;
-        font-size: 0.72rem !important;
-    }
-}
-
-/* ============================================================
    Force Landscape — rotate prompt overlay
    ============================================================ */
 #rotateDeviceOverlay {
@@ -2839,35 +2522,95 @@ body.force-landscape #rotateDeviceOverlay {
     }
 }
 
-@media (max-width: 768px) {
+/* ============================================================
+   Top Bar — universal close / reopen buttons
+   ============================================================ */
 
-    /* ★ 移動端：即使 topBar 被標記 .hidden，容器也要保持可見，
-         這樣才能讓底部的把手按鈕永遠露在畫面上。 */
-    .game-top-bar.hidden {
-        display: flex;
-        /* 覆蓋 display: none */
-        padding: 0;
-        /* 去掉多餘的內距，避免把手被推出畫面 */
-        transform: translateY(0);
-        /* 不要做「收起」位移 */
-        background: transparent;
-        /* 沒內容時不用黑底 */
-        box-shadow: none;
-        border-bottom: none;
-    }
+/* ── 頂部選單右側的「✕ 關閉」按鈕 ── */
+.topbar-close-btn {
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    line-height: 1;
+    font-family: inherit;
+    font-weight: 900;
 
-    /* 內容列（回合 / 計時 / 按鈕組）在 hidden 狀態下全部隱藏 */
-    .game-top-bar.hidden>div {
-        display: none;
-    }
+    border-radius: 8px;
+    border: 2px solid rgba(232, 197, 71, 0.6);
+    background: rgba(22, 33, 62, 0.9);
+    color: var(--gold);
 
-    /* 把手本身一定要露出來 */
-    .game-top-bar.hidden .topbar-handle {
-        display: flex;
-        background: rgba(22, 33, 62, 0.92);
-        /* 給它自己的底色，避免透明看不到 */
-        border-top: none;
-        border-radius: 0 0 14px 14px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.topbar-close-btn:hover {
+    background: var(--gold);
+    color: #1a1a2e;
+}
+
+.topbar-close-btn:active {
+    transform: scale(0.94);
+}
+
+/* ── 左上角浮動「☰ 開啟選單」按鈕 ── */
+#topBarReopenBtn {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 300;
+
+    width: 44px;
+    height: 44px;
+    padding: 0;
+
+    border-radius: 10px;
+    border: 2px solid var(--gold);
+    background: rgba(22, 33, 62, 0.92);
+    color: var(--gold);
+
+    font-family: inherit;
+    font-size: 1.3rem;
+    font-weight: 900;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    pointer-events: auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#topBarReopenBtn:hover {
+    background: var(--gold);
+    color: #1a1a2e;
+    transform: scale(1.06);
+}
+
+#topBarReopenBtn:active {
+    transform: scale(0.93);
+}
+
+#topBarReopenBtn.hidden {
+    display: none;
+}
+
+/* 手機橫向時避開劉海 */
+@media (orientation: landscape) and (pointer: coarse) {
+    #topBarReopenBtn {
+        top: max(10px, env(safe-area-inset-top));
+        left: max(10px, env(safe-area-inset-left));
     }
 }
