@@ -35,8 +35,7 @@
 
     <button id="globalFullscreenBtn" onclick="toggleFullscreen()" title="全屏 / Fullscreen" aria-label="全屏">⛶</button>
 
-    <!-- ★ 手機版：抽屜切換按鈕 + 背景遮罩 -->
-    <button id="topBarToggle" onclick="toggleTopBar()" title="選單" aria-label="開啟選單">☰</button>
+    <!-- ★ 手機版：抽屜背景遮罩 -->
     <div id="topBarBackdrop" onclick="hideTopBarDrawer()"></div>
 
     <div class="game-top-bar hidden" id="topBar">
@@ -67,6 +66,11 @@
             <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8rem;" onclick="backToMenu()">🏠
                 主選單</button>
         </div>
+
+        <!-- ★ 手機版：收合／展開把手（只在移動端顯示） -->
+        <button class="topbar-handle" id="topBarHandle" onclick="toggleTopBar()" aria-label="切換選單">
+            <span class="topbar-handle-icon"></span>
+        </button>
     </div>
 
     <div id="actionBar">

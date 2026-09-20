@@ -7410,28 +7410,20 @@ function showTopBarDrawer() {
     if (!bar || bar.classList.contains('hidden')) return;
     topBarDrawerOpen = true;
     bar.classList.add('mobile-visible');
-    document.getElementById('topBarToggle')?.classList.add('active');
     document.getElementById('topBarBackdrop')?.classList.add('active');
 }
 
 function hideTopBarDrawer() {
     topBarDrawerOpen = false;
     document.getElementById('topBar')?.classList.remove('mobile-visible');
-    document.getElementById('topBarToggle')?.classList.remove('active');
     document.getElementById('topBarBackdrop')?.classList.remove('active');
 }
 
-/** 依「遊戲中 + 手機」兩個條件，決定 ☰ 是否顯示 */
+/** 遊戲結束 / 回主選單時，順手把抽屜收起 */
 function updateTopBarToggleVisibility() {
     const bar = document.getElementById('topBar');
-    const btn = document.getElementById('topBarToggle');
-    if (!bar || !btn) return;
-
-    const gameActive = !bar.classList.contains('hidden');
-    btn.style.display = (gameActive && IS_MOBILE) ? 'flex' : 'none';
-
-    // 遊戲結束 / 回主選單 → 順手把抽屜關掉
-    if (!gameActive) hideTopBarDrawer();
+    if (!bar) return;
+    if (bar.classList.contains('hidden')) hideTopBarDrawer();
 }
 
 // 螢幕轉向 / 尺寸變化時，把抽屜關掉，避免殘留半開狀態

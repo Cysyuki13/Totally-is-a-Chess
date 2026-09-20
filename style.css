@@ -936,80 +936,188 @@ body {
     }
 }
 
+/* ============================================================
+   Mobile Top Bar Drawer — pop-out with peek handle
+   ============================================================ */
+
+/* 把手：桌機完全隱藏 */
+.topbar-handle {
+    display: none;
+}
+
 @media (max-width: 768px) {
+
+    /* ── 手機版：把 topBar 變成「只露出把手」的彈出式選單 ── */
     .game-top-bar {
-        padding: 6px 60px 6px 10px;
-        gap: 4px;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px 0 0 0;
+        gap: 8px;
+
+        max-height: 80vh;
+        max-height: 80dvh;
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        /* ★ 收起狀態：元素往上推，只留下底部 44px 的把手 */
+        transform: translateY(calc(-100% + 44px));
+        transition:
+            transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+            box-shadow 0.35s ease;
+
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+        border-bottom: 2px solid rgba(232, 197, 71, 0.3);
+        border-radius: 0 0 14px 14px;
     }
 
-    .game-top-bar>div:last-child {
+    /* ★ 展開狀態 */
+    .game-top-bar.mobile-visible {
+        transform: translateY(0);
+        box-shadow: 0 14px 44px rgba(0, 0, 0, 0.78);
+    }
+
+    /* 每一行自己的左右內距（原本掛在容器上的） */
+    .game-top-bar>div {
+        padding-left: 16px;
+        padding-right: 60px;
+    }
+
+    /* 第一行（回合/計時/提示） */
+    .game-top-bar>div:nth-child(1) {
         display: flex;
         flex-wrap: wrap;
-        gap: 4px;
+        align-items: center;
+        gap: 8px;
     }
 
+    /* 第二行（按鈕組）— 加一條分隔線 */
+    .game-top-bar>div:nth-child(2) {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(232, 197, 71, 0.2);
+    }
+
+    /* ══════════════════════════════════════════════
+       ★ 把手本體
+       ══════════════════════════════════════════════ */
+    .topbar-handle {
+        order: 999;
+        /* 永遠排在最後（視覺底部） */
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        width: 100%;
+        height: 44px;
+        margin: 4px 0 0 0;
+
+        background: transparent;
+        border: none;
+        border-top: 1px solid rgba(232, 197, 71, 0.25);
+        border-radius: 0 0 12px 12px;
+
+        color: var(--gold);
+        font-family: inherit;
+        cursor: pointer;
+
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+
+        transition:
+            background 0.25s ease,
+            border-color 0.25s ease,
+            color 0.25s ease;
+    }
+
+    /* ── Hover 效果（滑鼠 / 觸控筆） ── */
+    .topbar-handle:hover {
+        background: rgba(232, 197, 71, 0.12);
+        border-top-color: rgba(232, 197, 71, 0.55);
+        color: #f7e07a;
+    }
+
+    .topbar-handle:hover .topbar-handle-icon {
+        filter: drop-shadow(0 0 10px rgba(232, 197, 71, 0.95));
+    }
+
+    /* ── 按下回饋 ── */
+    .topbar-handle:active {
+        background: rgba(232, 197, 71, 0.22);
+    }
+
+    /* ── 箭頭（純 CSS chevron） ── */
+    .topbar-handle-icon {
+        display: block;
+        width: 13px;
+        height: 13px;
+        border-right: 3px solid currentColor;
+        border-bottom: 3px solid currentColor;
+        border-radius: 1px;
+
+        /* 收起時 → 朝下（提示：點我展開） */
+        transform: rotate(45deg);
+        transition:
+            transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+            filter 0.25s ease;
+        filter: drop-shadow(0 0 5px rgba(232, 197, 71, 0.55));
+    }
+
+    /* 展開時 → 朝上（提示：點我收起） */
+    .game-top-bar.mobile-visible .topbar-handle-icon {
+        transform: rotate(-135deg);
+    }
+
+    /* ★ 收起狀態下的呼吸發光，暗示「這裡可以點」 */
+    .game-top-bar:not(.mobile-visible) .topbar-handle-icon {
+        animation: handleBreathe 2.1s ease-in-out infinite;
+    }
+
+    @keyframes handleBreathe {
+
+        0%,
+        100% {
+            opacity: 0.55;
+            filter: drop-shadow(0 0 2px rgba(232, 197, 71, 0.3));
+        }
+
+        50% {
+            opacity: 1;
+            filter: drop-shadow(0 0 12px rgba(232, 197, 71, 0.95));
+        }
+    }
+
+    /* 字級微調 */
     .turn-indicator {
-        font-size: 0.8rem;
-        gap: 4px;
+        font-size: 0.85rem;
+        gap: 6px;
     }
 
     .timer-display {
-        font-size: 0.75rem;
-        padding: 2px 8px;
+        font-size: 0.8rem;
+        padding: 3px 10px;
         gap: 4px;
     }
 
     .timer-item .time {
-        min-width: 32px;
+        min-width: 36px;
+    }
+}
+
+/* 極窄螢幕（短邊手機） */
+@media (max-width: 480px) {
+    .game-top-bar {
+        padding-top: 10px;
     }
 
-    #actionBar {
-        padding: 8px 12px;
-        bottom: 16px;
-        gap: 6px;
-        width: 95%;
-        border-radius: 14px;
-    }
-
-    #actionBar .btn {
-        padding: 8px 14px;
-        font-size: 0.8rem;
-        min-width: 70px;
-    }
-
-    .panel {
-        padding: 20px 16px;
-    }
-
-    .panel h1 {
-        font-size: 1.6rem;
-    }
-
-    .code-display {
-        font-size: 2.2rem;
-        letter-spacing: 8px;
-        padding: 12px 16px;
-    }
-
-    .settings-group {
-        padding: 10px 12px;
-        margin: 12px 0;
-    }
-
-    .mode-btn,
-    .time-btn {
-        padding: 8px 14px;
-        font-size: 0.8rem;
-        min-width: 70px;
-    }
-
-    .ready-status-row {
-        gap: 12px;
-    }
-
-    .ready-status-item {
-        font-size: 0.8rem;
-        padding: 4px 10px;
+    .game-top-bar>div:nth-child(2) .btn {
+        padding: 5px 10px !important;
+        font-size: 0.72rem !important;
     }
 }
 
@@ -2728,10 +2836,5 @@ body.force-landscape #rotateDeviceOverlay {
     #globalFullscreenBtn {
         top: max(10px, env(safe-area-inset-top));
         right: max(10px, env(safe-area-inset-right));
-    }
-
-    #topBarToggle {
-        top: max(10px, env(safe-area-inset-top));
-        left: max(10px, env(safe-area-inset-left));
     }
 }

@@ -447,6 +447,16 @@
             box-shadow: 0 0 10px rgba(232, 197, 71, 0.2);
         }
 
+        /* ★ 固定軸向的按鈕（不可點） */
+        .gizmo-btn:disabled,
+        .gizmo-btn:disabled:hover {
+            background: rgba(232, 197, 71, 0.2);
+            border-color: #e8c547;
+            color: #e8c547;
+            box-shadow: 0 0 10px rgba(232, 197, 71, 0.2);
+            cursor: default;
+        }
+
         .parts-list {
             margin: 8px 0 4px;
             display: flex;
@@ -758,7 +768,7 @@
 
     <div id="main">
         <div id="sceneContainer">
-            <div id="sceneHint">🖱 左鍵旋轉 · 滾輪縮放 · 右鍵平移 · 拖曳箭頭移動部件 · G/R/S 模式 · Ctrl+Z 撤銷</div>
+            <div id="sceneHint">🖱 左鍵旋轉 · 滾輪縮放 · 右鍵平移 · 拖曳箭頭移動部件（世界軸） · G/R/S 模式 · Ctrl+Z 撤銷</div>
         </div>
         <div id="panel">
             <div id="panelHeader">
@@ -1508,8 +1518,11 @@
             }
             transformControls = new THREE.TransformControls(camera, renderer.domElement);
             transformControls.setSize(0.85);
-            transformControls.setSpace('world');
+            transformControls.setSpace('world');   // ★ 一律世界座標
             transformControls.setMode(gizmoMode);
+
+            // ★★ 讓 Gizmo 的三軸永遠對齊世界 X / Y / Z，不隨部件自身旋轉而傾斜
+            lockGizmoToWorldAxes(transformControls);
 
             // ★ Gizmo drag end → trigger CSG rebuild if the piece has any air block
             transformControls.addEventListener('dragging-changed', (e) => {
@@ -1527,6 +1540,38 @@
             transformControls.addEventListener('objectChange', onGizmoChange);
 
             scene.add(transformControls);
+        }
+
+        // ★ 強制 Gizmo 的箭頭／圓環永遠指向世界座標軸。
+        //   TransformControls 在 "local" 模式（或某些版本於縮放模式）會把
+        //   自身 quaternion 設成部件的世界旋轉，導致箭頭跟著部件傾斜。
+        //   這裡在每次 updateMatrixWorld 之後把它歸零，並重建矩陣。
+        //   縮放模式例外：世界軸縮放會造成 shear，Three.js 一律採局部軸。
+        function lockGizmoToWorldAxes(tc) {
+            const origUpdateMatrixWorld = tc.updateMatrixWorld.bind(tc);
+
+            tc.updateMatrixWorld = function (force) {
+                origUpdateMatrixWorld(force);
+
+                if (this.mode === 'scale') return;   // 縮放維持局部軸（避免剪切）
+                if (this.quaternion.w === 1 &&
+                    this.quaternion.x === 0 &&
+                    this.quaternion.y === 0 &&
+                    this.quaternion.z === 0) return; // 已經是世界軸，不做事
+
+                this.quaternion.set(0, 0, 0, 1);
+                this.updateMatrix();
+
+                if (this.parent) {
+                    this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
+                } else {
+                    this.matrixWorld.copy(this.matrix);
+                }
+
+                for (let i = 0; i < this.children.length; i++) {
+                    this.children[i].updateMatrixWorld(true);
+                }
+            };
         }
 
         function onGizmoChange() {
@@ -1557,17 +1602,6 @@
             document.querySelectorAll('.gizmo-btn[data-mode]').forEach(b => {
                 b.classList.toggle('active', b.dataset.mode === mode);
             });
-        }
-
-        function toggleGizmoSpace() {
-            if (!transformControls) return;
-            const next = transformControls.space === 'world' ? 'local' : 'world';
-            transformControls.setSpace(next);
-            document.querySelectorAll('.gizmo-space-btn').forEach(b => {
-                b.textContent = next === 'world' ? '🌐 世界' : '📦 局部';
-                b.classList.toggle('active', next === 'local');
-            });
-            showToast(next === 'world' ? '🌐 世界座標' : '📦 局部座標');
         }
 
         function onResize() {
@@ -2116,7 +2150,7 @@
                   <button class="gizmo-btn active" data-mode="translate" onclick="setGizmoMode('translate')" title="移動 (G)">✥ 移動</button>
                   <button class="gizmo-btn" data-mode="rotate" onclick="setGizmoMode('rotate')" title="旋轉 (R)">⟳ 旋轉</button>
                   <button class="gizmo-btn" data-mode="scale" onclick="setGizmoMode('scale')" title="縮放 (S)">⤢ 縮放</button>
-                  <button class="gizmo-btn gizmo-space-btn" onclick="toggleGizmoSpace()" title="切換世界/局部座標">🌐 世界</button>
+                  <button class="gizmo-btn active" disabled title="固定為世界座標：軸向不隨部件旋轉">🌐 世界軸</button>
                 </div>
                 <div class="pos-row">
                   ${rangeRow('X', `partX_${type}`, 0, -2, 2, 0.01)}
