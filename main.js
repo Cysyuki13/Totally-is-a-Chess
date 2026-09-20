@@ -206,6 +206,128 @@ async function enterMobileFullscreen() {
     }
 }
 
+// ============================================================
+//  ★ Auto-Force Landscape System
+// ============================================================
+//  三層防護：
+//    1. 第一次觸控 → 進全屏 + 鎖定 landscape
+//    2. 全屏狀態變化 → 重新鎖定（Android Chrome 退出全屏時會解除鎖定）
+//    3. 若鎖定失敗（iOS）→ 用 CSS 顯示「請旋轉」遮罩
+// ============================================================
+
+let _landscapeLockAttempted = false;
+
+/** 檢查目前是否直向 */
+function isPortraitOrientation() {
+    if (screen.orientation && typeof screen.orientation.type === 'string') {
+        return screen.orientation.type.startsWith('portrait');
+    }
+    return window.innerHeight > window.innerWidth;
+}
+
+/** 嘗試鎖定 landscape；回傳 Promise<boolean> 表示是否成功 */
+async function tryLockLandscape() {
+    // 沒有 API → 失敗
+    if (!screen.orientation || !screen.orientation.lock) return false;
+
+    // 必須處於全屏才能鎖定（Chrome / Android 的要求）
+    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!inFs) return false;
+
+    try {
+        await screen.orientation.lock('landscape');
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+/** 依「手機 + 直向」判斷是否顯示旋轉遮罩 */
+function updateRotateOverlay() {
+    if (!IS_MOBILE) {
+        document.body.classList.remove('force-landscape');
+        return;
+    }
+    if (isPortraitOrientation()) {
+        document.body.classList.add('force-landscape');
+    } else {
+        document.body.classList.remove('force-landscape');
+    }
+}
+
+/**
+ * 主動嘗試一次：進全屏（若尚未）+ 鎖定 landscape + 更新遮罩。
+ * 必須在使用者手勢中呼叫。
+ */
+async function enforceLandscape() {
+    _landscapeLockAttempted = true;
+
+    // 1) 進全屏（若還沒）
+    if (IS_MOBILE && !IS_STANDALONE) {
+        try {
+            await enterMobileFullscreen();
+        } catch (_) { }
+    }
+
+    // 2) 鎖定 landscape
+    await tryLockLandscape();
+
+    // 3) 更新視覺遮罩
+    updateRotateOverlay();
+}
+
+/** 掛載所有監聽器 — 在 window.onload 呼叫一次即可 */
+function setupForceLandscape() {
+    if (!IS_MOBILE) return;
+
+    // ── 第一次觸控：主動出擊 ──
+    const firstTap = () => {
+        if (_landscapeLockAttempted) return;
+        enforceLandscape();
+        document.removeEventListener('touchend', firstTap, true);
+        document.removeEventListener('click', firstTap, true);
+    };
+    document.addEventListener('touchend', firstTap, { capture: true, passive: true });
+    document.addEventListener('click', firstTap, { capture: true, passive: true });
+
+    // ── 全屏狀態變化：重新鎖定（Chrome 退出全屏會自動解鎖） ──
+    const onFsChange = () => {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            // 進入全屏 → 再次鎖定
+            tryLockLandscape();
+        }
+        updateRotateOverlay();
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    document.addEventListener('mozfullscreenchange', onFsChange);
+    document.addEventListener('MSFullscreenChange', onFsChange);
+
+    // ── 螢幕旋轉 / 尺寸變化：更新遮罩 ──
+    if (screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener('change', updateRotateOverlay);
+    }
+    window.addEventListener('orientationchange', () => {
+        // 有些瀏覽器 orientationchange 會早於 layout 完成，稍等一下
+        setTimeout(updateRotateOverlay, 60);
+    });
+    window.addEventListener('resize', updateRotateOverlay);
+
+    // ── 視窗重新取得焦點時（從背景切回）再檢查一次 ──
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            updateRotateOverlay();
+            // 若已進全屏，再嘗試鎖定一次
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                tryLockLandscape();
+            }
+        }
+    });
+
+    // ── 初始檢查 ──
+    updateRotateOverlay();
+}
+
 /** Attach the one-shot first-tap listener. Call once on page load. */
 function setupMobileAutoFullscreen() {
     if (!IS_MOBILE || IS_STANDALONE) return;
@@ -632,12 +754,13 @@ class ChessGame {
         return true;
     }
 
-    makeMove(fromR, fromC, toR, toC, promotionType = null) {
+    makeMove(fromR, fromC, toR, toC, promotionType = null, deferFlip = false) {
         const piece = this.board[fromR][fromC];
         if (!piece) return false;
         const legalMoves = this.getLegalMoves(fromR, fromC);
         const move = legalMoves.find(m => m.r === toR && m.c === toC);
         if (!move) return false;
+
         const captured = this.board[toR][toC];
         const prevEnPassant = this.enPassantTarget;
         const prevCastling = { ...this.castlingRights };
@@ -705,7 +828,7 @@ class ChessGame {
         if (piece.type === 'pawn' || captured) this.halfMoveClock = 0;
         else this.halfMoveClock++;
 
-        this.flipTurn();
+        if (!deferFlip) this.flipTurn();
         return true;
     }
     getGameStatus() {
@@ -1490,29 +1613,30 @@ const PIECE_PARAMS = {
                 "deleted": true
             },
             "custom_1000": {
-                "type": "cone",
+                "type": "air",
+                "name": "Air Cut",
                 "geometryParams": {
-                    "radius": 0.15,
-                    "height": 0.3
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
                 },
                 "roughness": 0.5,
                 "metalness": 0.2,
                 "position": {
-                    "x": 0.002,
-                    "y": 0.2385,
+                    "x": 0.1163,
+                    "y": 0.927,
                     "z": 0
                 },
                 "rotation": {
                     "x": 0,
                     "y": 0,
-                    "z": 0
+                    "z": 0.4762
                 },
                 "scale": {
-                    "x": 1.9999,
-                    "y": 0.9193,
-                    "z": 1.9931
-                },
-                "name": "Cone"
+                    "x": 1,
+                    "y": 0.09,
+                    "z": 1
+                }
             },
             "custom_1001": {
                 "type": "cylinder",
@@ -1813,32 +1937,6 @@ const PIECE_PARAMS = {
                     "z": 0.85
                 },
                 "name": "Cone Copy"
-            },
-            "custom_1020": {
-                "type": "air",
-                "geometryParams": {
-                    "width": 0.3,
-                    "height": 0.3,
-                    "depth": 0.3
-                },
-                "roughness": 0.5,
-                "metalness": 0.2,
-                "position": {
-                    "x": -0.0613,
-                    "y": 0.9222,
-                    "z": 0
-                },
-                "rotation": {
-                    "x": 0,
-                    "y": 0,
-                    "z": -2.4597
-                },
-                "scale": {
-                    "x": 0.0918,
-                    "y": 0.6278,
-                    "z": 2.5012
-                },
-                "name": "Air"
             },
             "custom_1021": {
                 "type": "cylinder",
@@ -4607,6 +4705,10 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
             fadeOutKnightGhostSquad(ghostSquad);
         }
         isAnimating = false;
+
+        // ★ 擊退動畫、撞牆動畫都跑完了，這時候才把回合交給對手
+        gameState.flipTurn();
+
         syncPiecesAfterMove();
         deselectPiece();
         switchTimer(gameState.turn);
@@ -4633,7 +4735,7 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
         } else {
             pieceObj.position.copy(targetPos);
 
-            gameState.makeMove(fromR, fromC, landingR, landingC, null);
+            gameState.makeMove(fromR, fromC, landingR, landingC, null, true);
 
             if (knockbackOption) {
                 const landedKnight = gameState.getPiece(landingR, landingC);
@@ -4847,7 +4949,7 @@ function executeQueenHeal(fromR, fromC, toR, toC, ability, isRemote = false) {
                 setTimeout(makeAIMove, 500);
             }
         }
-    }, 680);
+    }, 1050);
 }
 
 // 治癒視覺：綠色光柱 + 地面擴散環 + 上升粒子
@@ -5049,7 +5151,9 @@ function executeQueenRevive(fromR, fromC, toR, toC, ability, reviveType = null, 
                 obj.scale.set(1, 1, 1);
                 obj.rotation.y = baseRotY;
             }
-            finish();
+            // ★ spawnReviveEffect 總長 1.6s，棋子 0.9s 現形，
+            //   再等 0.75s 讓復活法陣播完才交棒給對手
+            setTimeout(finish, 750);
         }
     };
     anim();
@@ -7111,6 +7215,12 @@ function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = fals
         return;
     }
 
+    // ★ 皇后 — 復活   ← 新增這段
+    if (piece && piece.type === 'queen' && ability.id === 'revive') {
+        executeQueenRevive(fromR, fromC, targetR, targetC, ability, reviveType, isRemote);
+        return;
+    }
+
     if (piece && piece.type === 'pawn' && ability.name === '衝鋒爆炸') {
         executePawnAbility(fromR, fromC, targetR, targetC, ability, isRemote);
         return;
@@ -7284,6 +7394,50 @@ function updateTurnIndicator() {
     }
     updateTurnMessage();
 }
+
+// ============================================================
+//  Mobile Top Bar Drawer
+// ============================================================
+let topBarDrawerOpen = false;
+
+function toggleTopBar() {
+    if (topBarDrawerOpen) hideTopBarDrawer();
+    else showTopBarDrawer();
+}
+
+function showTopBarDrawer() {
+    const bar = document.getElementById('topBar');
+    if (!bar || bar.classList.contains('hidden')) return;
+    topBarDrawerOpen = true;
+    bar.classList.add('mobile-visible');
+    document.getElementById('topBarToggle')?.classList.add('active');
+    document.getElementById('topBarBackdrop')?.classList.add('active');
+}
+
+function hideTopBarDrawer() {
+    topBarDrawerOpen = false;
+    document.getElementById('topBar')?.classList.remove('mobile-visible');
+    document.getElementById('topBarToggle')?.classList.remove('active');
+    document.getElementById('topBarBackdrop')?.classList.remove('active');
+}
+
+/** 依「遊戲中 + 手機」兩個條件，決定 ☰ 是否顯示 */
+function updateTopBarToggleVisibility() {
+    const bar = document.getElementById('topBar');
+    const btn = document.getElementById('topBarToggle');
+    if (!bar || !btn) return;
+
+    const gameActive = !bar.classList.contains('hidden');
+    btn.style.display = (gameActive && IS_MOBILE) ? 'flex' : 'none';
+
+    // 遊戲結束 / 回主選單 → 順手把抽屜關掉
+    if (!gameActive) hideTopBarDrawer();
+}
+
+// 螢幕轉向 / 尺寸變化時，把抽屜關掉，避免殘留半開狀態
+window.addEventListener('resize', () => {
+    if (topBarDrawerOpen) hideTopBarDrawer();
+});
 
 function updateTurnMessage() {
     const el = document.getElementById('checkWarning');
@@ -7755,6 +7909,8 @@ function backToMenu() {
     document.getElementById('gameOverOverlay').classList.add('hidden');
     document.getElementById('restartConfirmOverlay').classList.add('hidden');
     document.getElementById('topBar').classList.add('hidden');
+    updateTopBarToggleVisibility();
+
     document.getElementById('actionBar').classList.remove('visible');
     document.getElementById('aimHint').classList.remove('visible');
     if (boardGroup) scene.remove(boardGroup);
@@ -8318,6 +8474,7 @@ function startAIGame(difficulty) {
     document.getElementById('aiDifficultyMenu').classList.add('hidden');
     document.getElementById('mainMenu').classList.add('hidden');
     document.getElementById('topBar').classList.remove('hidden');
+    updateTopBarToggleVisibility();
 
     document.getElementById('timerDisplay').style.display = 'none';
     resetCameraForPlayer();
@@ -8355,6 +8512,8 @@ function restartGame() {
 
 function initNewGame() {
     document.getElementById('topBar').classList.remove('hidden');
+    updateTopBarToggleVisibility();
+
     gameState = new ChessGame();
     resetKingSkillState();
     gameOverFlag = false;
@@ -10118,8 +10277,14 @@ window.onload = () => {
     // ★ NEW — hook the first tap to enter fullscreen
     setupMobileAutoFullscreen();
 
+    // ★ NEW — 強制橫向系統（含旋轉提示遮罩）
+    setupForceLandscape();
+
     // ★ Initialize AI mode toggle UI
     updateAIModeUI();
+
+    updateTopBarToggleVisibility();
+
 
     // ★ ESC closes the restart confirmation modal
     window.addEventListener('keydown', (e) => {

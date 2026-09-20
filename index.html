@@ -21,10 +21,23 @@
 <body>
 
     <div id="gameCanvas"></div>
+
+    <!-- ★ 直向時強制顯示的旋轉提示 -->
+    <div id="rotateDeviceOverlay">
+        <div class="rotate-icon">📱</div>
+        <div class="rotate-title">請旋轉至橫向</div>
+        <div class="rotate-subtitle">Rotate your device to landscape</div>
+        <div class="rotate-arrow">↻</div>
+    </div>
+
     <div id="damageOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:100;">
     </div>
 
     <button id="globalFullscreenBtn" onclick="toggleFullscreen()" title="全屏 / Fullscreen" aria-label="全屏">⛶</button>
+
+    <!-- ★ 手機版：抽屜切換按鈕 + 背景遮罩 -->
+    <button id="topBarToggle" onclick="toggleTopBar()" title="選單" aria-label="開啟選單">☰</button>
+    <div id="topBarBackdrop" onclick="hideTopBarDrawer()"></div>
 
     <div class="game-top-bar hidden" id="topBar">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -489,8 +502,7 @@
                     <div class="battle-hearts" id="battlePlayerHearts"></div>
                 </div>
                 <!-- ★ NEW: shows what the LOCAL player picked -->
-                <div class="battle-choice-bubble battle-choice-bubble-player"
-                     id="battlePlayerChoiceBubble"></div>
+                <div class="battle-choice-bubble battle-choice-bubble-player" id="battlePlayerChoiceBubble"></div>
             </div>
 
             <!-- Bottom bar -->

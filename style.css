@@ -2513,3 +2513,225 @@ body {
         border-bottom-width: 7px;
     }
 }
+
+/* ============================================================
+   Mobile Top Bar Drawer
+   ============================================================ */
+
+/* Toggle button — 預設桌面隱藏，只在手機遊戲中顯示 */
+#topBarToggle {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 300;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 2px solid var(--gold);
+    background: rgba(22, 33, 62, 0.92);
+    color: var(--gold);
+    font-size: 1.4rem;
+    font-weight: 900;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-family: inherit;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
+    pointer-events: auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#topBarToggle.active {
+    background: var(--gold);
+    color: #1a1a2e;
+}
+
+#topBarToggle:active {
+    transform: scale(0.93);
+}
+
+/* 抽屜背後遮罩 */
+#topBarBackdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 4;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+#topBarBackdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (max-width: 768px) {
+
+    /* 手機版：把 topBar 變成從上方滑入的抽屜 */
+    .game-top-bar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px 60px 12px 16px;
+        /* 右邊留給全屏按鈕 */
+        gap: 8px;
+        max-height: 80vh;
+        max-height: 80dvh;
+        overflow-y: auto;
+        transform: translateY(-110%);
+        transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+        border-bottom: 2px solid rgba(232, 197, 71, 0.3);
+    }
+
+    .game-top-bar.mobile-visible {
+        transform: translateY(0);
+    }
+
+    /* 第一行（回合/計時/提示） */
+    .game-top-bar>div:first-child {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* 第二行（按鈕組）— 加一條分隔線 */
+    .game-top-bar>div:last-child {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(232, 197, 71, 0.2);
+    }
+
+    /* 字級微調（沿用原本的行動版設定，這裡再收斂一點） */
+    .turn-indicator {
+        font-size: 0.85rem;
+        gap: 6px;
+    }
+
+    .timer-display {
+        font-size: 0.8rem;
+        padding: 3px 10px;
+        gap: 4px;
+    }
+
+    .timer-item .time {
+        min-width: 36px;
+    }
+}
+
+/* 極窄螢幕（短邊手機）— 抽屜內容再縮一點 */
+@media (max-width: 480px) {
+    .game-top-bar {
+        padding: 10px 56px 10px 14px;
+    }
+
+    .game-top-bar>div:last-child .btn {
+        padding: 5px 10px !important;
+        font-size: 0.72rem !important;
+    }
+}
+
+/* ============================================================
+   Force Landscape — rotate prompt overlay
+   ============================================================ */
+#rotateDeviceOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #0d0d1a;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: var(--gold);
+    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    text-align: center;
+    padding: 24px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#rotateDeviceOverlay .rotate-icon {
+    font-size: 4.5rem;
+    line-height: 1;
+    animation: rotatePhone 2s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px rgba(232, 197, 71, 0.6));
+}
+
+#rotateDeviceOverlay .rotate-title {
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px rgba(232, 197, 71, 0.5);
+}
+
+#rotateDeviceOverlay .rotate-subtitle {
+    font-size: 0.9rem;
+    opacity: 0.65;
+    letter-spacing: 1px;
+}
+
+#rotateDeviceOverlay .rotate-arrow {
+    font-size: 2rem;
+    margin-top: 10px;
+    opacity: 0.55;
+    animation: spinArrow 1.6s linear infinite;
+}
+
+@keyframes rotatePhone {
+
+    0%,
+    40%,
+    100% {
+        transform: rotate(0deg);
+    }
+
+    60%,
+    90% {
+        transform: rotate(-90deg);
+    }
+}
+
+@keyframes spinArrow {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 只在「手機 + 直向」時才顯示 */
+body.force-landscape #rotateDeviceOverlay {
+    display: flex;
+}
+
+/* 手機橫向時，讓全螢幕按鈕避開劉海 / 動態島 */
+@media (orientation: landscape) and (pointer: coarse) {
+    #globalFullscreenBtn {
+        top: max(10px, env(safe-area-inset-top));
+        right: max(10px, env(safe-area-inset-right));
+    }
+
+    #topBarToggle {
+        top: max(10px, env(safe-area-inset-top));
+        left: max(10px, env(safe-area-inset-left));
+    }
+}

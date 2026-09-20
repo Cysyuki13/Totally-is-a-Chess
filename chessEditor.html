@@ -1066,11 +1066,154 @@
         function isSolidGeometry(geo) {
             if (!geo) return false;
             const t = geo.type;
-            // 這些是開放曲面，沒有體積可以進行 CSG
+            // 開放曲面沒有體積，改走「多邊形裁切」路徑
             if (t === 'RingGeometry' || t === 'PlaneGeometry' || t === 'CircleGeometry') return false;
             return true;
         }
 
+        function makeEmptyGeometry() {
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+            g.setAttribute('normal', new THREE.Float32BufferAttribute([], 3));
+            g.computeBoundingBox();
+            g.computeBoundingSphere();
+            return g;
+        }
+
+        // ── 取得網格在世界座標中的 6 個外側平面（凸體裁切用）────────
+        function getWorldBoxPlanes(mesh) {
+            mesh.updateMatrixWorld(true);
+            const geo = mesh.geometry;
+            if (!geo.boundingBox) geo.computeBoundingBox();
+            const bb = geo.boundingBox;
+            if (!bb || bb.isEmpty()) return [];
+
+            const m = mesh.matrixWorld;
+            const nrmM = new THREE.Matrix3().getNormalMatrix(m);
+            const planes = [];
+            const axes = [
+                [new THREE.Vector3(1, 0, 0), bb.min.x, bb.max.x],
+                [new THREE.Vector3(0, 1, 0), bb.min.y, bb.max.y],
+                [new THREE.Vector3(0, 0, 1), bb.min.z, bb.max.z],
+            ];
+            for (const [axis, minV, maxV] of axes) {
+                for (const [val, sign] of [[maxV, 1], [minV, -1]]) {
+                    const centerWorld = axis.clone().multiplyScalar(val).applyMatrix4(m);
+                    const normal = axis.clone().multiplyScalar(sign).applyMatrix3(nrmM).normalize();
+                    planes.push({ normal, constant: -normal.dot(centerWorld) });
+                }
+            }
+            return planes;
+        }
+
+        // ── 保留多邊形「在盒子外」的片段，回傳多個多邊形 ─────────────
+        //    盒子是凸體：只要多邊形整片落在任一個外側面之外，就必定在盒外。
+        function clipPolyOutsideBox(poly, planes, planeIdx, out) {
+            if (!out) out = [];
+            if (poly.length < 3) return out;
+            if (planeIdx >= planes.length) return out;   // 全部落在盒內 → 丟棄
+
+            const plane = planes[planeIdx];
+            const d = poly.map(v => plane.normal.dot(v.pos) + plane.constant);
+
+            let hasFront = false, hasBack = false;
+            for (const x of d) {
+                if (x > 1e-7) hasFront = true;
+                else if (x < -1e-7) hasBack = true;
+            }
+            // 整片都在這個面的內側 → 還得看其他面
+            if (!hasFront) return clipPolyOutsideBox(poly, planes, planeIdx + 1, out);
+            // 整片都在這個面的外側 → 確定在盒外，整片保留
+            if (!hasBack) { out.push(poly); return out; }
+
+            const front = [], back = [];
+            for (let i = 0; i < poly.length; i++) {
+                const j = (i + 1) % poly.length;
+                const di = d[i], dj = d[j];
+                if (di >= 0) front.push(poly[i]);
+                if (di <= 0) back.push(poly[i]);
+                if ((di > 0 && dj < 0) || (di < 0 && dj > 0)) {
+                    const t = di / (di - dj);
+                    const pos = poly[i].pos.clone().lerp(poly[j].pos, t);
+                    const nrm = poly[i].nrm.clone().lerp(poly[j].nrm, t).normalize();
+                    front.push({ pos, nrm });
+                    back.push({ pos: pos.clone(), nrm: nrm.clone() });
+                }
+            }
+            if (front.length >= 3) out.push(front);
+            if (back.length >= 3) clipPolyOutsideBox(back, planes, planeIdx + 1, out);
+            return out;
+        }
+
+        // ── 用空氣塊裁切「開放曲面」網格（平面 / 圓環 / 圓盤）────────
+        function clipMeshByAirBoxes(mesh, boxesPlanes) {
+            mesh.updateMatrixWorld(true);
+            const src = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+            const posAttr = src.attributes.position;
+            const nrmAttr = src.attributes.normal;
+
+            const matrix = mesh.matrixWorld;
+            const invMatrix = new THREE.Matrix4().copy(matrix).invert();
+            const nrmMatrix = new THREE.Matrix3().getNormalMatrix(matrix);
+            const invNrmMatrix = new THREE.Matrix3().getNormalMatrix(invMatrix);
+
+            const outPos = [], outNrm = [];
+            const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+
+            for (let i = 0; i < posAttr.count; i += 3) {
+                a.fromBufferAttribute(posAttr, i).applyMatrix4(matrix);
+                b.fromBufferAttribute(posAttr, i + 1).applyMatrix4(matrix);
+                c.fromBufferAttribute(posAttr, i + 2).applyMatrix4(matrix);
+
+                const faceN = new THREE.Vector3()
+                    .subVectors(b, a)
+                    .cross(new THREE.Vector3().subVectors(c, a))
+                    .normalize();
+
+                const ns = [0, 1, 2].map(k => {
+                    if (!nrmAttr) return faceN.clone();
+                    return new THREE.Vector3()
+                        .fromBufferAttribute(nrmAttr, i + k)
+                        .applyMatrix3(nrmMatrix)
+                        .normalize();
+                });
+
+                let polys = [[
+                    { pos: a.clone(), nrm: ns[0] },
+                    { pos: b.clone(), nrm: ns[1] },
+                    { pos: c.clone(), nrm: ns[2] },
+                ]];
+
+                // 依序挖掉每一個重疊空氣塊
+                for (const planes of boxesPlanes) {
+                    const next = [];
+                    for (const p of polys) clipPolyOutsideBox(p, planes, 0, next);
+                    polys = next;
+                    if (polys.length === 0) break;
+                }
+
+                for (const poly of polys) {
+                    for (let k = 2; k < poly.length; k++) {
+                        const tri = [poly[0], poly[k - 1], poly[k]];
+                        for (const v of tri) {
+                            const p = v.pos.clone().applyMatrix4(invMatrix);
+                            const n = v.nrm.clone().applyMatrix3(invNrmMatrix).normalize();
+                            outPos.push(p.x, p.y, p.z);
+                            outNrm.push(n.x, n.y, n.z);
+                        }
+                    }
+                }
+            }
+
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.Float32BufferAttribute(outPos, 3));
+            g.setAttribute('normal', new THREE.Float32BufferAttribute(outNrm, 3));
+            g.computeBoundingBox();
+            g.computeBoundingSphere();
+            return g;
+        }
+
+        // ── 主流程：把所有與空氣塊重疊的部件全部挖掉 ──────────────────
         function applyAirBlockCSG(group) {
             const airMeshes = [];
             const partMeshes = [];
@@ -1082,49 +1225,54 @@
 
             group.updateMatrixWorld(true);
 
-            // Precompute air-block polygons + world-space AABBs (with a
-            // generous epsilon so parts that merely *touch* the air block
-            // still get processed).
+            // 預先算好每個空氣塊的世界座標資料
             const airData = airMeshes.map(air => {
+                // 加一個極小偏移，避免 CSG 共面誤差
+                const origPos = air.position.clone();
+                air.position.add(new THREE.Vector3(0.0001, 0.00013, 0.00011));
+                air.updateMatrixWorld(true);
+
                 const bbox = new THREE.Box3().setFromObject(air);
-                bbox.expandByScalar(0.03);   // forgiving margin
-                return {
-                    polys: meshToCSGPolygons(air),
-                    bbox,
-                };
+                bbox.expandByScalar(0.03);   // 放寬一點，避免邊緣漏判
+
+                const polys = meshToCSGPolygons(air);
+                const planes = getWorldBoxPlanes(air);
+
+                air.position.copy(origPos);
+                air.updateMatrixWorld(true);
+
+                return { polys, bbox, planes };
             });
 
             for (const part of partMeshes) {
-                if (!isSolidGeometry(part.geometry)) continue;
-
                 const partBox = new THREE.Box3().setFromObject(part);
                 partBox.expandByScalar(0.03);
 
-                // Collect all air blocks whose AABB might overlap
+                // 收集所有 AABB 可能重疊的空氣塊
                 const overlapping = airData.filter(a => partBox.intersectsBox(a.bbox));
                 if (overlapping.length === 0) continue;
 
-                // Extract fresh polygons from the part and subtract each air block
-                let polys = meshToCSGPolygons(part);
-                for (const air of overlapping) {
-                    try {
-                        polys = CSG.subtract(polys, air.polys);
-                    } catch (e) {
-                        console.warn('CSG subtract failed on part', part.userData.partKey, e);
+                if (isSolidGeometry(part.geometry)) {
+                    // ── 封閉實體：CSG 布林減集，切口有完整斷面 ──
+                    let polys = meshToCSGPolygons(part);
+                    for (const air of overlapping) {
+                        try {
+                            polys = CSG.subtract(polys, air.polys);
+                        } catch (e) {
+                            console.warn('CSG subtract failed on part', part.userData.partKey, e);
+                        }
                     }
-                }
+                    const newGeo = (polys && polys.length > 0)
+                        ? csgPolygonsToGeometry(polys, part)
+                        : makeEmptyGeometry();
 
-                if (polys && polys.length > 0) {
-                    const newGeo = csgPolygonsToGeometry(polys, part);
                     if (part.geometry.dispose) part.geometry.dispose();
                     part.geometry = newGeo;
                 } else {
-                    // Everything was carved away → collapse the mesh
-                    const empty = new THREE.BufferGeometry();
-                    empty.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
-                    empty.setAttribute('normal', new THREE.Float32BufferAttribute([], 3));
+                    // ── 開放曲面（平面 / 圓環 / 圓盤）：多邊形裁切直接挖洞 ──
+                    const newGeo = clipMeshByAirBoxes(part, overlapping.map(a => a.planes));
                     if (part.geometry.dispose) part.geometry.dispose();
-                    part.geometry = empty;
+                    part.geometry = newGeo;
                 }
             }
         }
@@ -1139,16 +1287,28 @@
     <script>
         // ============================================================
         //  1. 參數定義 (預設值，包含部件)
+        //     ★ 已更新為 PIECE_PARAMS 內容
         // ============================================================
         const DEFAULT_PARAMS = {
             "pawn": {
-                "baseRadius": 0.12, "baseHeight": 0.28, "topRadius": 0.185, "topHeight": 0.04, "sphereRadius": 0.18,
-                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
+                "baseRadius": 0.12,
+                "baseHeight": 0.28,
+                "topRadius": 0.185,
+                "topHeight": 0.04,
+                "sphereRadius": 0.18,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
                 "position": { "x": -4.2, "y": 0, "z": 0 }
             },
             "rook": {
-                "bodyRadius": 0.2, "bodyHeight": 0.44, "crownRadius": 0.285, "crownHeight": 0.13,
-                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
+                "bodyRadius": 0.2,
+                "bodyHeight": 0.44,
+                "crownRadius": 0.285,
+                "crownHeight": 0.13,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
                 "position": { "x": -2.52, "y": 0.02, "z": 0 },
                 "parts": {
                     "custom_1002": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy Copy" },
@@ -1158,9 +1318,17 @@
                 }
             },
             "knight": {
-                "bodyRadius": 0.26, "bodyHeight": 0.38, "neckWidth": 0.22, "neckHeight": 0.3, "neckDepth": 0.22,
-                "headWidth": 0.16, "headHeight": 0.22, "headDepth": 0.3,
-                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
+                "bodyRadius": 0.26,
+                "bodyHeight": 0.38,
+                "neckWidth": 0.22,
+                "neckHeight": 0.3,
+                "neckDepth": 0.22,
+                "headWidth": 0.16,
+                "headHeight": 0.22,
+                "headDepth": 0.3,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
                 "position": { "x": -0.84, "y": 0.02, "z": 0 },
                 "parts": {
                     "body": { "position": { "x": 0, "y": 0.21, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5, "y": 1.02, "z": 0.84 } },
@@ -1169,18 +1337,41 @@
                 }
             },
             "bishop": {
-                "bodyRadius": 0.22, "bodyHeight": 0.42, "sphereRadius": 0.1,
-                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
+                "bodyRadius": 0.22,
+                "bodyHeight": 0.42,
+                "sphereRadius": 0.1,
+                "color": "#ffffff",
+                "roughness": 0.25,
+                "metalness": 0.2,
                 "position": { "x": 0.84, "y": 0.02, "z": 0 },
                 "parts": {
-                    "body": { "position": { "x": 0, "y": 0.31, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5, "y": 1.2, "z": 0.5 } },
-                    "sphere": { "position": { "x": 0, "y": 0.93, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
-                    "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.42, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.08, "y": 2, "z": 1.2 }, "name": "Torus" }
+                    "body": { "deleted": true },
+                    "sphere": { "deleted": true },
+                    "custom_1000": { "type": "air", "name": "Air Cut", "geometryParams": { "width": 0.3, "height": 0.3, "depth": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.1163, "y": 0.927, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0.4762 }, "scale": { "x": 1, "y": 0.09, "z": 1 } },
+                    "custom_1001": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.1306, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.2957, "y": 1, "z": 1.2146 }, "name": "Cylinder" },
+                    "custom_1003": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.52, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.25, "y": 2.91, "z": 1.25 }, "name": "Cone" },
+                    "custom_1004": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.59, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.65, "y": 1.25, "z": 0.65 }, "name": "Cylinder" },
+                    "custom_1005": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.6888, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": -0.0615, "z": 1 }, "name": "Cylinder" },
+                    "custom_1006": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7085, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 }, "name": "Cylinder Copy" },
+                    "custom_1007": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7318, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 }, "name": "Cylinder" },
+                    "custom_1009": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.016, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.51, "y": 0.15, "z": 0.56 }, "name": "Cylinder" },
+                    "custom_1010": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9859, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.3, "y": 0.0559, "z": 0.3 }, "name": "Cylinder Copy" },
+                    "base": { "position": { "x": 0, "y": 0.06, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
+                    "custom_1016": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7763, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 }, "name": "Cylinder Copy" },
+                    "custom_1017": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9228, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.85, "y": 0.7, "z": 0.85 }, "name": "Cone" },
+                    "custom_1018": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.754, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 3.15 }, "scale": { "x": 0.85, "y": 0.45, "z": 0.85 }, "name": "Cone Copy" },
+                    "custom_1021": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7686, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 }, "name": "Cylinder Copy Copy" }
                 }
             },
             "queen": {
-                "bodyRadius": 0.22, "bodyHeight": 0.52, "crownRadius": 0.27, "crownHeight": 0.2, "spikeRadius": 0.13,
-                "color": "#f5f0e1", "roughness": 0.25, "metalness": 0.2,
+                "bodyRadius": 0.22,
+                "bodyHeight": 0.52,
+                "crownRadius": 0.27,
+                "crownHeight": 0.2,
+                "spikeRadius": 0.13,
+                "color": "#f5f0e1",
+                "roughness": 0.25,
+                "metalness": 0.2,
                 "position": { "x": 2.52, "y": 0.03, "z": 0 },
                 "parts": {
                     "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.57, "z": 0 }, "rotation": { "x": -1.56, "y": 0, "z": 0 }, "scale": { "x": 1.56, "y": 1.58, "z": 1.12 }, "name": "Torus" },
@@ -1192,13 +1383,23 @@
                 }
             },
             "king": {
-                "bodyRadius": 0.235, "bodyHeight": 0.5, "crownRadius": 0.25, "crownHeight": 0.12,
-                "crossWidth": 0.07, "crossHeight": 0.28, "crossDepth": 0.105,
-                "color": "#ffffff", "roughness": 0.25, "metalness": 0.2,
+                "bodyRadius": 0.235,
+                "bodyHeight": 0.5,
+                "crownRadius": 0.25,
+                "crownHeight": 0.12,
+                "crossWidth": 0.07,
+                "crossHeight": 0.28,
+                "crossDepth": 0.105,
+                "color": "#ffffff",
+                "roughness": 0.25,
+                "metalness": 0.2,
                 "position": { "x": 4.2, "y": 0.04, "z": 0 },
                 "parts": {
                     "base": { "position": { "x": 0, "y": 0.06, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
-                    "body": { "deleted": true }, "crown": { "deleted": true }, "crossV": { "deleted": true }, "crossH": { "deleted": true },
+                    "body": { "deleted": true },
+                    "crown": { "deleted": true },
+                    "crossV": { "deleted": true },
+                    "crossH": { "deleted": true },
                     "custom_1000": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.002, "y": 0.2539, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.9999, "y": 0.9193, "z": 1.9931 }, "name": "Cone" },
                     "custom_1001": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.1491, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.2957, "y": 1, "z": 1.2146 }, "name": "Cylinder" },
                     "custom_1003": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.4262, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.0914, "y": 2.9097, "z": 1.2881 }, "name": "Cone" },
@@ -1231,7 +1432,8 @@
         let gizmoMode = 'translate';
         let pieceGroups = {};
         let selectedPart = null;
-        let partIdCounter = 1000;
+        // ★ 起始計數調高，避免與預設 custom_10xx 部件 ID 衝突
+        let partIdCounter = 2000;
         let highlightBoxHelper = null;
         let highlightMeshRef = null;
 
@@ -1334,9 +1536,8 @@
             if (!mesh) return;
             writePartTransform(type, selectedPart.partId, mesh);
             syncPartInputs(type);
+            if (mesh.userData.isAir) syncAirOutline(mesh);
             if (highlightBoxHelper && highlightMeshRef === mesh) highlightBoxHelper.update();
-            // NOTE: We deliberately don't rebuild CSG here — doing so would
-            //       detach the gizmo mid-drag. Rebuild is triggered on drag end.
         }
 
         function attachGizmo() {
@@ -1538,17 +1739,8 @@
 
                     const isAir = partData.type === 'air';
                     const geo = createGeometry(partData.type, partData.geometryParams || {});
-                    // ★ Air blocks are visualized as a WIREFRAME-ONLY red cage.
-                    //   No filled faces → impossible to mistake for a solid part.
                     const mat = isAir
-                        ? new THREE.MeshBasicMaterial({
-                            color: 0xff3333,
-                            wireframe: true,
-                            transparent: true,
-                            opacity: 0.9,
-                            depthTest: false,
-                            depthWrite: false,
-                        })
+                        ? new THREE.MeshBasicMaterial({ color: 0xff3333 })
                         : createCustomPartMaterial(partData, params);
 
                     const mesh = new THREE.Mesh(geo, mat);
@@ -1565,9 +1757,37 @@
                     mesh.userData.isAir = isAir;
 
                     if (isAir) {
-                        // Wireframe material already draws every triangle edge,
-                        // so no separate EdgesGeometry child is needed.
+                        // ★ 半透明「挖空板」：永遠顯示在最上層，可穿透所有部件
+                        mesh.visible = true;
+                        mesh.material.transparent = true;
+                        mesh.material.opacity = 0.16;
+                        mesh.material.depthTest = false;
+                        mesh.material.depthWrite = false;
+                        mesh.material.side = THREE.DoubleSide;
+                        mesh.material.color.set(0xff3b5c);
                         mesh.renderOrder = 998;
+
+                        const outline = new THREE.LineSegments(
+                            new THREE.EdgesGeometry(geo),
+                            new THREE.LineBasicMaterial({
+                                color: 0xff3b5c,
+                                transparent: true,
+                                opacity: 0.9,
+                                depthTest: false,
+                                depthWrite: false,
+                            })
+                        );
+                        outline.name = '__airOutline_' + id;
+                        outline.renderOrder = 999;
+                        outline.frustumCulled = false;
+                        outline.raycast = () => { };
+                        outline.visible = true;
+                        outline.position.copy(mesh.position);
+                        outline.rotation.copy(mesh.rotation);
+                        outline.scale.copy(mesh.scale);
+                        group.add(outline);
+
+                        mesh.userData.airOutline = outline;
                     }
 
                     group.add(mesh);
@@ -1575,7 +1795,6 @@
                 }
             }
 
-            // ★ Apply CSG if any air block exists
             if (Object.values(group.userData.parts).some(m => m.userData.isAir)) {
                 try {
                     applyAirBlockCSG(group);
@@ -1640,6 +1859,50 @@
                 highlightPart(selectedPart.type, selectedPart.partId);
                 attachGizmo();
             }
+        }
+
+        let csgDebounceTimer = null;
+        function scheduleCSGRebuild() {
+            if (csgDebounceTimer) clearTimeout(csgDebounceTimer);
+            csgDebounceTimer = setTimeout(() => {
+                if (selectedPart) {
+                    rebuildSinglePiece(selectedPart.type);
+                }
+            }, 60);
+        }
+
+        function rebuildSinglePiece(type) {
+            const params = currentParams[type];
+            if (!params) return;
+
+            const oldGroup = pieceGroups[type];
+            const pos = params.position || { x: 0, y: 0, z: 0 };
+
+            if (selectedPart && selectedPart.type === type && transformControls) {
+                transformControls.detach();
+            }
+
+            if (oldGroup) {
+                scene.remove(oldGroup);
+                oldGroup.traverse(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                });
+            }
+
+            const newGroup = buildPiece(type, params, params.parts || {});
+            newGroup.position.set(pos.x, pos.y, pos.z);
+            scene.add(newGroup);
+            pieceGroups[type] = newGroup;
+
+            if (selectedPart && selectedPart.type === type) {
+                highlightPart(type, selectedPart.partId);
+                attachGizmo();
+            }
+            updatePartsListUI();
         }
 
         // ============================================================
@@ -1740,6 +2003,14 @@
             setVal(`partSZ_${type}`, mesh.scale.z);
         }
 
+        function syncAirOutline(mesh) {
+            const outline = mesh && mesh.userData && mesh.userData.airOutline;
+            if (!outline) return;
+            outline.position.copy(mesh.position);
+            outline.rotation.copy(mesh.rotation);
+            outline.scale.copy(mesh.scale);
+        }
+
         // ============================================================
         //  6. 面板UI生成
         // ============================================================
@@ -1835,7 +2106,7 @@
                 <button class="btn btn-success btn-sm" onclick="addPartToPiece('${type}')">➕ 添加</button>
               </div>
               <div id="partControls_${type}" style="margin-top:8px;display:none;">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+                <div style="display:flex;justify-space-between;align-items:center;gap:8px;margin-bottom:4px;">
                   <span style="font-size:0.7rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                     選中: <span id="selectedPartName_${type}">無</span>
                   </span>
@@ -1903,7 +2174,6 @@
                 bindRange(`posY_${type}`, updatePiecePos);
                 bindRange(`posZ_${type}`, updatePiecePos);
 
-                // ★ Part transform slider callback
                 const updatePart = () => {
                     if (!selectedPart || selectedPart.type !== type) return;
                     const mesh = getPartMesh(type, selectedPart.partId);
@@ -1925,10 +2195,10 @@
                         getRangeVal(`partSZ_${type}`, 1)
                     );
                     writePartTransform(type, selectedPart.partId, mesh);
+                    if (mesh.userData.isAir) syncAirOutline(mesh);
 
                     if (highlightBoxHelper && highlightMeshRef === mesh) highlightBoxHelper.update();
 
-                    // ★ 只要該棋子含有 air 塊，任何部件移動都要重算 CSG
                     const group = pieceGroups[type];
                     if (pieceHasAir(group)) {
                         scheduleCSGRebuild();
@@ -1941,736 +2211,371 @@
                 document.getElementById(`partControls_${type}`).style.display = 'none';
             }
 
-            setGizmoMode(gizmoMode);
-            const first = document.querySelector('.accordion-item');
-            if (first) first.classList.add('active');
-
-            updatePartsListUI();
-        }
-
-        // ★ Debounced CSG rebuild
-        let csgRebuildTimer = null;
-        let csgRebuildInFlight = false;
-
-        function scheduleCSGRebuild(delay = 90) {
-            if (csgRebuildInFlight) return;
-            clearTimeout(csgRebuildTimer);
-            csgRebuildTimer = setTimeout(() => {
-                csgRebuildInFlight = true;
-                try {
-                    const keepSel = selectedPart ? { ...selectedPart } : null;
-                    rebuildAllPieces();
-                    if (keepSel && getPartMesh(keepSel.type, keepSel.partId)) {
-                        selectedPart = keepSel;
-                        highlightPart(keepSel.type, keepSel.partId);
-                        attachGizmo();
-                    }
-                } finally {
-                    csgRebuildInFlight = false;
-                }
-            }, delay);
+            setGizmoMode('translate');
         }
 
         // ============================================================
-        //  7. 部件列表與選擇
+        //  7. 部件選擇與管理
         // ============================================================
-        function updatePartsListUI() {
-            for (const type of PIECE_TYPES) {
-                const list = document.getElementById(`partsList_${type}`);
-                if (!list) continue;
-                list.innerHTML = '';
-                const group = pieceGroups[type];
-                if (!group) continue;
-                const parts = group.userData.parts || {};
-                const partIds = Object.keys(parts);
-                if (partIds.length === 0) {
-                    list.innerHTML = '<span style="font-size:0.7rem;opacity:0.4;">無部件</span>';
-                    continue;
-                }
-                for (const [id, mesh] of Object.entries(parts)) {
-                    const tag = document.createElement('span');
-                    tag.className = 'part-tag';
-                    if (mesh.userData.isAir) tag.classList.add('air-tag');
-                    if (selectedPart && selectedPart.type === type && selectedPart.partId === id) {
-                        tag.classList.add('active');
-                    }
-                    const name = mesh.userData.partName || id;
-                    tag.textContent = mesh.userData.isAir ? '🕳 ' + name : name;
-                    tag.title = id;
-
-                    const renameBtn = document.createElement('span');
-                    renameBtn.className = 'rename-part';
-                    renameBtn.textContent = '✎';
-                    renameBtn.title = '重新命名';
-                    renameBtn.addEventListener('click', (e) => { e.stopPropagation(); renamePart(type, id); });
-                    tag.appendChild(renameBtn);
-
-                    const cloneBtn = document.createElement('span');
-                    cloneBtn.className = 'clone-part';
-                    cloneBtn.textContent = '📋';
-                    cloneBtn.title = '複製部件';
-                    cloneBtn.addEventListener('click', (e) => { e.stopPropagation(); clonePart(type, id); });
-                    tag.appendChild(cloneBtn);
-
-                    const del = document.createElement('span');
-                    del.className = 'del-part';
-                    del.textContent = '✕';
-                    del.title = '刪除部件';
-                    del.addEventListener('click', (e) => { e.stopPropagation(); deletePart(type, id); });
-                    tag.appendChild(del);
-
-                    tag.addEventListener('click', () => { selectPart(type, id); });
-                    list.appendChild(tag);
-                }
-            }
-            updatePartControls();
-        }
-
-        function selectPart(type, partId) {
-            selectedPart = { type, partId };
-            document.querySelectorAll('.parts-list').forEach(list => {
-                list.querySelectorAll('.part-tag').forEach(tag => tag.classList.remove('active'));
-            });
-            const list = document.getElementById(`partsList_${type}`);
-            if (list) {
-                const tags = list.querySelectorAll('.part-tag');
-                for (const tag of tags) {
-                    if (tag.title === partId) { tag.classList.add('active'); break; }
-                }
-            }
-            const controls = document.getElementById(`partControls_${type}`);
-            if (controls) controls.style.display = 'block';
-
-            const mesh = getPartMesh(type, partId);
-            const nameSpan = document.getElementById(`selectedPartName_${type}`);
-            if (nameSpan) nameSpan.textContent = mesh ? (mesh.userData.partName || partId) : '未知';
-
-            const item = document.querySelector(`.accordion-item[data-type="${type}"]`);
-            if (item && !item.classList.contains('active')) {
-                document.querySelectorAll('.accordion-item').forEach(el => el.classList.remove('active'));
-                item.classList.add('active');
-            }
-
-            syncPartInputs(type);
-            highlightPart(type, partId);
-            attachGizmo();
-        }
-
         function getPartMesh(type, partId) {
             const group = pieceGroups[type];
-            if (!group) return null;
+            if (!group || !group.userData || !group.userData.parts) return null;
             return group.userData.parts[partId] || null;
         }
 
         function highlightPart(type, partId) {
-            for (const t of PIECE_TYPES) {
-                const g = pieceGroups[t];
-                if (!g) continue;
-                for (const mesh of Object.values(g.userData.parts || {})) {
-                    if (mesh.userData.isAir) {
-                        // Wireframe — tint via color, not emissive
-                        if (mesh.material) {
-                            mesh.material.color.setHex(0xff3333);
-                            mesh.material.opacity = 0.9;
-                        }
-                    } else if (mesh.material && mesh.material.emissive) {
-                        mesh.material.emissive.setHex(0x000000);
-                        mesh.material.emissiveIntensity = 1;
-                    }
-                }
-            }
             if (highlightBoxHelper) {
                 scene.remove(highlightBoxHelper);
                 if (highlightBoxHelper.geometry) highlightBoxHelper.geometry.dispose();
-                if (highlightBoxHelper.material) highlightBoxHelper.material.dispose();
                 highlightBoxHelper = null;
             }
+
+            if (highlightMeshRef && highlightMeshRef.material && highlightMeshRef.material.emissive) {
+                highlightMeshRef.material.emissiveIntensity = 0;
+            }
             highlightMeshRef = null;
+
+            if (!type || !partId) return;
 
             const mesh = getPartMesh(type, partId);
             if (!mesh) return;
 
-            if (mesh.userData.isAir) {
-                if (mesh.material) {
-                    mesh.material.color.setHex(0xffaa66);
-                    mesh.material.opacity = 1;
-                }
-            } else if (mesh.material && mesh.material.emissive) {
-                mesh.material.emissive.setHex(0xffcc33);
-                mesh.material.emissiveIntensity = 0.9;
-            }
+            highlightMeshRef = mesh;
 
-            highlightBoxHelper = new THREE.BoxHelper(mesh, 0xffd700);
+            highlightBoxHelper = new THREE.BoxHelper(mesh, 0xe8c547);
             highlightBoxHelper.material.depthTest = false;
             highlightBoxHelper.material.transparent = true;
-            highlightBoxHelper.material.opacity = 0.95;
-            highlightBoxHelper.renderOrder = 999;
+            highlightBoxHelper.material.opacity = 0.8;
+            highlightBoxHelper.renderOrder = 1000;
             scene.add(highlightBoxHelper);
-
-            highlightMeshRef = mesh;
         }
 
-        function clearPartHighlight() {
+        function selectPart(type, partId) {
+            if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
+                selectedPart = null;
+            } else {
+                selectedPart = type && partId ? { type, partId } : null;
+            }
+
             for (const t of PIECE_TYPES) {
-                const g = pieceGroups[t];
-                if (!g) continue;
-                for (const mesh of Object.values(g.userData.parts || {})) {
-                    if (mesh.userData.isAir) {
-                        if (mesh.material) {
-                            mesh.material.color.setHex(0xff3333);
-                            mesh.material.opacity = 0.9;
+                const ctrl = document.getElementById(`partControls_${t}`);
+                const nameEl = document.getElementById(`selectedPartName_${t}`);
+                if (ctrl) {
+                    if (selectedPart && selectedPart.type === t) {
+                        ctrl.style.display = 'block';
+                        const mesh = getPartMesh(t, selectedPart.partId);
+                        if (nameEl) {
+                            nameEl.textContent = (mesh && mesh.userData.partName) || selectedPart.partId;
                         }
-                    } else if (mesh.material && mesh.material.emissive) {
-                        mesh.material.emissive.setHex(0x000000);
-                        mesh.material.emissiveIntensity = 1;
+                    } else {
+                        ctrl.style.display = 'none';
                     }
                 }
             }
-            if (highlightBoxHelper) {
-                scene.remove(highlightBoxHelper);
-                if (highlightBoxHelper.geometry) highlightBoxHelper.geometry.dispose();
-                if (highlightBoxHelper.material) highlightBoxHelper.material.dispose();
-                highlightBoxHelper = null;
+
+            if (selectedPart) {
+                syncPartInputs(selectedPart.type);
+                highlightPart(selectedPart.type, selectedPart.partId);
+            } else {
+                highlightPart(null, null);
             }
-            highlightMeshRef = null;
+
+            attachGizmo();
+            updatePartsListUI();
         }
 
-        function updatePartControls() {
+        function updatePartsListUI() {
             for (const type of PIECE_TYPES) {
-                const controls = document.getElementById(`partControls_${type}`);
-                if (!controls) continue;
-                controls.style.display = (selectedPart && selectedPart.type === type) ? 'block' : 'none';
+                const listContainer = document.getElementById(`partsList_${type}`);
+                if (!listContainer) continue;
+                listContainer.innerHTML = '';
+
+                const group = pieceGroups[type];
+                if (!group || !group.userData.parts) continue;
+
+                const parts = group.userData.parts;
+                for (const [partId, mesh] of Object.entries(parts)) {
+                    const isAir = mesh.userData.isAir;
+                    const isSelected = selectedPart && selectedPart.type === type && selectedPart.partId === partId;
+                    const tag = document.createElement('div');
+                    tag.className = `part-tag${isAir ? ' air-tag' : ''}${isSelected ? ' active' : ''}`;
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = mesh.userData.partName || partId;
+                    nameSpan.onclick = () => selectPart(type, partId);
+                    tag.appendChild(nameSpan);
+
+                    const cloneBtn = document.createElement('span');
+                    cloneBtn.className = 'clone-part';
+                    cloneBtn.innerHTML = '❐';
+                    cloneBtn.title = '複製部件';
+                    cloneBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        clonePart(type, partId);
+                    };
+                    tag.appendChild(cloneBtn);
+
+                    const renameBtn = document.createElement('span');
+                    renameBtn.className = 'rename-part';
+                    renameBtn.innerHTML = '✏';
+                    renameBtn.title = '重新命名';
+                    renameBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        renamePart(type, partId);
+                    };
+                    tag.appendChild(renameBtn);
+
+                    const delBtn = document.createElement('span');
+                    delBtn.className = 'del-part';
+                    delBtn.innerHTML = '✕';
+                    delBtn.title = '刪除部件';
+                    delBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deletePart(type, partId);
+                    };
+                    tag.appendChild(delBtn);
+
+                    listContainer.appendChild(tag);
+                }
             }
         }
 
-        // ============================================================
-        //  8. 添加/複製/刪除/重命名 部件
-        // ============================================================
         function addPartToPiece(type) {
             const select = document.getElementById(`addPartType_${type}`);
-            const shapeType = select.value;
+            if (!select) return;
+            const partType = select.value;
+            const newId = `custom_${partIdCounter++}`;
+
             const params = currentParams[type];
             if (!params.parts) params.parts = {};
 
-            const id = 'custom_' + (partIdCounter++);
-            let geoParams = {};
-            switch (shapeType) {
-                case 'box': geoParams = { width: 0.2, height: 0.2, depth: 0.2 }; break;
-                case 'sphere': geoParams = { radius: 0.15 }; break;
-                case 'cylinder': geoParams = { radiusTop: 0.15, radiusBottom: 0.15, height: 0.3 }; break;
-                case 'cone': geoParams = { radius: 0.15, height: 0.3 }; break;
-                case 'torus': geoParams = { radius: 0.15, tube: 0.05 }; break;
-                case 'frustum': geoParams = { radiusTop: 0.08, radiusBottom: 0.18, height: 0.3, segments: 16 }; break;
-                case 'tetrahedron': geoParams = { radius: 0.2, detail: 0 }; break;
-                case 'octahedron': geoParams = { radius: 0.2, detail: 0 }; break;
-                case 'dodecahedron': geoParams = { radius: 0.2, detail: 0 }; break;
-                case 'icosahedron': geoParams = { radius: 0.2, detail: 0 }; break;
-                case 'ring': geoParams = { innerRadius: 0.1, outerRadius: 0.22, thetaSegments: 24 }; break;
-                case 'plane': geoParams = { width: 0.3, height: 0.3 }; break;
-                case 'air': geoParams = { width: 0.3, height: 0.3, depth: 0.3 }; break;
-                default: geoParams = { width: 0.2, height: 0.2, depth: 0.2 };
-            }
+            const isAir = partType === 'air';
+            const defaultName = isAir ? 'Air Cut' : (partType.charAt(0).toUpperCase() + partType.slice(1));
 
-            const SHAPE_NAMES = {
-                box: 'Box', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone', torus: 'Torus',
-                frustum: 'Frustum', tetrahedron: 'Tetra', octahedron: 'Octa',
-                dodecahedron: 'Dodeca', icosahedron: 'Icosa', ring: 'Ring', plane: 'Plane',
-                air: 'Air',
-            };
-
-            const partData = {
-                type: shapeType,
-                geometryParams: geoParams,
+            params.parts[newId] = {
+                type: partType,
+                name: defaultName,
+                geometryParams: isAir ? { width: 0.3, height: 0.3, depth: 0.3 } : {},
                 roughness: 0.5,
                 metalness: 0.2,
-                position: { x: 0, y: 0.2, z: 0 },
+                position: { x: 0, y: 0.5, z: 0 },
                 rotation: { x: 0, y: 0, z: 0 },
-                scale: { x: 1, y: 1, z: 1 },
-                name: SHAPE_NAMES[shapeType] || shapeType,
+                scale: { x: 1, y: 1, z: 1 }
             };
-            params.parts[id] = partData;
 
-            // Always rebuild when adding air block (or if piece already has one)
-            const isAir = shapeType === 'air';
-            const hadAir = Object.values(params.parts).some(p => p && p.type === 'air');
-            if (isAir || hadAir) {
-                rebuildAllPieces();
-                updatePartsListUI();
-                selectPart(type, id);
-                pushHistory(true);
-                showToast(isAir ? '🕳 已添加挖空塊' : '✅ 已添加 ' + partData.name);
-                return;
-            }
-
-            const group = pieceGroups[type];
-            if (group) {
-                const geo = createGeometry(partData.type, partData.geometryParams);
-                const mat = createCustomPartMaterial(partData, params);
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set(partData.position.x, partData.position.y, partData.position.z);
-                mesh.rotation.set(partData.rotation.x, partData.rotation.y, partData.rotation.z);
-                mesh.scale.set(partData.scale.x, partData.scale.y, partData.scale.z);
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-                mesh.userData.partKey = id;
-                mesh.userData.partName = partData.name;
-                mesh.userData.isCustom = true;
-                group.add(mesh);
-                group.userData.parts[id] = mesh;
-            }
-
-            updatePartsListUI();
-            selectPart(type, id);
-            pushHistory(true);
-            showToast('✅ 已添加 ' + partData.name);
+            rebuildSinglePiece(type);
+            selectPart(type, newId);
+            pushHistory();
         }
 
-        function inferGeometryInfo(mesh) {
-            const geo = mesh.geometry;
-            if (!geo) return null;
-            const p = geo.parameters || {};
-            switch (geo.type) {
-                case 'BoxGeometry': return { type: 'box', geometryParams: { width: p.width, height: p.height, depth: p.depth } };
-                case 'SphereGeometry': return { type: 'sphere', geometryParams: { radius: p.radius } };
-                case 'CylinderGeometry':
-                    if (Math.abs((p.radiusTop ?? 0) - (p.radiusBottom ?? 0)) > 1e-4) {
-                        return { type: 'frustum', geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height, segments: p.radialSegments } };
-                    }
-                    return { type: 'cylinder', geometryParams: { radiusTop: p.radiusTop, radiusBottom: p.radiusBottom, height: p.height } };
-                case 'ConeGeometry': return { type: 'cone', geometryParams: { radius: p.radius, height: p.height } };
-                case 'TorusGeometry': return { type: 'torus', geometryParams: { radius: p.radius, tube: p.tube } };
-                case 'TetrahedronGeometry': return { type: 'tetrahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'OctahedronGeometry': return { type: 'octahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'DodecahedronGeometry': return { type: 'dodecahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'IcosahedronGeometry': return { type: 'icosahedron', geometryParams: { radius: p.radius, detail: p.detail } };
-                case 'RingGeometry': return { type: 'ring', geometryParams: { innerRadius: p.innerRadius, outerRadius: p.outerRadius, thetaSegments: p.thetaSegments } };
-                case 'PlaneGeometry': return { type: 'plane', geometryParams: { width: p.width, height: p.height } };
-                default: return null;
+        function deletePart(type, partId) {
+            const params = currentParams[type];
+            if (!params || !params.parts) return;
+
+            if (BUILTIN_PART_IDS.includes(partId)) {
+                params.parts[partId] = params.parts[partId] || {};
+                params.parts[partId].deleted = true;
+            } else {
+                delete params.parts[partId];
             }
+
+            if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
+                selectPart(null, null);
+            }
+
+            rebuildSinglePiece(type);
+            pushHistory();
         }
 
         function clonePart(type, partId) {
             const params = currentParams[type];
-            const group = pieceGroups[type];
-            if (!group) { showToast('⚠️ 找不到棋子'); return; }
+            if (!params || !params.parts) return;
 
-            const sourceMesh = getPartMesh(type, partId);
-            if (!sourceMesh) { showToast('⚠️ 找不到該部件'); return; }
+            const source = params.parts[partId];
+            const newId = `custom_${partIdCounter++}`;
 
-            const newId = 'custom_' + (partIdCounter++);
-            const isAirSource = sourceMesh.userData.isAir === true;
-
-            if (!params.parts) params.parts = {};
-
-            const sourceData = params.parts[partId];
-            let newData;
-
-            if (sourceData && sourceData.type) {
-                newData = JSON.parse(JSON.stringify(sourceData));
+            let clonedData;
+            if (source) {
+                clonedData = JSON.parse(JSON.stringify(source));
+                clonedData.name = (source.name || 'Component') + ' Copy';
+                if (clonedData.position) clonedData.position.x += 0.05;
             } else {
-                const geoInfo = inferGeometryInfo(sourceMesh);
-                if (!geoInfo) { showToast('⚠️ 此部件無法複製（幾何體無法辨識）'); return; }
-                newData = {
-                    type: geoInfo.type,
-                    geometryParams: geoInfo.geometryParams,
-                    roughness: (sourceMesh.material && sourceMesh.material.roughness) ?? 0.5,
-                    metalness: (sourceMesh.material && sourceMesh.material.metalness) ?? 0.2,
+                const mesh = getPartMesh(type, partId);
+                clonedData = {
+                    type: 'box',
+                    name: partId + ' Copy',
+                    roughness: params.roughness || 0.5,
+                    metalness: params.metalness || 0.2,
+                    position: mesh ? { x: mesh.position.x + 0.05, y: mesh.position.y, z: mesh.position.z } : { x: 0.05, y: 0.5, z: 0 },
+                    rotation: mesh ? { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z } : { x: 0, y: 0, z: 0 },
+                    scale: mesh ? { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z } : { x: 1, y: 1, z: 1 }
                 };
             }
 
-            delete newData.deleted;
+            delete clonedData.deleted;
+            params.parts[newId] = clonedData;
 
-            newData.position = { x: sourceMesh.position.x, y: sourceMesh.position.y, z: sourceMesh.position.z };
-            newData.rotation = { x: sourceMesh.rotation.x, y: sourceMesh.rotation.y, z: sourceMesh.rotation.z };
-            newData.scale = { x: sourceMesh.scale.x, y: sourceMesh.scale.y, z: sourceMesh.scale.z };
-            newData.name = (sourceMesh.userData.partName || '部件') + ' Copy';
-
-            params.parts[newId] = newData;
-
-            const hasAir = isAirSource || Object.values(params.parts).some(p => p && p.type === 'air');
-            if (hasAir) {
-                rebuildAllPieces();
-            } else {
-                const newMaterial = sourceMesh.material
-                    ? sourceMesh.material.clone()
-                    : new THREE.MeshStandardMaterial({ color: params.color || '#f5f0e1' });
-                if (newMaterial.emissive) {
-                    newMaterial.emissive.setHex(0x000000);
-                    newMaterial.emissiveIntensity = 1;
-                }
-                const newMesh = new THREE.Mesh(sourceMesh.geometry, newMaterial);
-                newMesh.position.copy(sourceMesh.position);
-                newMesh.rotation.copy(sourceMesh.rotation);
-                newMesh.scale.copy(sourceMesh.scale);
-                newMesh.castShadow = true;
-                newMesh.receiveShadow = true;
-                newMesh.userData.partKey = newId;
-                newMesh.userData.partName = newData.name;
-                newMesh.userData.isCustom = true;
-                group.add(newMesh);
-                group.userData.parts[newId] = newMesh;
-            }
-
-            updatePartsListUI();
+            rebuildSinglePiece(type);
             selectPart(type, newId);
-            pushHistory(true);
-            const total = Object.keys(params.parts).length;
-            showToast('📋 已複製 ' + (sourceMesh.userData.partName || '部件') + `（共 ${total} 個部件）`);
-        }
-
-        function deletePart(type, partId) {
-            const mesh = getPartMesh(type, partId);
-            if (!mesh) { showToast('⚠️ 找不到該部件'); return; }
-            const displayName = mesh.userData.partName || partId;
-            if (!confirm(`確定刪除部件「${displayName}」嗎？`)) return;
-
-            const params = currentParams[type];
-            if (!params.parts) params.parts = {};
-
-            const isCustom = mesh.userData.isCustom === true;
-            if (isCustom) {
-                delete params.parts[partId];
-            } else {
-                params.parts[partId] = { deleted: true };
-            }
-
-            if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
-                selectedPart = null;
-                if (transformControls) transformControls.detach();
-                clearPartHighlight();
-            }
-
-            const hadAir = mesh.userData.isAir === true;
-            const stillHasAir = Object.values(params.parts).some(p => p && p.type === 'air');
-            if (hadAir || stillHasAir) {
-                rebuildAllPieces();
-            } else {
-                const group = pieceGroups[type];
-                if (group) {
-                    group.remove(mesh);
-                    delete group.userData.parts[partId];
-                }
-            }
-
-            updatePartsListUI();
-            updatePartControls();
-            pushHistory(true);
-            showToast('🗑 已刪除部件「' + displayName + '」');
+            pushHistory();
         }
 
         function renamePart(type, partId) {
             const mesh = getPartMesh(type, partId);
-            if (!mesh) { showToast('⚠️ 找不到該部件'); return; }
-            const currentName = mesh.userData.partName || partId;
-            const input = prompt('請輸入新的部件名稱：', currentName);
-            if (input === null) return;
-            const newName = input.trim();
-            if (!newName) { showToast('⚠️ 名稱不能為空'); return; }
-            if (newName === currentName) return;
-
-            const params = currentParams[type];
-            if (!params.parts) params.parts = {};
-            if (!params.parts[partId]) params.parts[partId] = {};
-            params.parts[partId].name = newName;
-
-            mesh.userData.partName = newName;
-
-            if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
-                const nameSpan = document.getElementById(`selectedPartName_${type}`);
-                if (nameSpan) nameSpan.textContent = newName;
+            const currentName = (mesh && mesh.userData.partName) || partId;
+            const newName = prompt('請輸入部件新名稱:', currentName);
+            if (newName && newName.trim()) {
+                const params = currentParams[type];
+                if (!params.parts) params.parts = {};
+                if (!params.parts[partId]) params.parts[partId] = {};
+                params.parts[partId].name = newName.trim();
+                if (mesh) mesh.userData.partName = newName.trim();
+                updatePartsListUI();
+                if (selectedPart && selectedPart.type === type && selectedPart.partId === partId) {
+                    const nameEl = document.getElementById(`selectedPartName_${type}`);
+                    if (nameEl) nameEl.textContent = newName.trim();
+                }
+                pushHistory();
             }
-
-            updatePartsListUI();
-            pushHistory(true);
-            showToast('✏️ 已重新命名為「' + newName + '」');
         }
 
         // ============================================================
-        //  9. 重置功能
-        // ============================================================
-        function resetPiece(type) {
-            currentParams[type] = JSON.parse(JSON.stringify(DEFAULT_PARAMS[type]));
-            const wasActive = document.querySelector(`.accordion-item[data-type="${type}"]`)?.classList.contains('active');
-            if (selectedPart && selectedPart.type === type) {
-                selectedPart = null;
-                clearPartHighlight();
-            }
-            buildPanel();
-            if (wasActive) {
-                const item = document.querySelector(`.accordion-item[data-type="${type}"]`);
-                if (item) item.classList.add('active');
-            }
-            rebuildAllPieces();
-            updatePartsListUI();
-            updatePartControls();
-            pushHistory(true);
-        }
-
-        function resetAll() {
-            if (!confirm('確定重置所有棋子？')) return;
-            currentParams = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
-            selectedPart = null;
-            if (transformControls) transformControls.detach();
-            clearPartHighlight();
-            buildPanel();
-            rebuildAllPieces();
-            const first = document.querySelector('.accordion-item');
-            if (first) first.classList.add('active');
-            updatePartsListUI();
-            updatePartControls();
-            pushHistory(true);
-            showToast('↺ 已重置');
-        }
-
-        // ============================================================
-        //  10. 全局工具
+        //  8. 位置與全域動作
         // ============================================================
         function resetAllPositions() {
+            const defaultPositions = {
+                pawn: { x: -4.2, y: 0, z: 0 },
+                rook: { x: -2.52, y: 0.02, z: 0 },
+                knight: { x: -0.84, y: 0.02, z: 0 },
+                bishop: { x: 0.84, y: 0.02, z: 0 },
+                queen: { x: 2.52, y: 0.03, z: 0 },
+                king: { x: 4.2, y: 0.04, z: 0 }
+            };
             for (const type of PIECE_TYPES) {
-                const def = DEFAULT_PARAMS[type];
-                currentParams[type].position = { ...def.position };
+                currentParams[type].position = { ...defaultPositions[type] };
+                const rangeX = document.getElementById(`posX_${type}`);
+                const rangeY = document.getElementById(`posY_${type}`);
+                const rangeZ = document.getElementById(`posZ_${type}`);
+                if (rangeX) rangeX.value = defaultPositions[type].x;
+                if (rangeY) rangeY.value = defaultPositions[type].y;
+                if (rangeZ) rangeZ.value = defaultPositions[type].z;
+
+                const numX = document.getElementById(`posX_${type}_num`);
+                const numY = document.getElementById(`posY_${type}_num`);
+                const numZ = document.getElementById(`posZ_${type}_num`);
+                if (numX) numX.value = defaultPositions[type].x.toFixed(2);
+                if (numY) numY.value = defaultPositions[type].y.toFixed(2);
+                if (numZ) numZ.value = defaultPositions[type].z.toFixed(2);
+
+                if (pieceGroups[type]) {
+                    pieceGroups[type].position.set(defaultPositions[type].x, defaultPositions[type].y, defaultPositions[type].z);
+                }
             }
-            rebuildAllPieces();
-            refreshPanelPositions();
-            pushHistory(true);
-            showToast('↺ 位置已重置');
+            pushHistory();
         }
 
         function arrangeInRow() {
-            const count = PIECE_TYPES.length;
-            const spacing = 1.68;
-            const startX = -(count - 1) * spacing / 2;
-            for (let i = 0; i < count; i++) {
-                const type = PIECE_TYPES[i];
-                const yOffset = { pawn: 0, rook: 0.02, knight: 0.02, bishop: 0.02, queen: 0.03, king: 0.04 };
-                currentParams[type].position = { x: startX + i * spacing, y: yOffset[type] || 0, z: 0 };
-            }
-            rebuildAllPieces();
-            refreshPanelPositions();
-            pushHistory(true);
-            showToast('➡ 已排列');
+            const spacing = 1.6;
+            const startX = -((PIECE_TYPES.length - 1) * spacing) / 2;
+            PIECE_TYPES.forEach((type, idx) => {
+                const nx = startX + idx * spacing;
+                currentParams[type].position = { x: nx, y: 0, z: 0 };
+                const rangeX = document.getElementById(`posX_${type}`);
+                const rangeY = document.getElementById(`posY_${type}`);
+                const rangeZ = document.getElementById(`posZ_${type}`);
+                if (rangeX) rangeX.value = nx;
+                if (rangeY) rangeY.value = 0;
+                if (rangeZ) rangeZ.value = 0;
+
+                const numX = document.getElementById(`posX_${type}_num`);
+                const numY = document.getElementById(`posY_${type}_num`);
+                const numZ = document.getElementById(`posZ_${type}_num`);
+                if (numX) numX.value = nx.toFixed(2);
+                if (numY) numY.value = (0).toFixed(2);
+                if (numZ) numZ.value = (0).toFixed(2);
+
+                if (pieceGroups[type]) pieceGroups[type].position.set(nx, 0, 0);
+            });
+            pushHistory();
         }
 
         function randomizePositions() {
-            for (const type of PIECE_TYPES) {
-                const yOffset = { pawn: 0, rook: 0.02, knight: 0.02, bishop: 0.02, queen: 0.03, king: 0.04 };
-                currentParams[type].position = {
-                    x: (Math.random() - 0.5) * 8,
-                    y: (yOffset[type] || 0) + (Math.random() - 0.5) * 0.6,
-                    z: (Math.random() - 0.5) * 6
-                };
-            }
-            rebuildAllPieces();
-            refreshPanelPositions();
-            pushHistory(true);
-            showToast('🎲 隨機位置');
-        }
+            PIECE_TYPES.forEach(type => {
+                const rx = (Math.random() - 0.5) * 8;
+                const rz = (Math.random() - 0.5) * 4;
+                currentParams[type].position = { x: rx, y: 0, z: rz };
+                const rangeX = document.getElementById(`posX_${type}`);
+                const rangeZ = document.getElementById(`posZ_${type}`);
+                if (rangeX) rangeX.value = rx;
+                if (rangeZ) rangeZ.value = rz;
 
-        function refreshPanelPositions() {
-            for (const type of PIECE_TYPES) {
-                const pos = currentParams[type].position;
-                const setVal = (id, v) => {
-                    const range = document.getElementById(id);
-                    const num = document.getElementById(id + '_num');
-                    if (!range) return;
-                    const dec = decimalsFor(parseFloat(range.step) || 0.02);
-                    range.value = v;
-                    if (num) num.value = Number(v).toFixed(dec);
-                };
-                setVal(`posX_${type}`, pos.x);
-                setVal(`posY_${type}`, pos.y);
-                setVal(`posZ_${type}`, pos.z);
-            }
-        }
+                const numX = document.getElementById(`posX_${type}_num`);
+                const numZ = document.getElementById(`posZ_${type}_num`);
+                if (numX) numX.value = rx.toFixed(2);
+                if (numZ) numZ.value = rz.toFixed(2);
 
-        // ============================================================
-        //  11. 匯出 & 匯入
-        // ============================================================
-        function exportCode() {
-            const modal = document.getElementById('exportModal');
-            const area = document.getElementById('exportCodeArea');
-            let code = `const PIECE_PARAMS = ${JSON.stringify(currentParams, null, 2)};`;
-            area.value = code;
-            modal.classList.add('open');
-        }
-
-        function closeExport() {
-            document.getElementById('exportModal').classList.remove('open');
-        }
-
-        function copyExport() {
-            const area = document.getElementById('exportCodeArea');
-            navigator.clipboard.writeText(area.value).then(() => {
-                showToast('✅ 已複製');
-            }).catch(() => {
-                area.select();
-                document.execCommand('copy');
-                showToast('✅ 已複製');
+                if (pieceGroups[type]) pieceGroups[type].position.set(rx, 0, rz);
             });
+            pushHistory();
         }
 
-        function openImportModal() {
-            document.getElementById('importModal').classList.add('open');
-            document.getElementById('importCodeArea').value = '';
+        function resetPiece(type) {
+            currentParams[type] = JSON.parse(JSON.stringify(DEFAULT_PARAMS[type]));
+            if (selectedPart && selectedPart.type === type) selectPart(null, null);
+            buildPanel();
+            rebuildSinglePiece(type);
+            pushHistory();
+            showToast(`已重置 ${PIECE_NAMES[type]}`);
         }
 
-        function closeImport() {
-            document.getElementById('importModal').classList.remove('open');
-        }
-
-        function doImport() {
-            const area = document.getElementById('importCodeArea');
-            let raw = area.value.trim();
-            if (!raw) { showToast('⚠️ 請貼上 JSON 代碼'); return; }
-
-            let jsonStr = raw;
-            const assignMatch = raw.match(/PIECE_PARAMS\s*=\s*({[\s\S]*});?/);
-            if (assignMatch) jsonStr = assignMatch[1];
-
-            try {
-                const imported = JSON.parse(jsonStr);
-                const required = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
-                const allPresent = required.every(t => imported[t]);
-                if (!allPresent) { showToast('❌ 缺少必要的棋子類型'); return; }
-                currentParams = imported;
-                selectedPart = null;
-                if (transformControls) transformControls.detach();
-                clearPartHighlight();
-
-                partIdCounter = 1000;
-                for (const t of PIECE_TYPES) {
-                    const parts = imported[t] && imported[t].parts;
-                    if (!parts) continue;
-                    for (const id of Object.keys(parts)) {
-                        const m = /^custom_(\d+)$/.exec(id);
-                        if (m) {
-                            const n = parseInt(m[1], 10);
-                            if (n >= partIdCounter) partIdCounter = n + 1;
-                        }
-                    }
-                }
-
-                buildPanel();
-                rebuildAllPieces();
-                const first = document.querySelector('.accordion-item');
-                if (first) first.classList.add('active');
-                closeImport();
-                pushHistory(true);
-                showToast('✅ 匯入成功！');
-            } catch (e) {
-                showToast('❌ JSON 解析錯誤: ' + e.message);
-            }
+        function resetAll() {
+            currentParams = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
+            selectPart(null, null);
+            buildPanel();
+            rebuildAllPieces();
+            pushHistory();
+            showToast('已全部重置');
         }
 
         // ============================================================
-        //  12. 撤銷 / 重做
+        //  9. 歷史紀錄 (撤銷/重做)
         // ============================================================
-        let historyStack = [];
+        const historyStack = [];
         let historyIndex = -1;
-        let historyTimer = null;
-        let historyPaused = false;
-        const HISTORY_LIMIT = 80;
+        const MAX_HISTORY = 30;
 
-        function captureState() {
-            return {
-                params: JSON.parse(JSON.stringify(currentParams)),
-                selectedPart: selectedPart ? { ...selectedPart } : null
-            };
-        }
+        function pushHistory() {
+            const state = JSON.stringify(currentParams);
+            if (historyIndex >= 0 && historyStack[historyIndex] === state) return;
 
-        function pushHistory(immediate = false) {
-            if (historyPaused) return;
+            historyStack.splice(historyIndex + 1);
+            historyStack.push(state);
+            if (historyStack.length > MAX_HISTORY) historyStack.shift();
+            else historyIndex++;
 
-            const run = () => {
-                const snap = captureState();
-                historyStack = historyStack.slice(0, historyIndex + 1);
-
-                if (historyStack.length > 0) {
-                    const last = historyStack[historyStack.length - 1];
-                    if (JSON.stringify(last.params) === JSON.stringify(snap.params)) {
-                        updateUndoRedoButtons();
-                        return;
-                    }
-                }
-
-                historyStack.push(snap);
-                if (historyStack.length > HISTORY_LIMIT) historyStack.shift();
-                historyIndex = historyStack.length - 1;
-                updateUndoRedoButtons();
-            };
-
-            if (immediate) {
-                clearTimeout(historyTimer);
-                run();
-            } else {
-                clearTimeout(historyTimer);
-                historyTimer = setTimeout(run, 350);
-            }
-        }
-
-        function ensureCurrentStateSaved() {
-            const cur = captureState();
-            if (historyStack.length === 0) {
-                historyStack.push(cur);
-                historyIndex = 0;
-                return;
-            }
-            const stored = historyStack[historyIndex];
-            if (!stored || JSON.stringify(stored.params) !== JSON.stringify(cur.params)) {
-                historyStack = historyStack.slice(0, historyIndex + 1);
-                historyStack.push(cur);
-                historyIndex = historyStack.length - 1;
-            }
+            updateUndoRedoButtons();
         }
 
         function undo() {
-            clearTimeout(historyTimer);
-            ensureCurrentStateSaved();
-            if (historyIndex <= 0) { showToast('已到最早狀態'); return; }
-            historyIndex--;
-            restoreState(historyStack[historyIndex]);
-            showToast('↶ 撤銷 (' + (historyIndex + 1) + '/' + historyStack.length + ')');
+            if (historyIndex > 0) {
+                historyIndex--;
+                currentParams = JSON.parse(historyStack[historyIndex]);
+                buildPanel();
+                rebuildAllPieces();
+                updateUndoRedoButtons();
+                showToast('↶ 撤銷');
+            }
         }
 
         function redo() {
-            clearTimeout(historyTimer);
-            ensureCurrentStateSaved();
-            if (historyIndex >= historyStack.length - 1) { showToast('已到最新狀態'); return; }
-            historyIndex++;
-            restoreState(historyStack[historyIndex]);
-            showToast('↷ 重做 (' + (historyIndex + 1) + '/' + historyStack.length + ')');
-        }
-
-        function restoreState(snap) {
-            historyPaused = true;
-
-            currentParams = JSON.parse(JSON.stringify(snap.params));
-            selectedPart = snap.selectedPart ? { ...snap.selectedPart } : null;
-
-            buildPanel();
-            rebuildAllPieces();
-
-            if (selectedPart && !getPartMesh(selectedPart.type, selectedPart.partId)) {
-                selectedPart = null;
-                if (transformControls) transformControls.detach();
-                clearPartHighlight();
+            if (historyIndex < historyStack.length - 1) {
+                historyIndex++;
+                currentParams = JSON.parse(historyStack[historyIndex]);
+                buildPanel();
+                rebuildAllPieces();
+                updateUndoRedoButtons();
+                showToast('↷ 重做');
             }
-
-            const typeToOpen = selectedPart ? selectedPart.type : 'pawn';
-            document.querySelectorAll('.accordion-item').forEach(el => el.classList.remove('active'));
-            const item = document.querySelector(`.accordion-item[data-type="${typeToOpen}"]`);
-            if (item) item.classList.add('active');
-
-            updatePartsListUI();
-            updatePartControls();
-            if (selectedPart) {
-                syncPartInputs(selectedPart.type);
-                highlightPart(selectedPart.type, selectedPart.partId);
-                attachGizmo();
-            }
-
-            historyPaused = false;
-            updateUndoRedoButtons();
         }
 
         function updateUndoRedoButtons() {
@@ -2681,101 +2586,169 @@
         }
 
         // ============================================================
-        //  13. Toast
+        //  10. 匯出/匯入/Toast
         // ============================================================
+        function exportCode() {
+            const code = `const PIECE_PARAMS = ${JSON.stringify(currentParams, null, 2)};`;
+            document.getElementById('exportCodeArea').value = code;
+            document.getElementById('exportModal').classList.add('open');
+        }
+
+        function closeExport() {
+            document.getElementById('exportModal').classList.remove('open');
+        }
+
+        function copyExport() {
+            const area = document.getElementById('exportCodeArea');
+            area.select();
+            navigator.clipboard.writeText(area.value).then(() => {
+                showToast('📋 已複製代碼！');
+                closeExport();
+            }).catch(() => {
+                document.execCommand('copy');
+                showToast('📋 已複製代碼！');
+                closeExport();
+            });
+        }
+
+        function openImportModal() {
+            document.getElementById('importCodeArea').value = '';
+            document.getElementById('importModal').classList.add('open');
+        }
+
+        function closeImport() {
+            document.getElementById('importModal').classList.remove('open');
+        }
+
+        function doImport() {
+            let raw = document.getElementById('importCodeArea').value.trim();
+            if (!raw) return;
+
+            if (raw.startsWith('const PIECE_PARAMS =')) {
+                raw = raw.replace(/^const PIECE_PARAMS =\s*/, '').replace(/;$/, '');
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                currentParams = parsed;
+                selectPart(null, null);
+                buildPanel();
+                rebuildAllPieces();
+                pushHistory();
+                closeImport();
+                showToast('📥 匯入成功！');
+            } catch (err) {
+                alert('JSON 解析失敗，請檢查格式是否正確！\n' + err.message);
+            }
+        }
+
         function showToast(msg) {
             const toast = document.getElementById('copyToast');
+            if (!toast) return;
             toast.textContent = msg;
             toast.classList.add('show');
-            clearTimeout(toast._timer);
-            toast._timer = setTimeout(() => toast.classList.remove('show'), 2000);
+            setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
         // ============================================================
-        //  14. 鍵盤快捷鍵
+        //  11. 3D Raycasting & 快捷鍵綁定
         // ============================================================
-        window.addEventListener('keydown', (e) => {
-            const tag = (e.target && e.target.tagName || '').toLowerCase();
-            const isEditing = tag === 'input' || tag === 'textarea' || tag === 'select';
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
-            if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-                const k = e.key.toLowerCase();
-                if (k === 'z') {
-                    e.preventDefault();
-                    if (e.shiftKey) redo();
-                    else undo();
-                    return;
-                }
-                if (k === 'y') { e.preventDefault(); redo(); return; }
+        container.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            if (transformControls && transformControls.dragging) return;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const meshes = [];
+            for (const [type, group] of Object.entries(pieceGroups)) {
+                if (!group) continue;
+                group.traverse(child => {
+                    if (child.isMesh && child.userData && child.userData.partKey) {
+                        meshes.push(child);
+                    }
+                });
             }
 
-            if (isEditing) return;
-            if (!selectedPart) return;
+            const intersects = raycaster.intersectObjects(meshes, false);
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                const partKey = hit.userData.partKey;
 
-            const k = e.key.toLowerCase();
-            if (k === 'g') setGizmoMode('translate');
-            else if (k === 'r') setGizmoMode('rotate');
-            else if (k === 's') setGizmoMode('scale');
-        });
-
-        // ============================================================
-        //  15. 初始化
-        // ============================================================
-        function init() {
-            initScene();
-            initTransformControls();
-
-            partIdCounter = 1000;
-            for (const t of PIECE_TYPES) {
-                const parts = (currentParams[t] && currentParams[t].parts) || {};
-                for (const id of Object.keys(parts)) {
-                    const m = /^custom_(\d+)$/.exec(id);
-                    if (m) {
-                        const n = parseInt(m[1], 10);
-                        if (n >= partIdCounter) partIdCounter = n + 1;
+                for (const [type, group] of Object.entries(pieceGroups)) {
+                    if (!group) continue;
+                    let current = hit;
+                    while (current && current !== group && current.parent) {
+                        current = current.parent;
+                    }
+                    if (current === group) {
+                        const item = document.querySelector(`.accordion-item[data-type="${type}"]`);
+                        if (item && !item.classList.contains('active')) {
+                            document.querySelectorAll('.accordion-item').forEach(el => el.classList.remove('active'));
+                            item.classList.add('active');
+                        }
+                        selectPart(type, partKey);
+                        break;
                     }
                 }
             }
+        });
 
+        window.addEventListener('keydown', (e) => {
+            const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key.toLowerCase() === 'z') {
+                    e.preventDefault();
+                    if (e.shiftKey) redo();
+                    else undo();
+                } else if (e.key.toLowerCase() === 'y') {
+                    e.preventDefault();
+                    redo();
+                }
+                return;
+            }
+
+            switch (e.key.toLowerCase()) {
+                case 'g':
+                    setGizmoMode('translate');
+                    break;
+                case 'r':
+                    setGizmoMode('rotate');
+                    break;
+                case 's':
+                    setGizmoMode('scale');
+                    break;
+                case 'delete':
+                case 'backspace':
+                    if (selectedPart) {
+                        deletePart(selectedPart.type, selectedPart.partId);
+                    }
+                    break;
+                case 'escape':
+                    selectPart(null, null);
+                    break;
+            }
+        });
+
+        // ============================================================
+        //  12. 初始化啟動
+        // ============================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            initScene();
+            initTransformControls();
             buildPanel();
             rebuildAllPieces();
-            const first = document.querySelector('.accordion-item');
-            if (first) first.classList.add('active');
-
-            historyStack = [];
-            historyIndex = -1;
-            pushHistory(true);
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-
-        window.resetAll = resetAll;
-        window.exportCode = exportCode;
-        window.closeExport = closeExport;
-        window.copyExport = copyExport;
-        window.openImportModal = openImportModal;
-        window.closeImport = closeImport;
-        window.doImport = doImport;
-        window.resetPiece = resetPiece;
-        window.resetAllPositions = resetAllPositions;
-        window.arrangeInRow = arrangeInRow;
-        window.randomizePositions = randomizePositions;
-        window.addPartToPiece = addPartToPiece;
-        window.clonePart = clonePart;
-        window.deletePart = deletePart;
-        window.renamePart = renamePart;
-        window.selectPart = selectPart;
-        window.setGizmoMode = setGizmoMode;
-        window.toggleGizmoSpace = toggleGizmoSpace;
-        window.undo = undo;
-        window.redo = redo;
-        window.showToast = showToast;
-        window.clearPartHighlight = clearPartHighlight;
-        window.scheduleCSGRebuild = scheduleCSGRebuild;
+            pushHistory();
+        });
     </script>
 </body>
 
