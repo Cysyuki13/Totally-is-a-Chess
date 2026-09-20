@@ -2838,3 +2838,36 @@ body.force-landscape #rotateDeviceOverlay {
         right: max(10px, env(safe-area-inset-right));
     }
 }
+
+@media (max-width: 768px) {
+
+    /* ★ 移動端：即使 topBar 被標記 .hidden，容器也要保持可見，
+         這樣才能讓底部的把手按鈕永遠露在畫面上。 */
+    .game-top-bar.hidden {
+        display: flex;
+        /* 覆蓋 display: none */
+        padding: 0;
+        /* 去掉多餘的內距，避免把手被推出畫面 */
+        transform: translateY(0);
+        /* 不要做「收起」位移 */
+        background: transparent;
+        /* 沒內容時不用黑底 */
+        box-shadow: none;
+        border-bottom: none;
+    }
+
+    /* 內容列（回合 / 計時 / 按鈕組）在 hidden 狀態下全部隱藏 */
+    .game-top-bar.hidden>div {
+        display: none;
+    }
+
+    /* 把手本身一定要露出來 */
+    .game-top-bar.hidden .topbar-handle {
+        display: flex;
+        background: rgba(22, 33, 62, 0.92);
+        /* 給它自己的底色，避免透明看不到 */
+        border-top: none;
+        border-radius: 0 0 14px 14px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    }
+}
