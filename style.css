@@ -220,6 +220,34 @@ body {
     gap: 4px;
 }
 
+/* ============================================================
+   Main menu — 2×2 button grid
+   ============================================================ */
+.main-menu-buttons {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    max-width: 380px;
+    margin: 0 auto;
+    justify-content: stretch;
+}
+
+.main-menu-buttons .btn {
+    /* Kill the default `margin: 8px` on .btn so the grid can control spacing */
+    margin: 0;
+    width: 100%;
+    padding: 14px 12px;
+    font-size: 1rem;
+}
+
+@media (max-width: 480px) {
+    .main-menu-buttons .btn {
+        padding: 12px 8px;
+        font-size: 0.92rem;
+        letter-spacing: 0;
+    }
+}   
+
 .difficulty-btn {
     padding: 12px 24px;
     font-size: 1rem;
@@ -2613,4 +2641,145 @@ body.force-landscape #rotateDeviceOverlay {
         top: max(10px, env(safe-area-inset-top));
         left: max(10px, env(safe-area-inset-left));
     }
+}
+
+/* ============================================================
+   Settings panel
+   ============================================================ */
+.settings-panel {
+    max-width: 460px;
+    text-align: center;
+}
+
+.settings-block {
+    text-align: left;
+    margin: 12px 0;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-block>label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    color: var(--gold);
+}
+
+.settings-block .desc {
+    font-size: 0.78rem;
+    opacity: 0.6;
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+/* ── Volume slider row ── */
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.slider-row input[type="range"] {
+    flex: 1;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    outline: none;
+}
+
+.slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--gold);
+    cursor: pointer;
+    border: 2px solid #1a1a2e;
+    box-shadow: 0 0 12px rgba(232, 197, 71, 0.5);
+}
+
+.slider-row input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--gold);
+    cursor: pointer;
+    border: 2px solid #1a1a2e;
+}
+
+.slider-row .value-display {
+    min-width: 52px;
+    text-align: right;
+    font-weight: 700;
+    color: var(--gold);
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+/* ── Toggle row (label + switch on same line) ── */
+.toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--gold);
+}
+
+.toggle-row>span:first-child {
+    flex: 1;
+}
+
+/* Smaller variant of the toggle switch for the settings panel */
+.toggle-switch.small-switch {
+    width: 56px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.toggle-switch.small-switch .toggle-slider::before {
+    height: 20px;
+    width: 20px;
+    left: 2px;
+}
+
+.toggle-switch.small-switch input:checked+.toggle-slider::before {
+    transform: translate(28px, -50%);
+}
+
+/* Quality buttons: full width rows so the labels fit nicely */
+.settings-block .mode-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+}
+
+.settings-block .mode-btn.active {
+    border-color: var(--gold);
+    background: var(--gold);
+    color: #1a1a2e;
+}
+
+/* ============================================================
+   Settings overlay — must sit above top bar, action bar,
+   floating buttons, but below the domain-expansion modals.
+   ============================================================ */
+#settingsOverlay {
+    z-index: 350;
+    /* above #topBar(5), #actionBar(100), #topBarReopenBtn(300) */
+}
+
+/* The in-game settings button should use the same visual weight
+   as the other top-bar controls — no special styling needed. */
+#inGameSettingsBtn {
+    white-space: nowrap;
 }

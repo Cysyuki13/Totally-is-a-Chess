@@ -497,6 +497,15 @@ function playPieceEffect(type) {
     if (!wikiEffectRoot) return;
     clearEffectScene();
 
+    // ★ FIX: remove the queen skill label (it's a DOM node, not part of
+    //   the Three.js scene, so clearEffectScene() never touches it).
+    //   Queen's setup will recreate it if needed.
+    const container = document.getElementById('wikiEffect');
+    if (container) {
+        const staleLabel = container.querySelector('.wiki-effect-label');
+        if (staleLabel) staleLabel.remove();
+    }
+
     wikiEffectRoot.add(makeWikiGround());
 
     const info = WIKI_PIECES[type];
@@ -512,7 +521,7 @@ function playPieceEffect(type) {
     if (type === 'knight') setupKnightEffect();
     if (type === 'bishop') setupBishopEffect();
     if (type === 'queen') setupQueenEffect();
-    if (type === 'king') setupKingEffect();   // ★ NEW
+    if (type === 'king') setupKingEffect();
 }
 
 // ── Queen effect — alternates between HEAL and REVIVE ──────────

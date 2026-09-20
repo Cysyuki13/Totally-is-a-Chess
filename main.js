@@ -4012,12 +4012,14 @@ function createPieces3D() {
                     row: r, col: c, type: 'piece', color: piece.color,
                     baseScale: new THREE.Vector3(1, 1, 1)
                 };
-                // ★ 冷卻中 → 在棋子右上角顯示剩餘回合
-                const cd = piece.skillCooldown || 0;
-                if (cd > 0) {
-                    const cdSprite = createCooldownSprite(cd);
-                    obj.add(cdSprite);
-                    obj.userData.cooldownSprite = cdSprite;
+                // ★ 冷卻中 → 在棋子右上角顯示剩餘回合 (respect user preference)
+                if (gameSettings.showCooldownNumbers) {
+                    const cd = piece.skillCooldown || 0;
+                    if (cd > 0) {
+                        const cdSprite = createCooldownSprite(cd);
+                        obj.add(cdSprite);
+                        obj.userData.cooldownSprite = cdSprite;
+                    }
                 }
                 // ★ 皇后復活冷卻（紫色，另一側）
                 const cdRev = piece.reviveCooldown || 0;
@@ -4219,17 +4221,29 @@ function hideCannonRange() {
 // ============================================================
 function showValidMoveHighlights(moves, selectedR, selectedC) {
     clearHighlights();
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.6, depthWrite: false });
-    const capMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.5, depthWrite: false });
+    const dotMat = new THREE.MeshBasicMaterial({
+        color: 0x2ecc71, transparent: true, opacity: 0.55,
+        depthWrite: false, side: THREE.DoubleSide,
+    });
+    const capMat = new THREE.MeshBasicMaterial({
+        color: 0xe74c3c, transparent: true, opacity: 0.55,
+        depthWrite: false, side: THREE.DoubleSide,
+    });
+
+    // ★ Nearly the full grid square (board cells are 0.98 wide, so 0.9
+    //   leaves a thin visual gap but is far easier to click/tap).
+    const SQUARE_SIZE = 0.9;
+
     moves.forEach(m => {
         const isCapture = m.capture;
         const mat = isCapture ? capMat : dotMat;
-        const geo = isCapture
-            ? new THREE.TorusGeometry(0.4, 0.05, 8, 24)
-            : new THREE.CylinderGeometry(0.15, 0.15, 0.04, 16);
+
+        // ★ Flat square covering the whole cell — replaces the small
+        //   circle (cylinder) and thin torus ring.
+        const geo = new THREE.PlaneGeometry(SQUARE_SIZE, SQUARE_SIZE);
         const highlight = new THREE.Mesh(geo, mat);
-        highlight.position.set(m.c - 3.5, 0.04, 3.5 - m.r);
-        if (isCapture) highlight.rotation.x = Math.PI / 2;
+        highlight.rotation.x = -Math.PI / 2;               // lay flat on board
+        highlight.position.set(m.c - 3.5, 0.04, 3.5 - m.r); // just above squares
         highlight.userData = { row: m.r, col: m.c, type: 'highlight' };
         highlightsGroup.add(highlight);
     });
@@ -5548,6 +5562,8 @@ function executeBishopAbility(fromR, fromC, toR, toC, ability, isRemote = false)
 //  ★ 皇后「治癒」技能
 // ============================================================
 function executeQueenHeal(fromR, fromC, toR, toC, ability, isRemote = false) {
+    playSFX('heal');
+
     if (isAnimating) return;
     const caster = gameState.getPiece(fromR, fromC);
     const target = gameState.getPiece(toR, toC);
@@ -5690,6 +5706,8 @@ function spawnHealEffect(row, col) {
 //  ★ 皇后「復活」技能
 // ============================================================
 function executeQueenRevive(fromR, fromC, toR, toC, ability, reviveType = null, isRemote = false) {
+    playSFX('heal');
+
     if (isAnimating) return;
     const caster = gameState.getPiece(fromR, fromC);
     if (!caster) return;
@@ -6696,6 +6714,8 @@ function fireAimedCannon() {
 }
 
 function fireAreaCannonVisual(centerPos, targets, damage, callback) {
+    playSFX('explosion');
+
     const boomGroup = new THREE.Group();
     boomGroup.position.copy(centerPos);
     boomGroup.position.y += 0.3;
@@ -7733,6 +7753,8 @@ function executePawnAbility(fromR, fromC, toR, toC, ability, isRemote = false) {
 }
 
 function createCrossExplosion(row, col, damage, selfDamage, callback) {
+    playSFX('explosion');
+
     const centerPos = get3DPosition(row, col, 0.3);
     const boomGroup = new THREE.Group();
     boomGroup.position.copy(centerPos);
@@ -7827,6 +7849,9 @@ function createCrossExplosion(row, col, damage, selfDamage, callback) {
 
 function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = false, reviveType = null) {
     if (isAnimating) return;
+
+    playSFX('skill');
+
     const piece = gameState.getPiece(fromR, fromC);
 
     // ★ King — Domain Expansion (triggered by the skill button, no prompt)
@@ -7928,7 +7953,16 @@ function executeMove(fromR, fromC, toR, toC, promotionType, moveData, isRemote =
     triggerBishopLeapFadeOut();
     if (isAnimating) return;
     isAnimating = true;
+
     const targetPiece = gameState.getPiece(toR, toC);
+
+    if (targetPiece) {
+        playSFX('capture');
+        showDamageEffect(toR, toC, targetPiece.hp);
+    } else {
+        playSFX('move');
+    }
+
     if (targetPiece) showDamageEffect(toR, toC, targetPiece.hp);
     const pieceObj = pieceObjects[`${fromR},${fromC}`];
     if (!pieceObj) { isAnimating = false; return; }
@@ -7992,6 +8026,16 @@ function checkGameStatus() {
     if (status.over) {
         gameOverFlag = true;
         stopTimer();
+
+        if (status.winner === 'draw') {
+            playSFX('gameover');
+        } else if (currentMode === 'ai' || currentMode === 'multiplayer') {
+            if (status.winner === playerColor) playSFX('victory');
+            else playSFX('gameover');
+        } else {
+            playSFX('victory');
+        }
+
         document.getElementById('gameOverOverlay').classList.remove('hidden');
         document.getElementById('gameOverReason').textContent = status.reason;
         const text = document.getElementById('gameOverText');
@@ -8069,6 +8113,12 @@ function updateTopBarReopenBtn() {
 
     const shouldShow = !!currentMode && bar.classList.contains('hidden');
     reopen.classList.toggle('hidden', !shouldShow);
+}
+
+// ★ Alias — called from startAIGame / backToMenu / initNewGame.
+//   Keeps the ☰ reopen button in sync whenever the top bar toggles.
+function updateTopBarToggleVisibility() {
+    updateTopBarReopenBtn();
 }
 
 function updateTurnMessage() {
@@ -8540,6 +8590,12 @@ function backToMenu() {
     document.getElementById('waitingOverlay').classList.add('hidden');
     document.getElementById('gameOverOverlay').classList.add('hidden');
     document.getElementById('restartConfirmOverlay').classList.add('hidden');
+    document.getElementById('backToMenuConfirmOverlay').classList.add('hidden');
+
+    // ★ NEW — clean up the settings overlay and its origin flag
+    document.getElementById('settingsOverlay').classList.add('hidden');
+    _settingsOpenedFrom = null;
+
     document.getElementById('topBar').classList.add('hidden');
     updateTopBarToggleVisibility();
 
@@ -9114,9 +9170,37 @@ function startAIGame(difficulty) {
     updateTurnIndicator();
 }
 
+function confirmBackToMenu() {
+    const overlay = document.getElementById('backToMenuConfirmOverlay');
+    if (!overlay) { backToMenu(); return; }   // safety fallback
+    overlay.classList.remove('hidden');
+}
+
+function cancelBackToMenuConfirm() {
+    const overlay = document.getElementById('backToMenuConfirmOverlay');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+function doBackToMenuConfirm() {
+    const overlay = document.getElementById('backToMenuConfirmOverlay');
+    if (overlay) overlay.classList.add('hidden');
+    backToMenu();
+}
+
+function restartGame() {
+    document.getElementById('gameOverOverlay').classList.add('hidden');
+    resetTimers(roomSettings.timePerPlayer);
+    initNewGame();
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        peerConnection.send({ type: 'rematch' });
+    }
+}
+
+// ============================================================
+//  Restart confirmation dialog
+//  (wired to the 🔄 重開 button in the top bar)
+// ============================================================
 function confirmRestart() {
-    // ★ Was: if (confirm('確定要重新開始遊戲嗎？')) restartGame();
-    //   Now: show our own styled in-game modal.
     const overlay = document.getElementById('restartConfirmOverlay');
     if (!overlay) { restartGame(); return; }   // safety fallback
     overlay.classList.remove('hidden');
@@ -9131,15 +9215,6 @@ function doRestartConfirm() {
     const overlay = document.getElementById('restartConfirmOverlay');
     if (overlay) overlay.classList.add('hidden');
     restartGame();
-}
-
-function restartGame() {
-    document.getElementById('gameOverOverlay').classList.add('hidden');
-    resetTimers(roomSettings.timePerPlayer);
-    initNewGame();
-    if (currentMode === 'multiplayer' && peerConnection?.open) {
-        peerConnection.send({ type: 'rematch' });
-    }
 }
 
 function initNewGame() {
@@ -10897,33 +10972,296 @@ function createMiniPieceRenderer(canvasEl, type, color) {
 }
 
 // ============================================================
+//  ★ SETTINGS SYSTEM
+//  Persists to localStorage and applies to audio / renderer.
+// ============================================================
+const DEFAULT_GAME_SETTINGS = {
+    musicEnabled: true,
+    musicVolume: 30,        // 0–100
+    sfxVolume: 80,          // 0–100
+    queenVoice: true,
+    graphicsQuality: 'medium', // 'low' | 'medium' | 'high'
+    showCooldownNumbers: true,
+};
+
+let gameSettings = { ...DEFAULT_GAME_SETTINGS };
+
+function loadGameSettings() {
+    try {
+        const raw = localStorage.getItem('chessGameSettings');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            gameSettings = { ...DEFAULT_GAME_SETTINGS, ...parsed };
+        }
+    } catch (e) {
+        console.warn('Failed to load settings:', e);
+    }
+    // Keep the queen-voice mute flag in sync with our own setting
+    queenVoiceMuted = !gameSettings.queenVoice;
+    try { localStorage.setItem('queenVoiceMuted', queenVoiceMuted ? '1' : '0'); } catch (_) { }
+}
+
+function saveGameSettings() {
+    try {
+        localStorage.setItem('chessGameSettings', JSON.stringify(gameSettings));
+    } catch (e) {
+        console.warn('Failed to save settings:', e);
+    }
+}
+
+// ── Track where the settings panel was opened from, so closing
+//    it returns to the right place. 'menu' | 'game' | null
+let _settingsOpenedFrom = null;
+
+function openSettings() {
+    // Decide the origin BEFORE we change any visibility
+    // (a game is "in progress" when currentMode is set and the
+    //  game hasn't ended yet).
+    if (currentMode && !gameOverFlag) {
+        _settingsOpenedFrom = 'game';
+    } else {
+        _settingsOpenedFrom = 'menu';
+    }
+
+    // Only hide the main menu when we're actually on the menu —
+    // during a game mainMenu is already hidden.
+    if (_settingsOpenedFrom === 'menu') {
+        const mm = document.getElementById('mainMenu');
+        if (mm) mm.classList.add('hidden');
+    }
+
+    const overlay = document.getElementById('settingsOverlay');
+    if (overlay) overlay.classList.remove('hidden');
+
+    syncSettingsUI();
+
+    // Try to (re)start the menu music on this user gesture.
+    // This does NOT affect the game in any way.
+    startMenuMusic();
+}
+
+function closeSettings() {
+    const overlay = document.getElementById('settingsOverlay');
+    if (overlay) overlay.classList.add('hidden');
+
+    if (_settingsOpenedFrom === 'menu') {
+        const mm = document.getElementById('mainMenu');
+        if (mm) mm.classList.remove('hidden');
+    }
+    // If it was 'game' → we simply do nothing else. The game
+    // canvas, timer, animations etc. were never touched.
+
+    _settingsOpenedFrom = null;
+}
+
+// Push the current settings values into the UI controls.
+function syncSettingsUI() {
+    const mToggle = document.getElementById('musicEnabledToggle');
+    const mSlider = document.getElementById('musicVolumeSlider');
+    const sSlider = document.getElementById('sfxVolumeSlider');
+    const qToggle = document.getElementById('queenVoiceToggle');
+    const cdToggle = document.getElementById('showCooldownToggle');
+
+    if (mToggle) mToggle.checked = !!gameSettings.musicEnabled;
+    if (mSlider) {
+        mSlider.value = gameSettings.musicVolume;
+        document.getElementById('musicVolumeValue').textContent = gameSettings.musicVolume + '%';
+    }
+    if (sSlider) {
+        sSlider.value = gameSettings.sfxVolume;
+        document.getElementById('sfxVolumeValue').textContent = gameSettings.sfxVolume + '%';
+    }
+    if (qToggle) qToggle.checked = !!gameSettings.queenVoice;
+    if (cdToggle) cdToggle.checked = !!gameSettings.showCooldownNumbers;
+
+    document.querySelectorAll('#settingsOverlay .mode-btn[data-quality]').forEach(b => {
+        b.classList.toggle('active', b.dataset.quality === gameSettings.graphicsQuality);
+    });
+}
+
+// ── Individual setters ──
+function setMusicEnabled(enabled) {
+    gameSettings.musicEnabled = !!enabled;
+    saveGameSettings();
+    if (enabled) startMenuMusic();
+    else stopMenuMusic();
+    updateMusicVolume();
+}
+
+function setMusicVolume(v) {
+    gameSettings.musicVolume = Math.max(0, Math.min(100, parseInt(v) || 0));
+    document.getElementById('musicVolumeValue').textContent = gameSettings.musicVolume + '%';
+    saveGameSettings();
+    updateMusicVolume();
+}
+
+function setSfxVolume(v) {
+    gameSettings.sfxVolume = Math.max(0, Math.min(100, parseInt(v) || 0));
+    document.getElementById('sfxVolumeValue').textContent = gameSettings.sfxVolume + '%';
+    saveGameSettings();
+}
+
+function setQueenVoiceEnabled(enabled) {
+    gameSettings.queenVoice = !!enabled;
+    // Reuse the existing mechanism (which also persists the flag)
+    setQueenVoiceMuted(!enabled);
+    saveGameSettings();
+}
+
+function setShowCooldownNumbers(enabled) {
+    gameSettings.showCooldownNumbers = !!enabled;
+    saveGameSettings();
+    // Refresh any pieces currently on the board so sprites update immediately
+    if (typeof createPieces3D === 'function' && gameState) {
+        try { createPieces3D(); } catch (_) { }
+    }
+}
+
+function setGraphicsQuality(quality) {
+    if (!['low', 'medium', 'high'].includes(quality)) return;
+    gameSettings.graphicsQuality = quality;
+    document.querySelectorAll('#settingsOverlay .mode-btn[data-quality]').forEach(b => {
+        b.classList.toggle('active', b.dataset.quality === quality);
+    });
+    saveGameSettings();
+    applyGraphicsQuality(quality);
+}
+
+function applyGraphicsQuality(quality) {
+    if (!renderer || !scene) return;
+
+    let pixelRatio, shadowOn, shadowType;
+    if (quality === 'low') {
+        pixelRatio = 1;
+        shadowOn = false;
+    } else if (quality === 'high') {
+        pixelRatio = Math.min(window.devicePixelRatio, 2);
+        shadowOn = true;
+        shadowType = THREE.PCFSoftShadowMap;
+    } else {
+        pixelRatio = Math.min(window.devicePixelRatio, 1.5);
+        shadowOn = true;
+        shadowType = THREE.PCFShadowMap;
+    }
+
+    renderer.setPixelRatio(pixelRatio);
+    renderer.shadowMap.enabled = shadowOn;
+    if (shadowOn && shadowType !== undefined) {
+        renderer.shadowMap.type = shadowType;
+    }
+    renderer.shadowMap.needsUpdate = true;
+    scene.traverse(n => { if (n.material) n.material.needsUpdate = true; });
+}
+
+function resetSettingsToDefaults() {
+    if (!confirm('確定要將所有設定重設為預設值嗎？')) return;
+    gameSettings = { ...DEFAULT_GAME_SETTINGS };
+    saveGameSettings();
+
+    // Sync back to the queen-voice mute mechanism
+    queenVoiceMuted = false;
+    try { localStorage.setItem('queenVoiceMuted', '0'); } catch (_) { }
+
+    syncSettingsUI();
+    applyGraphicsQuality(gameSettings.graphicsQuality);
+    updateMusicVolume();
+    if (gameSettings.musicEnabled) startMenuMusic();
+}
+
+// ============================================================
+//  ★ Background music — plays a local MP3 file on loop
+// ============================================================
+let bgmAudio = null;
+
+function startMenuMusic() {
+    if (!gameSettings.musicEnabled) return;
+    if (gameSettings.musicVolume <= 0) return;
+
+    if (!bgmAudio) {
+        bgmAudio = new Audio('Midnight_On_The_Board.mp3');
+        bgmAudio.loop = true;    // 循環播放
+        bgmAudio.preload = 'auto';
+        bgmAudio.volume = gameSettings.musicVolume / 100;
+    }
+
+    // 已經在播就不重複觸發
+    if (bgmAudio.paused) {
+        bgmAudio.play().catch(err => {
+            // 瀏覽器政策擋掉時（沒有使用者手勢）就會落到這裡
+            console.warn('🎵 BGM 播放被阻擋:', err.message);
+        });
+    }
+}
+
+function stopMenuMusic() {
+    if (!bgmAudio) return;
+    bgmAudio.pause();
+    // 保留 currentTime，下次 resume 時從中斷處繼續
+}
+
+function updateMusicVolume() {
+    if (!bgmAudio) return;
+    bgmAudio.volume = gameSettings.musicEnabled
+        ? gameSettings.musicVolume / 100
+        : 0;
+}
+
+// Public helper so any future SFX system can respect the user's volume.
+function getSfxVolume() {
+    return gameSettings.sfxVolume / 100;
+}
+
+// ============================================================
 //  BOOT
 // ============================================================
 window.onload = () => {
     initThree();
+
+    // ★ NEW — load saved settings before anything else uses them
+    loadGameSettings();
+    applyGraphicsQuality(gameSettings.graphicsQuality);
+
     initQueenVoice();
     hideRemoteAim();
     updateActionButtonStates();
     if (IS_MOBILE) setupMobileCannonControls();
 
-    // ★ NEW — hook the first tap to enter fullscreen
+    // ★ NEW — hook the first user gesture to start menu music
+    //   (browsers block AudioContext before any interaction)
+    const startMusicOnFirstGesture = () => {
+        startMenuMusic();
+        document.removeEventListener('pointerdown', startMusicOnFirstGesture, true);
+        document.removeEventListener('touchstart', startMusicOnFirstGesture, true);
+        document.removeEventListener('keydown', startMusicOnFirstGesture, true);
+    };
+    document.addEventListener('pointerdown', startMusicOnFirstGesture, { capture: true, passive: true });
+    document.addEventListener('touchstart', startMusicOnFirstGesture, { capture: true, passive: true });
+    document.addEventListener('keydown', startMusicOnFirstGesture, { capture: true });
+
     setupMobileAutoFullscreen();
-
-    // ★ NEW — 強制橫向系統（含旋轉提示遮罩）
     setupForceLandscape();
-
-    // ★ Initialize AI mode toggle UI
     updateAIModeUI();
-
     updateTopBarReopenBtn();
 
-    // ★ ESC closes the restart confirmation modal
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+            const menuOverlay = document.getElementById('backToMenuConfirmOverlay');
+            if (menuOverlay && !menuOverlay.classList.contains('hidden')) {
+                e.preventDefault();
+                cancelBackToMenuConfirm();
+                return;
+            }
             const overlay = document.getElementById('restartConfirmOverlay');
             if (overlay && !overlay.classList.contains('hidden')) {
                 e.preventDefault();
                 cancelRestartConfirm();
+                return;
+            }
+            // ★ NEW — ESC also closes the settings panel
+            const settingsOverlay = document.getElementById('settingsOverlay');
+            if (settingsOverlay && !settingsOverlay.classList.contains('hidden')) {
+                e.preventDefault();
+                closeSettings();
             }
         }
     });

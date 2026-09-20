@@ -58,7 +58,8 @@
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
             <button class="btn btn-danger" id="freeCamBtn" ...>📷 自由</button>
             <button class="btn btn-secondary" ... onclick="confirmRestart()">🔄 重開</button>
-            <button class="btn btn-secondary" ... onclick="backToMenu()">🏠 主選單</button>
+            <button class="btn btn-secondary" ... onclick="confirmBackToMenu()">🏠 主選單</button>
+            <button class="btn btn-secondary" id="inGameSettingsBtn" onclick="openSettings()">⚙️ 設定</button>
 
             <!-- ★ 新增：通用關閉鈕 -->
             <button class="topbar-close-btn" id="topBarCloseBtn" onclick="closeTopBar()" ...>✕</button>
@@ -117,12 +118,11 @@
         <div class="panel">
             <h1>♞ 西洋棋</h1>
             <p style="opacity:0.7;margin-bottom:20px;">與眾同樂</p>
-            <div class="btn-row">
+            <div class="btn-row main-menu-buttons">
                 <button class="btn" onclick="showAIDifficulty()">🤖 單人遊戲</button>
                 <button class="btn" onclick="showMultiplayerSetup()">👥 雙人遊戲</button>
-            </div>
-            <div class="btn-row" style="margin-top:8px;">
                 <button class="btn btn-secondary" onclick="openWiki()">📖 技能圖鑑</button>
+                <button class="btn btn-secondary" onclick="openSettings()">⚙️ 設定</button>
             </div>
         </div>
     </div>
@@ -352,6 +352,104 @@
     </div>
 
     <!-- ============================================================ -->
+    <!--  SETTINGS                                                     -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="settingsOverlay">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
+        <div class="panel settings-panel">
+            <h2>⚙️ 設定</h2>
+
+            <!-- Music -->
+            <div class="settings-block">
+                <label class="toggle-row">
+                    <span>🎵 背景音樂</span>
+                    <label class="toggle-switch small-switch">
+                        <input type="checkbox" id="musicEnabledToggle" checked onchange="setMusicEnabled(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+                <div class="slider-row" style="margin-top:8px;">
+                    <input type="range" id="musicVolumeSlider" min="0" max="100" value="30"
+                        oninput="setMusicVolume(this.value)">
+                    <span class="value-display" id="musicVolumeValue">30%</span>
+                </div>
+            </div>
+
+            <!-- Sound effects -->
+            <div class="settings-block">
+                <label>🔊 音效音量</label>
+                <div class="slider-row">
+                    <input type="range" id="sfxVolumeSlider" min="0" max="100" value="80"
+                        oninput="setSfxVolume(this.value)">
+                    <span class="value-display" id="sfxVolumeValue">80%</span>
+                </div>
+            </div>
+
+            <!-- Queen voice -->
+            <div class="settings-block">
+                <label class="toggle-row">
+                    <span>👑 皇后語音 (TTS)</span>
+                    <label class="toggle-switch small-switch">
+                        <input type="checkbox" id="queenVoiceToggle" checked
+                            onchange="setQueenVoiceEnabled(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+                <div class="desc">皇后施放技能時的英文語音</div>
+            </div>
+
+            <!-- Graphics quality -->
+            <div class="settings-block">
+                <label>🎨 畫質</label>
+                <div class="btn-row" style="justify-content:center;gap:6px;margin-top:4px;">
+                    <button class="mode-btn" data-quality="low" onclick="setGraphicsQuality('low')">低</button>
+                    <button class="mode-btn" data-quality="medium" onclick="setGraphicsQuality('medium')">中</button>
+                    <button class="mode-btn" data-quality="high" onclick="setGraphicsQuality('high')">高</button>
+                </div>
+                <div class="desc">較低畫質可提升手機效能</div>
+            </div>
+
+            <!-- Cooldown numbers -->
+            <div class="settings-block">
+                <label class="toggle-row">
+                    <span>⏳ 顯示技能冷卻</span>
+                    <label class="toggle-switch small-switch">
+                        <input type="checkbox" id="showCooldownToggle" checked
+                            onchange="setShowCooldownNumbers(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <!-- Fullscreen shortcut -->
+            <div class="settings-block">
+                <label class="toggle-row">
+                    <span>🖥 全螢幕</span>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleFullscreen()">切換</button>
+                </label>
+            </div>
+
+            <!-- Actions -->
+            <div class="btn-row" style="margin-top:18px;">
+                <button class="btn btn-danger" onclick="resetSettingsToDefaults()">↺ 重設</button>
+                <button class="btn btn-secondary" onclick="closeSettings()">← 返回</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
     <!-- ============ PROMOTION ============ -->
     <!-- ============================================================ -->
     <div class="overlay hidden" id="promotionOverlay">
@@ -392,6 +490,21 @@
             <div class="btn-row" style="margin-top:16px;">
                 <button class="btn btn-danger" onclick="doRestartConfirm()">✅ 確定重開</button>
                 <button class="btn btn-secondary" onclick="cancelRestartConfirm()">✕ 取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  BACK TO MAIN MENU CONFIRM                                    -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="backToMenuConfirmOverlay">
+        <div class="panel" style="max-width: 420px;">
+            <h2>🏠 回到主選單？</h2>
+            <p style="opacity:0.85;margin-bottom:8px;">目前的對局進度將會遺失。</p>
+            <p style="opacity:0.6;font-size:0.9rem;">確定要離開此對局嗎？</p>
+            <div class="btn-row" style="margin-top:16px;">
+                <button class="btn btn-danger" onclick="doBackToMenuConfirm()">✅ 確定離開</button>
+                <button class="btn btn-secondary" onclick="cancelBackToMenuConfirm()">✕ 取消</button>
             </div>
         </div>
     </div>
@@ -532,6 +645,7 @@
 
     <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
+    <script src="sfx.js"></script>
     <script src="main.js"></script>
     <script src="ai.js"></script>
     <script src="wiki.js"></script>

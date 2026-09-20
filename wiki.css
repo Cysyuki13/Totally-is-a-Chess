@@ -425,3 +425,24 @@
         opacity: 1;
     }
 }
+
+/* ============================================================
+   Hide scrollbars globally — keeps scrolling functional
+   ============================================================ */
+
+/* Firefox */
+* {
+    scrollbar-width: none;
+}
+
+/* Chrome, Edge, Safari (WebKit/Blink) */
+*::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* IE / old Edge (legacy) */
+* {
+    -ms-overflow-style: none;
+}
