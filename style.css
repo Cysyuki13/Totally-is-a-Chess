@@ -3648,3 +3648,95 @@ body.force-landscape #rotateDeviceOverlay {
         font-size: 0.8rem !important;
     }
 }
+
+/* ============================================================
+   COMPACT TOP BAR — mobile landscape
+   Scales the whole top bar down to ~70% while keeping the
+   same visual proportions as desktop (same colors, same
+   shapes, same shadows — just smaller).
+   ============================================================ */
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
+
+    .game-top-bar {
+        padding: 4px 10px;
+        gap: 3px;
+    }
+
+    /* ── Turn indicator ── */
+    .turn-indicator {
+        font-size: 0.72rem;
+        gap: 5px;
+    }
+
+    .turn-dot {
+        width: 10px;
+        height: 10px;
+        box-shadow: 0 0 9px currentColor;
+    }
+
+    /* ── Warnings ── */
+    .check-warning,
+    .ai-thinking {
+        font-size: 0.75rem;
+    }
+
+    /* ── Timer ── */
+    .timer-display {
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        gap: 4px;
+        border-radius: 14px;
+    }
+
+    .timer-item {
+        padding: 1px 4px;
+        gap: 3px;
+        border-radius: 8px;
+    }
+
+    .timer-item .dot {
+        width: 6px;
+        height: 6px;
+    }
+
+    .timer-item .time {
+        min-width: 28px;
+    }
+
+    .timer-item .time.infinity {
+        min-width: 18px;
+        font-size: 0.85rem;
+    }
+
+    .timer-sep {
+        padding: 0;
+        font-size: 0.7rem;
+    }
+
+    /* ── Top-bar action buttons (自由 / 重開 / 主選單 / 設定) ── */
+    .game-top-bar .btn {
+        padding: 5px 10px;
+        margin: 2px;
+        font-size: 0.72rem;
+        letter-spacing: 0.3px;
+        border-radius: 7px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .game-top-bar .btn-danger {
+        box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+    }
+
+    .game-top-bar .btn-secondary {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* ── ✕ close button ── */
+    .topbar-close-btn {
+        padding: 4px 7px;
+        min-width: 26px;
+        height: 26px;
+        font-size: 0.72rem;
+        border-radius: 6px;
+    }
+}

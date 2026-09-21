@@ -5370,7 +5370,7 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
         checkGameStatus();
         if (!gameOverFlag) {
             updateCameraTargets();
-            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+            if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                 aiThinking = true;
                 setTimeout(makeAIMove, 500);
             }
@@ -5548,7 +5548,7 @@ function executeBishopAbility(fromR, fromC, toR, toC, ability, isRemote = false)
             updateTurnIndicator();
             if (!gameOverFlag) {
                 updateCameraTargets();
-                if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                     aiThinking = true;
                     setTimeout(makeAIMove, 500);
                 }
@@ -5601,7 +5601,7 @@ function executeQueenHeal(fromR, fromC, toR, toC, ability, isRemote = false) {
         updateTurnIndicator();
         if (!gameOverFlag) {
             updateCameraTargets();
-            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+            if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                 aiThinking = true;
                 setTimeout(makeAIMove, 500);
             }
@@ -5788,7 +5788,7 @@ function executeQueenRevive(fromR, fromC, toR, toC, ability, reviveType = null, 
         updateTurnIndicator();
         if (!gameOverFlag) {
             updateCameraTargets();
-            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+            if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                 aiThinking = true;
                 setTimeout(makeAIMove, 500);
             }
@@ -6668,7 +6668,7 @@ function fireAimedCannon() {
             checkGameStatus();
             if (!gameOverFlag) {
                 updateCameraTargets();
-                if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                     aiThinking = true;
                     setTimeout(makeAIMove, 500);
                 }
@@ -6703,7 +6703,7 @@ function fireAimedCannon() {
             checkGameStatus();
             if (!gameOverFlag) {
                 updateCameraTargets();
-                if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                     aiThinking = true;
                     setTimeout(makeAIMove, 500);
                 }
@@ -7634,7 +7634,7 @@ function executePawnAbility(fromR, fromC, toR, toC, ability, isRemote = false) {
         updateTurnIndicator();
         if (!gameOverFlag) {
             updateCameraTargets();
-            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+            if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                 aiThinking = true;
                 setTimeout(makeAIMove, 500);
             }
@@ -7675,7 +7675,7 @@ function executePawnAbility(fromR, fromC, toR, toC, ability, isRemote = false) {
             updateTurnIndicator();
             if (!gameOverFlag) {
                 updateCameraTargets();
-                if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                     aiThinking = true;
                     setTimeout(makeAIMove, 500);
                 }
@@ -7738,7 +7738,7 @@ function executePawnAbility(fromR, fromC, toR, toC, ability, isRemote = false) {
                 updateTurnIndicator();
                 if (!gameOverFlag) {
                     updateCameraTargets();
-                    if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                    if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                         aiThinking = true;
                         setTimeout(makeAIMove, 500);
                     }
@@ -7930,7 +7930,7 @@ function attemptAbility(fromR, fromC, targetR, targetC, ability, isRemote = fals
         checkGameStatus();
         if (!gameOverFlag) {
             updateCameraTargets();
-            if (currentMode === 'ai' && gameState.turn !== playerColor) {
+            if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                 aiThinking = true;
                 setTimeout(makeAIMove, 500);
             }
@@ -7985,16 +7985,21 @@ function executeMove(fromR, fromC, toR, toC, promotionType, moveData, isRemote =
             syncPiecesAfterMove();
             isAnimating = false;
             deselectPiece();
+
             switchTimer(gameState.turn);
+
+            // ★ Send the move BEFORE the local game-status check so the opponent
+            //   always learns about the final move (which may end the game).
+            if (currentMode === 'multiplayer' && !isRemote) {
+                sendMoveToPeer(fromR, fromC, toR, toC, promotionType);
+            }
+
             checkGameStatus();
             if (!gameOverFlag) {
                 updateCameraTargets();
-                if (currentMode === 'ai' && gameState.turn !== playerColor) {
+                if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
                     aiThinking = true;
                     setTimeout(makeAIMove, 500);
-                }
-                if (currentMode === 'multiplayer' && !isRemote) {
-                    sendMoveToPeer(fromR, fromC, toR, toC, promotionType);
                 }
             }
             updateTurnIndicator();
@@ -8053,9 +8058,6 @@ function checkGameStatus() {
         } else {
             text.textContent = (status.winner === 'white' ? '白方' : '黑方') + ' 獲勝!';
             text.className = 'game-over-text win';
-        }
-        if (currentMode === 'multiplayer') {
-            if (peerConnection?.open) peerConnection.send({ type: 'gameover' });
         }
         return;
     }
@@ -9352,7 +9354,7 @@ function initNewGame() {
         timerState.currentPlayer = 'white';
         startTimer();
     }
-    if (currentMode === 'ai' && gameState.turn !== playerColor) {
+    if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
         aiThinking = true;
         setTimeout(makeAIMove, 500);
     }
@@ -9823,8 +9825,11 @@ function maybeOfferDomainExpansion() {
     //   (If it's OUR king, we press the button ourselves.)
     if (color === playerColor) return;
 
+    kingSkillState.active = true;
+    kingSkillState.context = { color, checker: checkers[0] };
+
     setTimeout(() => {
-        if (gameOverFlag || kingSkillState.active) return;
+        if (gameOverFlag) return;   // (active check removed — already true)
         acceptDomainExpansion(color, checkers[0]);
     }, 750);
 }
