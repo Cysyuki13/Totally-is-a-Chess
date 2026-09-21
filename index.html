@@ -13,7 +13,7 @@
     <meta name="format-detection" content="telephone=no" />
 
     <title>TotallyIsAChess</title>
-    <link rel="icon" type="image/png" href="Chess_icon.png" />
+    <link rel="icon" type="image/png" href="assets/icons/Chess_icon.png" />
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="wiki.css" />
 </head>
@@ -56,20 +56,19 @@
             <span id="aiThinkingIndicator" class="ai-thinking hidden">🤖 AI 思考中...</span>
         </div>
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-            <button class="btn btn-danger" id="freeCamBtn" ...>📷 自由</button>
-            <button class="btn btn-secondary" ... onclick="confirmRestart()">🔄 重開</button>
-            <button class="btn btn-secondary" ... onclick="confirmBackToMenu()">🏠 主選單</button>
+            <button class="btn btn-danger" id="freeCamBtn" onclick="toggleFreeCamera()">📷 自由</button>
+            <button class="btn btn-secondary" onclick="confirmRestart()">🔄 重開</button>
+            <button class="btn btn-secondary" onclick="confirmBackToMenu()">🏠 主選單</button>
             <button class="btn btn-secondary" id="inGameSettingsBtn" onclick="openSettings()">⚙️ 設定</button>
 
-            <!-- ★ 新增：通用關閉鈕 -->
-            <button class="topbar-close-btn" id="topBarCloseBtn" onclick="closeTopBar()" ...>✕</button>
+            <button class="topbar-close-btn" id="topBarCloseBtn" onclick="closeTopBar()" title="隱藏選單">✕</button>
         </div>
     </div>
     <!-- ↑↑↑ 這一行 `</div>` 就是補上的：關閉 #topBar -->
     <!-- ↓↓↓ 然後把 ☰ 按鈕移到外面 -->
 
     <!-- ★ 浮動「開啟選單」鈕 -->
-    <button id="topBarReopenBtn" class="hidden" onclick="showTopBar()" ...>☰</button>
+    <button id="topBarReopenBtn" class="hidden" onclick="showTopBar()" title="顯示選單">☰</button>
 
     <div id="actionBar">
         <button class="btn btn-action-move active" id="btnActionMove" onclick="setActionMode('move')">🚶 移動</button>
@@ -532,8 +531,21 @@
             <p id="gameOverReason" style="opacity:0.8;"></p>
             <div class="btn-row" style="margin-top:16px;">
                 <button class="btn" onclick="restartGame()">🔄 再玩一局</button>
+                <button class="btn btn-secondary" onclick="viewFinalBoard()">👁 查看棋盤</button>
                 <button class="btn btn-secondary" onclick="backToMenu()">🏠 主選單</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ★ 遊戲結束 — 查看殘局時的浮動狀態列 -->
+    <div id="gameOverStatusBar" class="game-over-status-bar hidden">
+        <div class="game-over-status-text">
+            <span class="game-over-status-result" id="gameOverStatusResult">遊戲結束</span>
+            <span class="game-over-status-reason" id="gameOverStatusReason"></span>
+        </div>
+        <div class="game-over-status-actions">
+            <button class="btn btn-secondary btn-sm" onclick="restartGame()">🔄 再玩一局</button>
+            <button class="btn btn-secondary btn-sm" onclick="showGameOverMenu()">📋 結算</button>
         </div>
     </div>
 
@@ -573,6 +585,16 @@
 
     <!-- 3) VS screen -->
     <div id="vsOverlay" class="vs-overlay hidden">
+        <div class="vs-speedlines"></div>
+        <div class="vs-lightning"><span></span><span></span><span></span><span></span></div>
+        <div class="vs-shard-burst">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="vs-vignette"></div>
+        <div class="vs-chromatic vs-chromatic-r">V</div>
+        <div class="vs-chromatic vs-chromatic-b">V</div>
+
         <div class="vs-bg-split vs-bg-red"></div>
         <div class="vs-bg-split vs-bg-blue"></div>
         <div class="vs-shards"></div>
@@ -591,54 +613,79 @@
         </div>
     </div>
 
-    <!-- 4) Battle UI (arena style) -->
+    <!-- 4) Battle UI (Arena style) -->
     <div id="battleOverlay" class="battle-overlay hidden">
+        <!-- Background Layers -->
+        <div class="battle-bg-layer"></div>
+        <div class="battle-grid-floor"></div>
+        <div class="battle-speed-lines"></div>
+
+        <!-- Screen Effects -->
+        <div class="battle-vignette"></div>
+        <div class="battle-flash" id="battleFlash"></div>
+        <div class="battle-shockwave" id="battleShockwave"></div>
+
+        <!-- Top HUD -->
+        <div class="battle-hud-top">
+            <div class="battle-combo-badge" id="battleComboBadge"></div>
+        </div>
+
+        <!-- Central VS -->
+        <div class="battle-vs-center" id="battleVsCenter">VS</div>
+
+        <!-- Combatants -->
         <div class="battle-stage">
-            <!-- Opponent top-right -->
-            <div class="battle-combatant battle-opponent">
-                <div class="battle-sprite">
+            <!-- Opponent (Top Right) -->
+            <div class="battle-combatant battle-opponent" id="battleOpponent">
+                <div class="battle-sprite-container">
+                    <div class="battle-aura opponent-aura"></div>
                     <canvas id="battleOpponentCanvas"></canvas>
+                    <div class="battle-choice-bubble" id="battleOpponentChoiceBubble"></div>
                 </div>
                 <div class="battle-stats battle-stats-right">
                     <div class="battle-name" id="battleOpponentName">Opponent</div>
+                    <div class="battle-health-bar">
+                        <div class="battle-health-fill" id="battleOpponentHealthFill"></div>
+                    </div>
                     <div class="battle-hearts" id="battleOpponentHearts"></div>
                 </div>
-                <!-- ★ Shows what the opponent picked (rock/paper/scissors) -->
-                <div class="battle-choice-bubble" id="battleOpponentChoiceBubble"></div>
             </div>
 
-            <!-- Player bottom-left -->
-            <div class="battle-combatant battle-player">
-                <div class="battle-sprite">
+            <!-- Player (Bottom Left) -->
+            <div class="battle-combatant battle-player" id="battlePlayer">
+                <div class="battle-sprite-container">
+                    <div class="battle-aura player-aura"></div>
                     <canvas id="battlePlayerCanvas"></canvas>
+                    <div class="battle-choice-bubble battle-choice-bubble-player" id="battlePlayerChoiceBubble"></div>
                 </div>
                 <div class="battle-stats battle-stats-left">
                     <div class="battle-name" id="battlePlayerName">King</div>
+                    <div class="battle-health-bar">
+                        <div class="battle-health-fill" id="battlePlayerHealthFill"></div>
+                    </div>
                     <div class="battle-hearts" id="battlePlayerHearts"></div>
                 </div>
-                <!-- ★ NEW: shows what the LOCAL player picked -->
-                <div class="battle-choice-bubble battle-choice-bubble-player" id="battlePlayerChoiceBubble"></div>
             </div>
+        </div>
 
-            <!-- Bottom bar -->
-            <div class="battle-bottom">
-                <div class="battle-message-box">
-                    <div class="battle-message" id="battleMessage">選擇你的出拳！</div>
-                </div>
-                <div class="battle-menu" id="battleMenu">
-                    <button class="battle-menu-btn" data-choice="rock">
-                        <span class="battle-menu-icon">🪨</span>
-                        <span class="battle-menu-label">石頭</span>
-                    </button>
-                    <button class="battle-menu-btn" data-choice="paper">
-                        <span class="battle-menu-icon">📄</span>
-                        <span class="battle-menu-label">布</span>
-                    </button>
-                    <button class="battle-menu-btn" data-choice="scissors">
-                        <span class="battle-menu-icon">✂️</span>
-                        <span class="battle-menu-label">剪刀</span>
-                    </button>
-                </div>
+        <!-- Bottom Control Deck -->
+        <div class="battle-bottom">
+            <div class="battle-message-box">
+                <div class="battle-message" id="battleMessage">選擇你的出拳！</div>
+            </div>
+            <div class="battle-menu" id="battleMenu">
+                <button class="battle-menu-btn" data-choice="rock">
+                    <span class="battle-menu-icon">🪨</span>
+                    <span class="battle-menu-label">石頭</span>
+                </button>
+                <button class="battle-menu-btn" data-choice="paper">
+                    <span class="battle-menu-icon">📄</span>
+                    <span class="battle-menu-label">布</span>
+                </button>
+                <button class="battle-menu-btn" data-choice="scissors">
+                    <span class="battle-menu-icon">✂️</span>
+                    <span class="battle-menu-label">剪刀</span>
+                </button>
             </div>
         </div>
     </div>

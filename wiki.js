@@ -1574,6 +1574,22 @@ function setupKingEffect() {
         checker.position.set(0.6, 0, -0.6);
         wikiEffectRoot.add(checker);
 
+        const mist = [];
+        for (let i = 0; i < 40; i++) {
+            const mg = new THREE.SphereGeometry(0.03, 4, 4);
+            const mm = new THREE.MeshBasicMaterial({
+                color: 0xc44dff, transparent: true, opacity: 0,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const m = new THREE.Mesh(mg, mm);
+            const a = Math.random() * Math.PI * 2;
+            const r = 0.2 + Math.random() * 2.2;
+            m.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+            m.userData = { baseY: 0.05, speed: 0.6 + Math.random() * 1.4, delay: Math.random() * 1.2 };
+            wikiEffectRoot.add(m);
+            mist.push(m);
+        }
+
         // ── Pure black expanding disc ──
         const discMat = new THREE.MeshBasicMaterial({
             color: 0x000000,

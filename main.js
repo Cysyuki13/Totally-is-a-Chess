@@ -8113,6 +8113,26 @@ function updateTopBarReopenBtn() {
 
     const shouldShow = !!currentMode && bar.classList.contains('hidden');
     reopen.classList.toggle('hidden', !shouldShow);
+
+    // ⛶ follows the ☰ state — but wait a tick so the ☰ has time to appear
+    requestAnimationFrame(updateFullscreenBtnPosition);
+}
+
+function updateFullscreenBtnPosition() {
+    const btn = document.getElementById('globalFullscreenBtn');
+    const bar = document.getElementById('topBar');
+    const reopen = document.getElementById('topBarReopenBtn');
+    if (!btn) return;
+
+    const barVisible = !!bar && !bar.classList.contains('hidden');
+    const reopenVisible = !!reopen && !reopen.classList.contains('hidden');
+
+    // ★ Three states:
+    //   1. Top bar visible   → drop below the top bar
+    //   2. Top bar hidden + ☰ shown → drop below the ☰ button
+    //   3. Neither (menus)   → stay at the very top-left
+    btn.classList.toggle('below-topbar', barVisible);
+    btn.classList.toggle('below-reopen', !barVisible && reopenVisible);
 }
 
 // ★ Alias — called from startAIGame / backToMenu / initNewGame.
@@ -8545,6 +8565,15 @@ function animate() {
         }
     }
 
+    // ★ DOMAIN EXPANSION — camera shake
+    if (window._domainShake && window._domainShake.intensity > 0) {
+        const s = window._domainShake.intensity;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s * 0.5;
+        camera.position.z += (Math.random() - 0.5) * s;
+        camera.rotation.z += (Math.random() - 0.5) * s * 0.6;
+    }
+
     renderer.render(scene, camera);
 }
 
@@ -8589,6 +8618,7 @@ function backToMenu() {
     document.getElementById('roomSettings').classList.add('hidden');
     document.getElementById('waitingOverlay').classList.add('hidden');
     document.getElementById('gameOverOverlay').classList.add('hidden');
+    document.getElementById('gameOverStatusBar')?.classList.add('hidden');
     document.getElementById('restartConfirmOverlay').classList.add('hidden');
     document.getElementById('backToMenuConfirmOverlay').classList.add('hidden');
 
@@ -9189,11 +9219,55 @@ function doBackToMenuConfirm() {
 
 function restartGame() {
     document.getElementById('gameOverOverlay').classList.add('hidden');
+    document.getElementById('gameOverStatusBar')?.classList.add('hidden');   // ★ NEW
     resetTimers(roomSettings.timePerPlayer);
     initNewGame();
     if (currentMode === 'multiplayer' && peerConnection?.open) {
         peerConnection.send({ type: 'rematch' });
     }
+}
+
+// ============================================================
+//  ★ Game Over — "view final board" mode
+//  Hides the game-over overlay and shows a small floating bar
+//  with the result + reason so the player can inspect the
+//  final board freely (camera drag / pinch-zoom still works).
+// ============================================================
+function viewFinalBoard() {
+    const overlay = document.getElementById('gameOverOverlay');
+    if (overlay) overlay.classList.add('hidden');
+
+    const textEl = document.getElementById('gameOverText');
+    const reasonEl = document.getElementById('gameOverReason');
+    const bar = document.getElementById('gameOverStatusBar');
+    const barResult = document.getElementById('gameOverStatusResult');
+    const barReason = document.getElementById('gameOverStatusReason');
+
+    if (barResult && textEl) {
+        barResult.textContent = (textEl.textContent || '遊戲結束').trim();
+
+        // Carry over win / lose / draw class from the overlay text
+        const extra = (textEl.className || '')
+            .replace('game-over-text', '')
+            .trim();
+        barResult.className =
+            'game-over-status-result' + (extra ? ' ' + extra : '');
+    }
+
+    if (barReason && reasonEl) {
+        const r = (reasonEl.textContent || '').trim();
+        barReason.textContent = r ? '· ' + r : '';
+    }
+
+    if (bar) bar.classList.remove('hidden');
+}
+
+function showGameOverMenu() {
+    const bar = document.getElementById('gameOverStatusBar');
+    if (bar) bar.classList.add('hidden');
+
+    const overlay = document.getElementById('gameOverOverlay');
+    if (overlay) overlay.classList.remove('hidden');
 }
 
 // ============================================================
@@ -9219,6 +9293,7 @@ function doRestartConfirm() {
 
 function initNewGame() {
     document.getElementById('topBar').classList.remove('hidden');
+    document.getElementById('gameOverStatusBar')?.classList.add('hidden');
     updateTopBarToggleVisibility();
 
     gameState = new ChessGame();
@@ -9370,6 +9445,7 @@ window.chessHelp = function () {
     // ── Editor / Tools ──
     console.log('%c📝 編輯器 / 工具', gold);
     console.log('  %copenChessEditor(filename?)%c  → 在新分頁開啟棋盤編輯器', cmd, desc);
+    console.log('  %copenChessEditor()%c  → 在新分頁開啟棋盤編輯器', cmd, desc);
     console.log('  %c                              %c     預設檔名: chessEditor.html', dim, desc);
     console.log('  %c                              %c     會附帶當前棋盤狀態 (board=…&turn=…)', dim, desc);
 
@@ -9392,6 +9468,8 @@ window.chessHelp = function () {
     console.log('  %csetTurn("white"|"black")%c    → 強制切換回合', cmd, desc);
     console.log('  %chealAll()%c                   → 將所有棋子補滿 HP', cmd, desc);
     console.log('  %cclearBoard()%c                → 清空棋盤 (慎用)', cmd, desc);
+    console.log('  %cforceWin()%c                  → 立即強制獲勝（結束對局）', cmd, desc);
+    console.log('  %cforceLose()%c                 → 立即強制認輸（結束對局）', cmd, desc);
 
     console.log('%c─────────────────────────────────────────', gold);
     console.log('%c輸入 chessHelp() 可再次顯示此列表', dim);
@@ -9399,6 +9477,7 @@ window.chessHelp = function () {
     // ── Domain Expansion ──
     console.log('%c👑 領域展開 (Domain Expansion)', gold);
     console.log('  %cforceDomainExpansion(color?, type?)%c → 強制觸發國王領域展開', cmd, desc);
+    console.log('  %cforceDomainExpansion()%c', cmd, desc);
     console.log('  %c                                    %c     color: "white" | "black" (預設當前回合)', dim, desc);
     console.log('  %c                                    %c     type : 敵方棋子類型 (e.g. "queen", 預設隨機)', dim, desc);
 };
@@ -9583,6 +9662,82 @@ window.forceDomainExpansion = function (color, targetType) {
 };
 
 // ============================================================
+//  ★ Force Win / Lose — developer console commands
+// ============================================================
+//  Usage (in DevTools console):
+//      forceWin()   → instantly ends the game with your victory
+//      forceLose()  → instantly ends the game with your defeat
+//
+//  Notes:
+//   • Works in local / AI / multiplayer modes.
+//   • In multiplayer, the opponent is notified via the 'gameover'
+//     message (they'll see "對手認輸或投降" and win).
+//   • Does nothing if the game is already over.
+// ============================================================
+
+window.forceWin = function () {
+    if (!gameState) {
+        return console.warn('⚠️ 沒有進行中的遊戲');
+    }
+    if (gameOverFlag) {
+        return console.warn('⚠️ 遊戲已經結束了');
+    }
+
+    gameOverFlag = true;
+    stopTimer();
+
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    document.getElementById('gameOverReason').textContent = '（開發者指令：強制勝利）';
+
+    const text = document.getElementById('gameOverText');
+    text.textContent = '你贏了!';
+    text.className = 'game-over-text win';
+
+    playSFX('victory');
+
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        peerConnection.send({ type: 'gameover' });
+    }
+
+    console.log(
+        '%c🏆 強制勝利！%c  gameOverFlag = true',
+        'color:#2ecc71;font-weight:bold;font-size:14px;',
+        'color:#f0e6d3;font-family:monospace;'
+    );
+};
+
+window.forceLose = function () {
+    if (!gameState) {
+        return console.warn('⚠️ 沒有進行中的遊戲');
+    }
+    if (gameOverFlag) {
+        return console.warn('⚠️ 遊戲已經結束了');
+    }
+
+    gameOverFlag = true;
+    stopTimer();
+
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    document.getElementById('gameOverReason').textContent = '（開發者指令：強制失敗）';
+
+    const text = document.getElementById('gameOverText');
+    text.textContent = '你輸了...';
+    text.className = 'game-over-text lose';
+
+    playSFX('gameover');
+
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        peerConnection.send({ type: 'gameover' });
+    }
+
+    console.log(
+        '%c💀 強制失敗！%c  gameOverFlag = true',
+        'color:#e74c3c;font-weight:bold;font-size:14px;',
+        'color:#f0e6d3;font-family:monospace;'
+    );
+};
+
+// ============================================================
 //  KING PASSIVE SKILL — Domain Expansion (領域展開)
 // ============================================================
 //
@@ -9719,10 +9874,12 @@ function declineDomainExpansion() {
     kingSkillState.context = null;
 }
 
-// ── Domain expansion animation (3D) — BLACK DOMAIN ──
-// A wave of pure black energy expands slowly from the king's square,
-// tinting every other piece on the board as it passes — except the
-// checking piece(s) and the king himself. Then we hand off to the VS screen.
+// ── Domain expansion animation (3D) — BLACK DOMAIN 2.0 ──
+//  Cinematic timeline:
+//    CHARGE  (0.8s) : rune circle + inward-spiraling particles
+//    EXPAND  (3.3s) : 2 wavefronts, 16 pillars, 10 cracks,
+//                     lightning arcs on the dome, tinting pieces
+//    BURST   (0.8s) : shatter shards + shake spike, then VS screen
 function startDomainExpansion(color, checker) {
     isAnimating = true;
 
@@ -9733,39 +9890,66 @@ function startDomainExpansion(color, checker) {
     }
 
     const kingPos = get3DPosition(king.r, king.c, 0);
+    const t0 = clock.getElapsedTime();
 
-    // ★ BLACK DOMAIN palette
-    const waveColor = 0x000000;       // pure black wavefront
-    const discColor = 0x000000;       // pure black fill
-    const glowColor = 0x2a0a4a;       // dark purple glow accent
-    const pillarColor = 0x0a0a14;     // near-black pillars
-    const rimColor = 0x4a1a6a;        // subtle purple rim light
-    const darkColor = new THREE.Color(0x000000);
+    // ── Palette ──
+    const BLACK = 0x000000;
+    const PURPLE = 0x6a2a9a;
+    const PURPLE_L = 0x9b4ddb;
+    const MAGENTA = 0xc44dff;
+    const RED = 0x8b0033;
+    const DARK_COLOR = new THREE.Color(0x000000);
 
-    // ── 1. Ground disc — pure black fill behind the wave ──
+    // ── Bookkeeping ──
+    const created = [];   // { obj, geo, mat }
+    const track = (obj, geo, mat) => {
+        created.push({
+            obj,
+            geo: geo || (obj && obj.geometry),
+            mat: mat || (obj && obj.material),
+        });
+        return obj;
+    };
+    let shatterFired = false;
+
+    // ═══════════════════════════════════════════════════════════
+    //  VIGNETTE (DOM overlay — cheap, dramatic)
+    // ═══════════════════════════════════════════════════════════
+    const vignette = document.createElement('div');
+    vignette.style.cssText = `
+        position: fixed; inset: 0; pointer-events: none; z-index: 490;
+        background: radial-gradient(circle at 50% 50%,
+            rgba(0,0,0,0) 28%,
+            rgba(10,0,25,0.55) 68%,
+            rgba(0,0,0,0.95) 100%);
+        opacity: 0; transition: opacity 0.6s ease;
+    `;
+    document.body.appendChild(vignette);
+    requestAnimationFrame(() => { vignette.style.opacity = '1'; });
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 1 — Ground disc (fill under the wave)
+    // ═══════════════════════════════════════════════════════════
     const discGeo = new THREE.CircleGeometry(1, 128);
     const discMat = new THREE.MeshBasicMaterial({
-        color: discColor,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+        color: BLACK, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
     });
     const disc = new THREE.Mesh(discGeo, discMat);
     disc.rotation.x = -Math.PI / 2;
-    disc.position.set(kingPos.x, 0.055, kingPos.z);
+    disc.position.set(kingPos.x, 0.05, kingPos.z);
     disc.scale.set(0.001, 0.001, 1);
     disc.renderOrder = 5;
     scene.add(disc);
+    track(disc, discGeo, discMat);
 
-    // ── 2. Main expanding ring (black wavefront) ──
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 2 — Main wavefront (thick black ring)
+    // ═══════════════════════════════════════════════════════════
     const ringGeo = new THREE.RingGeometry(0.85, 1.0, 128);
     const ringMat = new THREE.MeshBasicMaterial({
-        color: waveColor,
-        transparent: true,
-        opacity: 0.95,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+        color: BLACK, transparent: true, opacity: 0.95,
+        depthWrite: false, side: THREE.DoubleSide,
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
@@ -9773,15 +9957,15 @@ function startDomainExpansion(color, checker) {
     ring.scale.set(0.001, 0.001, 1);
     ring.renderOrder = 10;
     scene.add(ring);
+    track(ring, ringGeo, ringMat);
 
-    // ── 3. Purple rim-light — thin bright ring riding on the wavefront edge ──
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 3 — Bright purple rim on the wavefront edge
+    // ═══════════════════════════════════════════════════════════
     const rimGeo = new THREE.RingGeometry(1.0, 1.06, 128);
     const rimMat = new THREE.MeshBasicMaterial({
-        color: rimColor,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+        color: PURPLE_L, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
     const rim = new THREE.Mesh(rimGeo, rimMat);
@@ -9790,15 +9974,15 @@ function startDomainExpansion(color, checker) {
     rim.scale.set(0.001, 0.001, 1);
     rim.renderOrder = 11;
     scene.add(rim);
+    track(rim, rimGeo, rimMat);
 
-    // ── 4. Outer purple glow (additive, sits below the black ring) ──
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 4 — Outer purple haze
+    // ═══════════════════════════════════════════════════════════
     const glowGeo = new THREE.RingGeometry(0.55, 1.45, 128);
     const glowMat = new THREE.MeshBasicMaterial({
-        color: glowColor,
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+        color: PURPLE, transparent: true, opacity: 0.4,
+        depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
     const glow = new THREE.Mesh(glowGeo, glowMat);
@@ -9807,80 +9991,339 @@ function startDomainExpansion(color, checker) {
     glow.scale.set(0.001, 0.001, 1);
     glow.renderOrder = 9;
     scene.add(glow);
+    track(glow, glowGeo, glowMat);
 
-    // ── 5. Vertical pillars riding the wavefront ──
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 5 — Secondary magenta wavefront (lags the main ring)
+    // ═══════════════════════════════════════════════════════════
+    const ring2Geo = new THREE.RingGeometry(0.6, 1.15, 128);
+    const ring2Mat = new THREE.MeshBasicMaterial({
+        color: MAGENTA, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
+    ring2.rotation.x = -Math.PI / 2;
+    ring2.position.set(kingPos.x, 0.083, kingPos.z);
+    ring2.scale.set(0.001, 0.001, 1);
+    ring2.renderOrder = 9.5;
+    scene.add(ring2);
+    track(ring2, ring2Geo, ring2Mat);
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 6 — Scattered swords inside the corridor
+    //            from the king → the checking piece
+    //            (direction preserved, placement random)
+    // ═══════════════════════════════════════════════════════════
+    const checkerPos = get3DPosition(checker.r, checker.c, 0);
+    const pathDX = checkerPos.x - kingPos.x;
+    const pathDZ = checkerPos.z - kingPos.z;
+    const pathLength = Math.hypot(pathDX, pathDZ);
+    const pathAngle = Math.atan2(pathDZ, pathDX);
+    const perpAngle = pathAngle + Math.PI / 2;
+
+    // Number of swords scales with corridor length
+    const CRACK_COUNT = Math.max(8, Math.min(22, Math.floor(pathLength / 0.28)));
+    const cracks = [];
+
+    for (let i = 0; i < CRACK_COUNT; i++) {
+        // ── Fully random position along the corridor ──
+        // t = 0 → at the king,  t = 1 → at the checker
+        const t = Math.random();
+
+        // Distance from the king along the path direction
+        // (leave a small buffer near the king so swords don't sit on him)
+        const alongDist = 0.55 + t * (pathLength - 0.55);
+
+        // ── Perpendicular scatter ──
+        // The band widens as you get further from the king, so the swords
+        // fan out loosely toward the checker instead of hugging the line.
+        const perpHalfWidth = 0.20 + t * 1.10;
+        const perpOffset = (Math.random() - 0.5) * 2 * perpHalfWidth;
+
+        // ── Small forward / back noise ──
+        // Breaks up the "sorted by distance" feel even more.
+        const alongNoise = (Math.random() - 0.5) * 0.55;
+
+        const px = kingPos.x
+            + Math.cos(pathAngle) * (alongDist + alongNoise)
+            + Math.cos(perpAngle) * perpOffset;
+        const pz = kingPos.z
+            + Math.sin(pathAngle) * (alongDist + alongNoise)
+            + Math.sin(perpAngle) * perpOffset;
+
+        // ── One upside-down sword, tip buried in the board ──
+        const swordGroup = new THREE.Group();
+        swordGroup.position.set(px, 0, pz);
+
+        // Random yaw + wider tilt so they never align as a neat row
+        swordGroup.rotation.y = Math.random() * Math.PI * 2;
+        swordGroup.rotation.z = (Math.random() - 0.5) * 0.60;
+        swordGroup.rotation.x = (Math.random() - 0.5) * 0.60;
+
+        // Random uniform scale — some blades longer, some shorter
+        const swordScale = 0.72 + Math.random() * 0.6;
+        swordGroup.userData.baseScale = swordScale;
+
+        const swordMat = new THREE.MeshBasicMaterial({
+            color: BLACK, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+        const swordGlowMat = new THREE.MeshBasicMaterial({
+            color: RED, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+
+        // Dimensions (blade points DOWN into the board)
+        const BLADE_H = 0.75;
+        const BLADE_W = 0.085;
+        const BLADE_D = 0.038;
+        const GUARD_Y = 0.16;
+
+        // ── Blade — buried, points DOWN ──
+        const bladeGeo = new THREE.BoxGeometry(BLADE_W, BLADE_H, BLADE_D);
+        const blade = new THREE.Mesh(bladeGeo, swordMat);
+        blade.position.y = GUARD_Y - BLADE_H / 2;
+        swordGroup.add(blade);
+        track(blade, bladeGeo, swordMat);
+
+        // ── Blade tip — 4-sided cone flipped to point DOWN ──
+        const tipGeo = new THREE.ConeGeometry(BLADE_W * 0.65, 0.18, 4);
+        const tip = new THREE.Mesh(tipGeo, swordMat);
+        tip.position.y = GUARD_Y - BLADE_H - 0.09;
+        tip.rotation.y = Math.PI / 4;
+        tip.rotation.z = Math.PI;
+        swordGroup.add(tip);
+        track(tip, tipGeo, swordMat);
+
+        // ── Cross-guard ──
+        const guardGeo = new THREE.BoxGeometry(0.24, 0.05, 0.07);
+        const guard = new THREE.Mesh(guardGeo, swordMat);
+        guard.position.y = GUARD_Y;
+        swordGroup.add(guard);
+        track(guard, guardGeo, swordMat);
+
+        // ── Grip ──
+        const gripGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.22, 8);
+        const grip = new THREE.Mesh(gripGeo, swordMat);
+        grip.position.y = GUARD_Y + 0.11;
+        swordGroup.add(grip);
+        track(grip, gripGeo, swordMat);
+
+        // ── Pommel ──
+        const pommelGeo = new THREE.SphereGeometry(0.045, 8, 8);
+        const pommel = new THREE.Mesh(pommelGeo, swordMat);
+        pommel.position.y = GUARD_Y + 0.22 + 0.03;
+        swordGroup.add(pommel);
+        track(pommel, pommelGeo, swordMat);
+
+        // ── Red glow seam ──
+        const seamGeo = new THREE.PlaneGeometry(0.02, 0.35);
+        const seam = new THREE.Mesh(seamGeo, swordGlowMat);
+        seam.position.set(0, GUARD_Y - 0.20, BLADE_D / 2 + 0.002);
+        swordGroup.add(seam);
+        track(seam, seamGeo, swordGlowMat);
+
+        swordGroup.scale.setScalar(swordScale);
+
+        track(swordGroup);
+        scene.add(swordGroup);
+
+        cracks.push({
+            swordGroup,
+            swordMat,
+            glowMat: swordGlowMat,
+            index: i,
+            // Random chaotic stab-in moment
+            spawnDelay: Math.random() * (CRACK_COUNT * 0.10),
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 7 — Rotating rune circle under the king (pre-wave)
+    // ═══════════════════════════════════════════════════════════
+    const runeGroup = new THREE.Group();
+    runeGroup.position.set(kingPos.x, 0.08, kingPos.z);
+    scene.add(runeGroup);
+    const runeRings = [];
+    for (let i = 0; i < 2; i++) {
+        const rGeo = new THREE.RingGeometry(
+            i === 0 ? 0.55 : 0.85,
+            i === 0 ? 0.60 : 0.92,
+            64
+        );
+        const rMat = new THREE.MeshBasicMaterial({
+            color: i === 0 ? PURPLE_L : MAGENTA,
+            transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const rMesh = new THREE.Mesh(rGeo, rMat);
+        rMesh.rotation.x = -Math.PI / 2;
+        runeGroup.add(rMesh);
+        track(rMesh, rGeo, rMat);
+        runeRings.push(rMesh);
+    }
+    const runeTicks = [];
+    const TICK_COUNT = 16;
+    for (let i = 0; i < TICK_COUNT; i++) {
+        const a = (i / TICK_COUNT) * Math.PI * 2;
+        const tg = new THREE.PlaneGeometry(0.16, 0.035);
+        const tm = new THREE.MeshBasicMaterial({
+            color: MAGENTA, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const tick = new THREE.Mesh(tg, tm);
+        tick.position.set(Math.cos(a) * 0.72, 0.001, Math.sin(a) * 0.72);
+        tick.rotation.x = -Math.PI / 2;
+        tick.rotation.z = -a;
+        runeGroup.add(tick);
+        track(tick, tg, tm);
+        runeTicks.push(tick);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 8 — Charge-up particles (spiral inward)
+    // ═══════════════════════════════════════════════════════════
+    const chargeParticles = [];
+    const CHARGE_COUNT = 32;
+    for (let i = 0; i < CHARGE_COUNT; i++) {
+        const pg = new THREE.SphereGeometry(0.04 + Math.random() * 0.04, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? MAGENTA : PURPLE_L,
+            transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 3.5 + Math.random() * 3.0;
+        const y0 = 0.15 + Math.random() * 1.8;
+        p.position.set(kingPos.x + Math.cos(a) * r, y0, kingPos.z + Math.sin(a) * r);
+        p.userData = {
+            startR: r, startAngle: a, startY: y0,
+            duration: 0.55 + Math.random() * 0.3,
+            delay: Math.random() * 0.25,
+            orbit: (Math.random() - 0.5) * 0.8,
+        };
+        p.renderOrder = 30;
+        scene.add(p);
+        track(p, pg, pm);
+        chargeParticles.push(p);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 9 — 16 dark swords stabbed into the ground
+    // ═══════════════════════════════════════════════════════════
     const pillarGroup = new THREE.Group();
     pillarGroup.position.set(kingPos.x, 0, kingPos.z);
     scene.add(pillarGroup);
     const PILLAR_COUNT = 16;
     const pillars = [];
+
+    // Sword proportions (total height = 2.40, base at y = 0)
+    const SWORD_BLADE_W = 0.11;
+    const SWORD_BLADE_D = 0.035;
+    const SWORD_BLADE_H = 1.65;
+
     for (let i = 0; i < PILLAR_COUNT; i++) {
         const angle = (i / PILLAR_COUNT) * Math.PI * 2;
-        const pg = new THREE.PlaneGeometry(0.12, 1.6);
-        const pm = new THREE.MeshBasicMaterial({
-            color: pillarColor,
-            transparent: true,
-            opacity: 0,
-            depthWrite: false,
-            side: THREE.DoubleSide,
+
+        const swordGroup = new THREE.Group();
+
+        // Shared materials (one per sword → single fade control point)
+        const darkMat = new THREE.MeshBasicMaterial({
+            color: 0x0a0a14, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
         });
-        const pillar = new THREE.Mesh(pg, pm);
-        pillar.position.set(1, 0.8, 0);
-        pillar.rotation.y = -angle;
-        pillarGroup.add(pillar);
-        pillars.push({ mesh: pillar, angle });
+        const rimMat = new THREE.MeshBasicMaterial({
+            color: MAGENTA, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+
+        // ── Pommel (bottom of hilt) ──
+        const pommelGeo = new THREE.SphereGeometry(0.06, 8, 8);
+        const pommel = new THREE.Mesh(pommelGeo, darkMat);
+        pommel.position.y = 0.06;
+        swordGroup.add(pommel);
+        track(pommel, pommelGeo, darkMat);
+
+        // ── Grip ──
+        const gripGeo = new THREE.CylinderGeometry(0.034, 0.034, 0.40, 8);
+        const grip = new THREE.Mesh(gripGeo, darkMat);
+        grip.position.y = 0.26;
+        swordGroup.add(grip);
+        track(grip, gripGeo, darkMat);
+
+        // ── Cross-guard ──
+        const guardGeo = new THREE.BoxGeometry(0.32, 0.06, 0.08);
+        const guard = new THREE.Mesh(guardGeo, darkMat);
+        guard.position.y = 0.49;
+        swordGroup.add(guard);
+        track(guard, guardGeo, darkMat);
+
+        // ── Blade ──
+        const bladeGeo = new THREE.BoxGeometry(SWORD_BLADE_W, SWORD_BLADE_H, SWORD_BLADE_D);
+        const blade = new THREE.Mesh(bladeGeo, darkMat);
+        blade.position.y = 0.52 + SWORD_BLADE_H / 2;      // 1.345
+        swordGroup.add(blade);
+        track(blade, bladeGeo, darkMat);
+
+        // ── Blade tip (4-sided cone) ──
+        const tipGeo = new THREE.ConeGeometry(SWORD_BLADE_W * 0.7, 0.23, 4);
+        const tip = new THREE.Mesh(tipGeo, darkMat);
+        tip.position.y = 0.52 + SWORD_BLADE_H + 0.115;    // 2.285
+        tip.rotation.y = Math.PI / 4;
+        swordGroup.add(tip);
+        track(tip, tipGeo, darkMat);
+
+        // ── Magenta edge glow (both blade edges) ──
+        const rimGeo = new THREE.PlaneGeometry(0.022, SWORD_BLADE_H);
+        for (const sgn of [-1, 1]) {
+            const rim = new THREE.Mesh(rimGeo, rimMat);
+            rim.position.set(
+                sgn * (SWORD_BLADE_W * 0.5 + 0.001),
+                0.52 + SWORD_BLADE_H / 2,
+                0
+            );
+            swordGroup.add(rim);
+            track(rim, rimGeo, rimMat);
+        }
+
+        // Position + orientation:
+        //   rotation.y = π/2 - angle  →  blade's broad face points OUTWARD
+        //   (change to `-angle` if you'd rather see the edge-on silhouette)
+        swordGroup.position.set(1, 0, 0);
+        swordGroup.rotation.y = Math.PI / 2 - angle;
+        // Tiny random tilt for a "just-stabbed-in" look
+        swordGroup.rotation.z = (Math.random() - 0.5) * 0.12;
+
+        pillarGroup.add(swordGroup);
+
+        pillars.push({ group: swordGroup, darkMat, rimMat, angle });
     }
 
-    // ── 6. Bright flash at the king's position ──
-    const flashGeo = new THREE.SphereGeometry(0.55, 20, 20);
-    const flashMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.95,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-    });
-    const flash = new THREE.Mesh(flashGeo, flashMat);
-    flash.position.set(kingPos.x, 0.4, kingPos.z);
-    scene.add(flash);
-
-    // ── 6b. TRANSPARENT SHADOW DOME (half-sphere / "domain bubble") ──
-    // A dark, translucent hemisphere that expands with the wave and
-    // acts as a shadow shell over everything inside the domain.
-    const DOME_W = 64, DOME_H = 32;
-
-    // Outer shell — the main shadow layer
-    const domeGeo = new THREE.SphereGeometry(
-        1, DOME_W, DOME_H,
-        0, Math.PI * 2,        // full revolution
-        0, Math.PI / 2         // top hemisphere only
-    );
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 10 — Shadow dome (double shell + ground rim)
+    // ═══════════════════════════════════════════════════════════
+    const domeGeo = new THREE.SphereGeometry(1, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     const domeMat = new THREE.MeshBasicMaterial({
-        color: 0x05000a,        // near-black with a faint violet tinge
-        transparent: true,
-        opacity: 0,
-        side: THREE.DoubleSide, // visible from outside AND inside
-        depthWrite: false,      // don't occlude the tinted pieces
+        color: 0x05000a, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthWrite: false,
     });
     const dome = new THREE.Mesh(domeGeo, domeMat);
     dome.position.set(kingPos.x, 0.02, kingPos.z);
     dome.scale.setScalar(0.001);
     dome.renderOrder = 6;
     scene.add(dome);
+    track(dome, domeGeo, domeMat);
 
-    // Inner shell — faint additive purple, backside only, gives the
-    // dome a "lit from within" feel without breaking the shadow look.
-    const domeInnerGeo = new THREE.SphereGeometry(
-        1, 48, 24,
-        0, Math.PI * 2,
-        0, Math.PI / 2
-    );
+    const domeInnerGeo = new THREE.SphereGeometry(1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
     const domeInnerMat = new THREE.MeshBasicMaterial({
-        color: 0x2a0a4a,
-        transparent: true,
-        opacity: 0,
-        side: THREE.BackSide,
-        depthWrite: false,
+        color: PURPLE, transparent: true, opacity: 0,
+        side: THREE.BackSide, depthWrite: false,
         blending: THREE.AdditiveBlending,
     });
     const domeInner = new THREE.Mesh(domeInnerGeo, domeInnerMat);
@@ -9888,15 +10331,12 @@ function startDomainExpansion(color, checker) {
     domeInner.scale.setScalar(0.001);
     domeInner.renderOrder = 7;
     scene.add(domeInner);
+    track(domeInner, domeInnerGeo, domeInnerMat);
 
-    // Ground rim — glowing edge where the dome meets the board
     const domeRimGeo = new THREE.RingGeometry(0.97, 1.04, 96);
     const domeRimMat = new THREE.MeshBasicMaterial({
-        color: 0x6a2a9a,
-        transparent: true,
-        opacity: 0,
-        side: THREE.DoubleSide,
-        depthWrite: false,
+        color: PURPLE_L, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthWrite: false,
         blending: THREE.AdditiveBlending,
     });
     const domeRim = new THREE.Mesh(domeRimGeo, domeRimMat);
@@ -9905,8 +10345,74 @@ function startDomainExpansion(color, checker) {
     domeRim.scale.set(0.001, 0.001, 1);
     domeRim.renderOrder = 10;
     scene.add(domeRim);
+    track(domeRim, domeRimGeo, domeRimMat);
 
-    // ── 7. Collect pieces to tint (everything except king + checkers) ──
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 11 — Lightning arcs crawling on the dome surface
+    // ═══════════════════════════════════════════════════════════
+    const lightningBolts = [];
+    const BOLT_COUNT = 5;
+    for (let i = 0; i < BOLT_COUNT; i++) {
+        const segGeo = new THREE.CylinderGeometry(0.028, 0.028, 1, 5, 1, true);
+        const segMat = new THREE.MeshBasicMaterial({
+            color: MAGENTA, transparent: true, opacity: 0.9,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const seg = new THREE.Mesh(segGeo, segMat);
+        seg.visible = false;
+        scene.add(seg);
+        track(seg, segGeo, segMat);
+        lightningBolts.push({
+            seg, nextJumpAt: 0,
+            currentAngle: Math.random() * Math.PI * 2,
+            baseR: 1, height: 1,
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 12 — Flash at the king (brief white pop)
+    // ═══════════════════════════════════════════════════════════
+    const flashGeo = new THREE.SphereGeometry(0.55, 20, 20);
+    const flashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.95,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.set(kingPos.x, 0.4, kingPos.z);
+    flash.visible = false;
+    scene.add(flash);
+    track(flash, flashGeo, flashMat);
+
+    // ═══════════════════════════════════════════════════════════
+    //  LAYER 13 — Shatter shards (peak burst)
+    // ═══════════════════════════════════════════════════════════
+    const shards = [];
+    const SHARD_COUNT = 24;
+    for (let i = 0; i < SHARD_COUNT; i++) {
+        const sg = new THREE.TetrahedronGeometry(0.10 + Math.random() * 0.12, 0);
+        const sm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? BLACK : MAGENTA,
+            transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const shard = new THREE.Mesh(sg, sm);
+        shard.visible = false;
+        shard.renderOrder = 25;
+        scene.add(shard);
+        track(shard, sg, sm);
+        const a = Math.random() * Math.PI * 2;
+        shards.push({
+            mesh: shard,
+            dirX: Math.cos(a), dirZ: Math.sin(a),
+            upSpeed: 1.5 + Math.random() * 2.0,
+            spin: (Math.random() - 0.5) * 8,
+            bornAt: 0, life: 1.0,
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  Collect pieces to tint (skip king + checkers)
+    // ═══════════════════════════════════════════════════════════
     const exemptKeys = new Set();
     exemptKeys.add(`${king.r},${king.c}`);
     const allCheckers = findCheckingPieces(color);
@@ -9925,6 +10431,7 @@ function startDomainExpansion(color, checker) {
             const distFromKing = Math.hypot(worldPos.x - kingPos.x, worldPos.z - kingPos.z);
 
             const savedMats = [];
+            const sprites = [];          // ★ NEW: health bars + cooldown badges
             obj.traverse(n => {
                 if (n.isMesh && n.material && n.material.color) {
                     n.material = n.material.clone();
@@ -9933,177 +10440,334 @@ function startDomainExpansion(color, checker) {
                         color: n.material.color.clone(),
                         emissive: n.material.emissive ? n.material.emissive.clone() : null,
                     });
+                } else if (n.isSprite && n.material) {
+                    // Sprites are not `isMesh` → they were silently skipped before.
+                    sprites.push(n);
                 }
             });
-
             piecesToTint.push({
-                obj,
-                dist: distFromKing,
-                tintAmount: 0,
-                opacityAmount: 1,        // ★ NEW
-                savedMats,
+                obj, dist: distFromKing, tintAmount: 0, opacityAmount: 1,
+                savedMats, sprites,
             });
         }
     }
 
-    // ★ Glow-outline the king + every checking piece (the two "involved" fighters)
+    // ── Glow outlines on the two involved pieces ──
     const glowOutlineEntries = [];
-
-    // 1) King — gold halo
     const kingObj = pieceObjects[`${king.r},${king.c}`];
-    if (kingObj) {
-        glowOutlineEntries.push(...buildDomainGlowOutline(kingObj, 0xffe27a, 1.12));
-    }
-
-    // 2) Every checker — pink/red halo
+    if (kingObj) glowOutlineEntries.push(...buildDomainGlowOutline(kingObj, 0xffe27a, 1.12));
     for (const ch of allCheckers) {
         const chObj = pieceObjects[`${ch.r},${ch.c}`];
         if (!chObj) continue;
         glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
     }
-    // Also the specific `checker` passed in, in case it's somehow not in allCheckers
     if (checker) {
         const ck = `${checker.r},${checker.c}`;
         if (!allCheckers.some(ch => `${ch.r},${ch.c}` === ck)) {
             const chObj = pieceObjects[ck];
-            if (chObj) {
-                glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
-            }
+            if (chObj) glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
         }
     }
 
-    // ── 8. Animate — SLOW spread ──
-    const startTime = clock.getElapsedTime();
-    const EXPAND_DURATION = 3.5;      // ★ slower: was 1.3
-    const HOLD_DURATION = 0.7;        // ★ hold a bit longer at the end
-    const TOTAL_DURATION = EXPAND_DURATION + HOLD_DURATION;
+    // ═══════════════════════════════════════════════════════════
+    //  TIMELINE
+    // ═══════════════════════════════════════════════════════════
+    const CHARGE_END = 0.8;
+    const EXPAND_END = CHARGE_END + 7.0;
+    const TOTAL = EXPAND_END + 0.8;
     const MAX_RADIUS = 14;
-    const TINT_RAMP = 0.9;            // wider ramp = smoother tint fade-in
+    const TINT_RAMP = 0.9;
+
+    // ── Register camera shake ──
+    const shakeHandle = { intensity: 0 };
+    window._domainShake = shakeHandle;
 
     const disposeAll = () => {
-        scene.remove(disc);
-        scene.remove(ring);
-        scene.remove(rim);
-        scene.remove(glow);
-        scene.remove(pillarGroup);
-        scene.remove(flash);
-        scene.remove(dome);
-        scene.remove(domeInner);
-        scene.remove(domeRim);
-        domeGeo.dispose(); domeMat.dispose();
-        domeInnerGeo.dispose(); domeInnerMat.dispose();
-        domeRimGeo.dispose(); domeRimMat.dispose();
-        disc.geometry.dispose(); discMat.dispose();
-        ring.geometry.dispose(); ringMat.dispose();
-        rim.geometry.dispose(); rimMat.dispose();
-        glow.geometry.dispose(); glowMat.dispose();
-        flash.geometry.dispose(); flashMat.dispose();
-        pillarGroup.traverse(n => {
-            if (n.geometry) n.geometry.dispose();
-            if (n.material) n.material.dispose();
-        });
-        // ★ Remove the glowing outlines from the two involved pieces
+        if (vignette.parentNode) {
+            vignette.style.opacity = '0';
+            setTimeout(() => vignette.remove(), 600);
+        }
+        window._domainShake = null;
+        for (const e of created) {
+            if (e.obj && e.obj.parent) e.obj.parent.remove(e.obj);
+            if (e.geo && e.geo.dispose) e.geo.dispose();
+            if (e.mat && e.mat.dispose) e.mat.dispose();
+        }
         disposeDomainGlowOutlines(glowOutlineEntries);
     };
 
     const animateExpand = () => {
-        const elapsed = clock.getElapsedTime() - startTime;
-        if (elapsed >= TOTAL_DURATION) {
+        const elapsed = clock.getElapsedTime() - t0;
+
+        if (elapsed >= TOTAL) {
             disposeAll();
             showVsScreen(color, checker);
             return;
         }
 
-        const tRaw = Math.min(elapsed / EXPAND_DURATION, 1);
-        // smoother easing (quintic) for a heavier, slower feel
-        const ease = 1 - Math.pow(1 - tRaw, 4);
-        const radius = MAX_RADIUS * ease;
+        // ═══════════════ PHASE: CHARGE ═══════════════
+        if (elapsed < CHARGE_END) {
+            const k = elapsed / CHARGE_END;
+            const ease = 1 - Math.pow(1 - k, 3);
 
-        // Disc — pure black, darkens as it fills
-        disc.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
-        discMat.opacity = 0.72 * Math.min(1, tRaw * 1.5);
+            // Rune circle fades in
+            runeRings[0].material.opacity = 0.75 * ease;
+            runeRings[1].material.opacity = 0.55 * ease;
+            for (const t of runeTicks) t.material.opacity = 0.85 * ease;
+            runeGroup.rotation.y += 0.05;
+            runeGroup.children.forEach(ch => {
+                // counter-rotate inner ring visually
+            });
 
-        // Main ring — black wavefront
-        ring.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
-        const ringPulse = 0.85 + 0.15 * Math.sin(elapsed * 8);
-        ringMat.opacity = 0.95 * (1 - tRaw * 0.25) * ringPulse;
-
-        // Bright purple rim
-        rim.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
-        rimMat.opacity = 0.75 * Math.sin(Math.PI * Math.min(tRaw * 1.1, 1));
-
-        // Outer purple glow
-        glow.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
-        glowMat.opacity = 0.35 * (1 - tRaw * 0.4);
-
-        // Pillars
-        for (const p of pillars) {
-            const px = Math.cos(p.angle) * radius;
-            const pz = Math.sin(p.angle) * radius;
-            p.mesh.position.set(px, 0.8, pz);
-            p.mesh.material.opacity = Math.max(0, 0.9 * (1 - tRaw * 1.0));
-            p.mesh.scale.set(1, 0.6 + tRaw * 0.5, 1);
-        }
-
-        // ── Transparent shadow dome ──
-        // The dome grows with the wave but holds its opacity a touch
-        // longer so the "shadow settles" after the wave passes.
-        const domeR = Math.max(0.001, radius);
-        dome.scale.setScalar(domeR);
-        domeMat.opacity = 0.42 * Math.min(1, tRaw * 1.5) * (1 - tRaw * 0.15);
-
-        domeInner.scale.setScalar(domeR * 1.01);
-        domeInnerMat.opacity = 0.22 * Math.min(1, tRaw * 1.8);
-
-        domeRim.scale.set(domeR, domeR, 1);
-        domeRimMat.opacity =
-            0.7 * Math.min(1, tRaw * 1.4) * (1 - tRaw * 0.25);
-
-        // Flash — brief bright pop at the start
-        const flashT = Math.min(1, elapsed / 0.4);
-        flashMat.opacity = 0.95 * (1 - flashT);
-        flash.scale.setScalar(1 + flashT * 2.6);
-
-        // Tint pieces behind the wave; HIDE pieces still outside the shadow dome
-        const EDGE_SMOOTH = 0.4;    // fade-in width at the dome boundary
-        for (const p of piecesToTint) {
-            const behind = radius - p.dist;
-
-            let targetTint;
-            let targetOpacity;
-
-            if (behind < 0) {
-                // ── Outside the dome → hide (fade in as the dome reaches it) ──
-                targetTint = 0;
-                targetOpacity = Math.max(0, 1 + behind / EDGE_SMOOTH);
-            } else {
-                // ── Inside the dome → darken / dissolve into the shadow ──
-                targetTint = Math.min(1, behind / TINT_RAMP) * 0.92;
-                targetOpacity = 1 - targetTint * 0.9;
+            // Charge particles spiral inward
+            for (const p of chargeParticles) {
+                const pt = elapsed - p.userData.delay;
+                if (pt < 0) { p.material.opacity = 0; continue; }
+                const lk = Math.min(1, pt / p.userData.duration);
+                const a = p.userData.startAngle + lk * 3.0 * p.userData.orbit * Math.PI;
+                const r = p.userData.startR * (1 - lk) * (1 - lk * 0.4);
+                const y = p.userData.startY * (1 - lk) + 0.5 * lk;
+                p.position.set(
+                    kingPos.x + Math.cos(a) * r,
+                    y,
+                    kingPos.z + Math.sin(a) * r
+                );
+                p.material.opacity = 0.95 * (1 - Math.pow(lk, 3));
+                p.scale.setScalar(1 - lk * 0.5);
             }
 
-            if (Math.abs(p.tintAmount - targetTint) > 0.005 ||
-                Math.abs(p.opacityAmount - targetOpacity) > 0.005) {
+            // Faint disc creep
+            disc.scale.set(0.5, 0.5, 1);
+            discMat.opacity = 0.15 * ease;
 
-                p.tintAmount = targetTint;
-                p.opacityAmount = targetOpacity;
+            // Gentle shake ramp
+            shakeHandle.intensity = 0.015 * ease;
+        }
+        // ═══════════════ PHASE: EXPAND ═══════════════
+        else {
+            const expElapsed = elapsed - CHARGE_END;
+            const tRaw = Math.min(expElapsed / (EXPAND_END - CHARGE_END), 1);
+            const ease = 1 - Math.pow(1 - tRaw, 2);
+            const radius = MAX_RADIUS * ease;
 
-                for (const sm of p.savedMats) {
-                    const c1 = sm.color.clone();
-                    c1.lerp(darkColor, p.tintAmount);
-                    sm.mesh.material.color.copy(c1);
-                    if (sm.mesh.material.emissive && sm.emissive) {
-                        sm.mesh.material.emissive.copy(sm.emissive);
-                        sm.mesh.material.emissive.multiplyScalar(1 - p.tintAmount);
-                    }
-                    sm.mesh.material.opacity = targetOpacity;
-                    sm.mesh.material.transparent =
-                        targetOpacity < 0.99 || p.tintAmount > 0.01;
+            // Rune fades out as the wave grows
+            const runeFade = Math.max(0, 1 - tRaw * 2.0);
+            runeRings[0].material.opacity = 0.75 * runeFade;
+            runeRings[1].material.opacity = 0.55 * runeFade;
+            for (const t of runeTicks) t.material.opacity = 0.85 * runeFade;
+            runeGroup.rotation.y += 0.05;
+
+            // Charge particles burn off
+            for (const p of chargeParticles) {
+                if (p.material.opacity > 0) {
+                    p.material.opacity = Math.max(0, p.material.opacity - 0.08);
                 }
             }
+
+            // Disc
+            disc.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            discMat.opacity = 0.78 * Math.min(1, tRaw * 1.6);
+
+            // Main ring
+            ring.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            const ringPulse = 0.85 + 0.15 * Math.sin(elapsed * 10);
+            ringMat.opacity = 0.98 * (1 - tRaw * 0.2) * ringPulse;
+
+            // Purple rim
+            rim.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            rimMat.opacity = 0.85 * Math.sin(Math.PI * Math.min(tRaw * 1.1, 1));
+
+            // Outer glow
+            glow.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            glowMat.opacity = 0.4 * (1 - tRaw * 0.35);
+
+            // Secondary wavefront (lags the main one by 0.25s)
+            const tRaw2 = Math.max(0, (expElapsed - 0.45) / (EXPAND_END - CHARGE_END - 0.45));
+            const radius2 = MAX_RADIUS * (1 - Math.pow(1 - Math.min(tRaw2, 1), 3.5));
+
+            ring2.scale.set(Math.max(0.001, radius2), Math.max(0.001, radius2), 1);
+            ring2Mat.opacity = 0.55 * (1 - tRaw * 0.8);
+
+            // Pillars
+            // Pillars (swords)
+            for (const p of pillars) {
+                const px = Math.cos(p.angle) * radius;
+                const pz = Math.sin(p.angle) * radius;
+                p.group.position.set(px, 0, pz);
+
+                const pillarFade = Math.max(0, 1 - tRaw * 1.1);
+                p.darkMat.opacity = 0.95 * pillarFade;
+                p.rimMat.opacity = 0.90 * pillarFade;
+
+                p.group.scale.set(1, 0.6 + tRaw * 0.9, 1);
+            }
+
+            // ── Scattered swords (path corridor) — chaotic stab-in ──
+            for (const c of cracks) {
+                const appearT = c.spawnDelay;
+                const growT = Math.max(0, Math.min(1, (expElapsed - appearT) / 0.28));
+                const holdFade = Math.max(0, 1 - tRaw * 0.9);
+                const alpha = growT * holdFade;
+
+                // Stab-in pop, multiplied by the sword's own random base scale
+                const base = c.swordGroup.userData.baseScale || 1;
+                const pop = base * (0.35 + 0.65 * growT);
+                c.swordGroup.scale.setScalar(pop);
+
+                c.swordMat.opacity = 0.95 * alpha;
+                c.glowMat.opacity = 0.90 * alpha * (0.7 + 0.3 * Math.sin(elapsed * 14 + c.index));
+            }
+
+            // Shadow dome
+            const domeR = Math.max(0.001, radius);
+            dome.scale.setScalar(domeR);
+            domeMat.opacity = 0.45 * Math.min(1, tRaw * 1.5) * (1 - tRaw * 0.12);
+
+            domeInner.scale.setScalar(domeR * 1.01);
+            domeInnerMat.opacity = 0.24 * Math.min(1, tRaw * 1.8);
+
+            domeRim.scale.set(domeR, domeR, 1);
+            domeRimMat.opacity = 0.75 * Math.min(1, tRaw * 1.4) * (1 - tRaw * 0.25);
+
+            // ── Lightning arcs on the dome ──
+            const boltNow = clock.getElapsedTime();
+            for (const b of lightningBolts) {
+                if (boltNow >= b.nextJumpAt) {
+                    b.nextJumpAt = boltNow + 0.08 + Math.random() * 0.18;
+                    b.currentAngle = Math.random() * Math.PI * 2;
+                    b.baseR = domeR * (0.85 + Math.random() * 0.15);
+                    b.height = domeR * (0.6 + Math.random() * 0.35);
+                }
+                if (tRaw < 0.15 || tRaw > 0.95) {
+                    b.seg.visible = false;
+                    continue;
+                }
+                b.seg.visible = true;
+                const bx = kingPos.x + Math.cos(b.currentAngle) * b.baseR;
+                const bz = kingPos.z + Math.sin(b.currentAngle) * b.baseR;
+                const by = 0.1;
+                const tx = kingPos.x + Math.cos(b.currentAngle + 0.2) * b.baseR * 0.6;
+                const tz = kingPos.z + Math.sin(b.currentAngle + 0.2) * b.baseR * 0.6;
+                const ty = by + b.height;
+
+                const dirV = new THREE.Vector3(tx - bx, ty - by, tz - bz);
+                const len = dirV.length();
+                const mid = new THREE.Vector3((bx + tx) / 2, (by + ty) / 2, (bz + tz) / 2);
+                b.seg.position.copy(mid);
+                b.seg.quaternion.setFromUnitVectors(
+                    new THREE.Vector3(0, 1, 0),
+                    dirV.clone().normalize()
+                );
+                b.seg.scale.set(1, len, 1);
+                b.seg.material.opacity =
+                    0.9 * Math.min(1, tRaw * 2) * Math.max(0, 1 - tRaw * 0.6);
+            }
+
+            // ── Flash at the king (very brief pop at expansion start) ──
+            if (expElapsed < 0.4) {
+                flash.visible = true;
+                const ft = expElapsed / 0.4;
+                flashMat.opacity = 0.98 * (1 - ft);
+                flash.scale.setScalar(1 + ft * 3.5);
+            } else {
+                flash.visible = false;
+            }
+
+            // ── Camera shake ──
+            const shakeRamp = tRaw < 0.15
+                ? tRaw / 0.15
+                : Math.max(0, 1 - (tRaw - 0.15) / 0.6);
+            shakeHandle.intensity = 0.06 * shakeRamp;
+
+            // ── Tint / dissolve pieces as the wavefront passes over them ──
+            //   • Before the wave touches a piece → fully visible, no tint
+            //   • The instant the wave reaches it → quick fade down to 10%
+            //     opacity (90% transparent) with a full dark tint
+            //   • After the wave has passed → stays at 10% opacity
+            const EDGE_SMOOTH = 0.35;   // transition band, in world units
+            const MIN_OPACITY = 0.1;    // 10% remains visible after the wave passes
+            for (const p of piecesToTint) {
+                const behind = radius - p.dist;   // > 0 → wave has reached this piece
+                let targetTint, targetOpacity;
+                if (behind <= 0) {
+                    // Wave hasn't reached this piece yet — leave it alone
+                    targetTint = 0;
+                    targetOpacity = 1;
+                } else if (behind < EDGE_SMOOTH) {
+                    // Wavefront is actively passing over this piece → ramp to 10%
+                    const k = behind / EDGE_SMOOTH;              // 0 → 1 across the band
+                    targetTint = k;
+                    targetOpacity = 1 - (1 - MIN_OPACITY) * k;   // 1 → 0.1
+                } else {
+                    // Wave has fully passed → settle at 10% opacity
+                    targetTint = 1;
+                    targetOpacity = MIN_OPACITY;
+                }
+
+
+                if (Math.abs(p.tintAmount - targetTint) > 0.005 ||
+                    Math.abs(p.opacityAmount - targetOpacity) > 0.005) {
+                    p.tintAmount = targetTint;
+                    p.opacityAmount = targetOpacity;
+
+                    for (const sm of p.savedMats) {
+                        const c1 = sm.color.clone();
+                        c1.lerp(DARK_COLOR, p.tintAmount);
+                        sm.mesh.material.color.copy(c1);
+                        if (sm.mesh.material.emissive && sm.emissive) {
+                            sm.mesh.material.emissive.copy(sm.emissive);
+                            sm.mesh.material.emissive.multiplyScalar(1 - p.tintAmount);
+                        }
+                        sm.mesh.material.opacity = targetOpacity;
+                        sm.mesh.material.transparent =
+                            targetOpacity < 0.99 || p.tintAmount > 0.01;
+                        // ★ When near-invisible, stop writing to the depth buffer so the
+                        //   dome / beams / cracks behind the piece still render through it.
+                        sm.mesh.material.depthWrite = targetOpacity > 0.92;
+                        sm.mesh.material.needsUpdate = true;
+                    }
+
+                    // ★ Hide the health bar + cooldown sprites along with the piece
+                    for (const sp of p.sprites) {
+                        sp.material.transparent = true;
+                        sp.material.opacity = targetOpacity;
+                        sp.material.needsUpdate = true;
+                        sp.visible = targetOpacity > 0.15;
+                    }
+                }
+            }
+
+            // ── SHATTER BURST (one-shot at tRaw ≈ 0.85) ──
+            if (tRaw >= 0.85 && !shatterFired) {
+                shatterFired = true;
+                for (const s of shards) {
+                    s.mesh.visible = true;
+                    s.mesh.material.opacity = 0.9;
+                    s.mesh.position.set(kingPos.x, 0.4, kingPos.z);
+                    s.bornAt = elapsed;
+                }
+                // Sharp one-shot camera kick
+                shakeHandle.intensity = 0.20;
+            }
         }
 
-        // ★ Slow breathing pulse on the king/checker glow outlines
+        // ═══════════ SHARD PHYSICS (any phase) ═══════════
+        for (const s of shards) {
+            if (!s.mesh.visible) continue;
+            const st = elapsed - s.bornAt;
+            if (st < 0 || st > s.life) { s.mesh.visible = false; continue; }
+            const lt = st / s.life;
+            const dist = 3.0 * Math.sqrt(lt);
+            s.mesh.position.x = kingPos.x + s.dirX * dist;
+            s.mesh.position.z = kingPos.z + s.dirZ * dist;
+            s.mesh.position.y = 0.4 + s.upSpeed * st - 2.5 * st * st;
+            s.mesh.rotation.x += s.spin * 0.02;
+            s.mesh.rotation.y += s.spin * 0.03;
+            s.mesh.material.opacity = 0.95 * (1 - lt);
+            s.mesh.scale.setScalar(1 - lt * 0.3);
+        }
+
+        // ═══════════ Breathing pulse on glow outlines ═══════════
         const glowPulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(elapsed * 4.5));
         for (const o of glowOutlineEntries) {
             if (o.material) o.material.opacity = glowPulse;
@@ -10111,6 +10775,7 @@ function startDomainExpansion(color, checker) {
 
         requestAnimationFrame(animateExpand);
     };
+
     animateExpand();
 }
 
@@ -10174,6 +10839,19 @@ function openBattleMenu(color, checker) {
     hideOpponentChoiceBubble();
     hidePlayerChoiceBubble();
 
+    // Reset new visual elements
+    document.getElementById('battleShockwave').classList.remove('trigger');
+    document.getElementById('battleFlash').classList.remove('trigger');
+    document.getElementById('battleVsCenter').classList.remove('slam');
+    document.getElementById('battleOpponent').classList.remove('hit-shake', 'victory-zoom');
+    document.getElementById('battlePlayer').classList.remove('hit-shake', 'victory-zoom');
+
+    // Trigger the VS slam animation
+    setTimeout(() => {
+        document.getElementById('battleVsCenter').classList.add('slam');
+        playSFX('explosion'); // Add a heavy impact sound
+    }, 100);
+
     // Is the king (defender) on this client?
     const defenderIsLocal =
         (color === playerColor) ||
@@ -10191,6 +10869,7 @@ function openBattleMenu(color, checker) {
         round: 0,
         myChoice: null,
         opponentChoice: null,
+        comboCount: 0,
     };
 
     // ─────────────────────────────────────────────────────────
@@ -10226,6 +10905,8 @@ function openBattleMenu(color, checker) {
     document.getElementById('battleOpponentName').textContent =
         (opponentPiece.color === 'white' ? '白方' : '黑方') + ' ' +
         opponentPiece.type.charAt(0).toUpperCase() + opponentPiece.type.slice(1);
+
+    updateBattleHealthBars();
 
     renderBattleHearts();
     setBattleMessage('選擇你的出拳！');
@@ -10263,6 +10944,13 @@ function renderBattleHearts() {
     const myMax = battleState.isDefenderLocal ? 2 : 1;
     const oppMax = battleState.isDefenderLocal ? 1 : 2;
 
+    const overlay = document.getElementById('battleOverlay');
+    const myRatio = myHearts / myMax;
+    const oppRatio = oppHearts / oppMax;
+
+    overlay.classList.toggle('player-losing', myRatio <= 0.5);
+    overlay.classList.toggle('opponent-losing', oppRatio <= 0.5);
+
     document.getElementById('battlePlayerHearts').innerHTML = mk(myHearts, myMax);
     document.getElementById('battleOpponentHearts').innerHTML = mk(oppHearts, oppMax);
 }
@@ -10292,23 +10980,25 @@ function hideOpponentChoiceBubble() {
 
 function onBattleChoice(playerChoice) {
     if (!battleState || battleState.over || battleState.busy) return;
-    if (battleState.myChoice) return;  // already picked this round
+    if (battleState.myChoice) return;
 
     battleState.myChoice = playerChoice;
-
     showPlayerChoiceBubble(playerChoice);
 
+    // Add a satisfying button press effect
+    const btn = document.querySelector(`.battle-menu-btn[data-choice="${playerChoice}"]`);
+    if (btn) {
+        btn.style.transform = 'translateY(4px) scale(0.95)';
+        setTimeout(() => btn.style.transform = '', 200);
+    }
 
-    // Lock the buttons until the round resolves
     document.querySelectorAll('.battle-menu-btn').forEach(b => b.disabled = true);
     setBattleMessage('等待對手出拳...');
 
-    // Send our pick to the opponent
     if (currentMode === 'multiplayer' && peerConnection?.open) {
         peerConnection.send({ type: 'domain_choice', choice: playerChoice });
     }
 
-    // AI mode → the AI answers instantly
     if (currentMode === 'ai') {
         const opts = ['rock', 'paper', 'scissors'];
         battleState.opponentChoice = opts[Math.floor(Math.random() * opts.length)];
@@ -10334,20 +11024,36 @@ function tryResolveBattle() {
 
     const myChoice = battleState.myChoice;
     const oppChoice = battleState.opponentChoice;
-
-    // Clear for the next round (kept until busy=false)
     battleState.myChoice = null;
     battleState.opponentChoice = null;
 
     showOpponentChoiceBubble(oppChoice);
 
-    // Determine who won in ROLE terms
+    // ── CLASH ANIMATION SEQUENCE ──
+    // 1. Shake the screen
+    document.querySelector('.battle-overlay').classList.add('screen-shake');
+
+    // 2. Trigger the white flash
+    document.getElementById('battleFlash').classList.add('trigger');
+
+    // 3. Trigger the shockwave from center
+    setTimeout(() => {
+        document.getElementById('battleShockwave').classList.add('trigger');
+    }, 100);
+
+    // 4. Play clash sound
+    playSFX('skill'); // Or a custom clash sound
+
+    // Reset shake after animation
+    setTimeout(() => {
+        document.querySelector('.battle-overlay').classList.remove('screen-shake');
+    }, 500);
+
+    // Determine results
     const isKingMe = battleState.isDefenderLocal;
     const kingChoice = isKingMe ? myChoice : oppChoice;
     const checkerChoice = isKingMe ? oppChoice : myChoice;
     const kingResult = rpsResult(kingChoice, checkerChoice);
-
-    // And from the local player's own perspective
     const myResult = rpsResult(myChoice, oppChoice);
 
     if (myResult === 'tie') {
@@ -10356,24 +11062,73 @@ function tryResolveBattle() {
             battleState.busy = false;
             if (battleState.over) return;
             hideOpponentChoiceBubble();
-            hidePlayerChoiceBubble();          // ★ NEW
+            hidePlayerChoiceBubble();
             enableBattleButtons();
             setBattleMessage('選擇你的出拳！');
+            // Reset health bars just in case
+            updateBattleHealthBars();
         }, 1400);
         return;
     }
 
-    // Apply damage to the loser
+    // Apply damage
     if (kingResult === 'win') battleState.attackerHearts--;
     else if (kingResult === 'lose') battleState.defenderHearts--;
-    renderBattleHearts();
 
-    const youWon = myResult === 'win';
-    const myRole = isKingMe ? '國王' : '將軍者';
-    setBattleMessage(
-        `對手出了「${zhChoice(oppChoice)}」— ${myRole}${youWon ? '勝！' : '敗...'}`
-    );
+    const localIsKing = battleState.isDefenderLocal;
+    const iLost = (kingResult === 'win' && !localIsKing) ||
+        (kingResult === 'lose' && localIsKing);
 
+    // ── DAMAGE ANIMATION SEQUENCE ──
+    setTimeout(() => {
+        // Shake the loser
+        const loserEl = document.querySelector(iLost ? '#battlePlayer' : '#battleOpponent');
+        if (loserEl) loserEl.classList.add('hit-shake');
+
+        // Update health bars and hearts
+        updateBattleHealthBars();
+        renderBattleHearts();
+
+        // Trigger heavy flash
+        document.getElementById('battleFlash').classList.add('trigger');
+
+        // Play damage sound
+        playSFX('capture');
+
+        // Floating damage number
+        const rect = document.getElementById('battleOverlay').getBoundingClientRect();
+        const midX = rect.left + rect.width * (iLost ? 0.28 : 0.72);
+        const midY = rect.top + rect.height * (iLost ? 0.42 : 0.32);
+        spawnBattleDamageNumber(midX, midY, '-1 ♥', iLost ? '#ff4466' : '#ffcc00');
+
+        // Combo badge
+        if (!iLost) {
+            battleState.comboCount = (battleState.comboCount || 0) + 1;
+            showComboBadge(battleState.comboCount);
+        } else {
+            battleState.comboCount = 0;
+        }
+
+        // Heart shatter animation
+        const heartsEl = document.querySelector(iLost ? '#battlePlayerHearts' : '#battleOpponentHearts');
+        if (heartsEl) {
+            const hearts = heartsEl.querySelectorAll('.heart.full');
+            const last = hearts[hearts.length - 1];
+            if (last) {
+                last.classList.remove('full');
+                last.classList.add('shatter');
+                setTimeout(() => {
+                    last.classList.remove('shatter');
+                    last.classList.add('empty');
+                    last.textContent = '♡';
+                }, 650);
+            }
+        }
+
+        setBattleMessage(`對手出了「${zhChoice(oppChoice)}」— ${iLost ? '敗...' : '勝！'}`);
+    }, 400); // Wait for the clash animation to peak
+
+    // ── RESOLVE ROUND ──
     setTimeout(() => {
         if (battleState.defenderHearts <= 0) {
             resolveDomainDefenderLose();
@@ -10383,18 +11138,75 @@ function tryResolveBattle() {
             resolveDomainCheckerDies();
             return;
         }
+
         // Continue to next round
         battleState.busy = false;
         const remaining = isKingMe ? battleState.defenderHearts : battleState.attackerHearts;
         setBattleMessage(`剩餘生命：${remaining}。再來一局！`);
+
         setTimeout(() => {
             if (battleState.over) return;
             hideOpponentChoiceBubble();
-            hidePlayerChoiceBubble();          // ★ NEW
+            hidePlayerChoiceBubble();
             enableBattleButtons();
             setBattleMessage('選擇你的出拳！');
+            updateBattleHealthBars(); // Reset visual health if needed
         }, 1200);
-    }, 1400);
+    }, 1800);
+}
+
+function updateBattleHealthBars() {
+    if (!battleState) return;
+
+    const myMax = battleState.isDefenderLocal ? 2 : 1;
+    const oppMax = battleState.isDefenderLocal ? 1 : 2;
+
+    const myHearts = battleState.isDefenderLocal ? battleState.defenderHearts : battleState.attackerHearts;
+    const oppHearts = battleState.isDefenderLocal ? battleState.attackerHearts : battleState.defenderHearts;
+
+    const myRatio = myHearts / myMax;
+    const oppRatio = oppHearts / oppMax;
+
+    // Update Player Health Bar
+    const playerFill = document.getElementById('battlePlayerHealthFill');
+    if (playerFill) {
+        playerFill.style.width = `${myRatio * 100}%`;
+        // Change color based on health
+        if (myRatio <= 0.5) {
+            playerFill.style.background = 'linear-gradient(90deg, #ff4466, #ff8080)';
+            playerFill.style.boxShadow = '0 0 20px #ff4466';
+        } else {
+            playerFill.style.background = 'linear-gradient(90deg, #e8c547, #f0d860)';
+            playerFill.style.boxShadow = '0 0 10px #e8c547';
+        }
+    }
+
+    // Update Opponent Health Bar
+    const oppFill = document.getElementById('battleOpponentHealthFill');
+    if (oppFill) {
+        oppFill.style.width = `${oppRatio * 100}%`;
+        if (oppRatio <= 0.5) {
+            oppFill.style.background = 'linear-gradient(90deg, #ff4466, #ff8080)';
+            oppFill.style.boxShadow = '0 0 20px #ff4466';
+        } else {
+            oppFill.style.background = 'linear-gradient(90deg, #ff5050, #ff8080)';
+            oppFill.style.boxShadow = '0 0 10px #ff5050';
+        }
+    }
+
+    // Update hearts display
+    const mk = (n, total) => {
+        let s = '';
+        for (let i = 0; i < total; i++) {
+            s += i < n
+                ? '<span class="heart full">❤</span>'
+                : '<span class="heart empty">♡</span>';
+        }
+        return s;
+    };
+
+    document.getElementById('battlePlayerHearts').innerHTML = mk(myHearts, myMax);
+    document.getElementById('battleOpponentHearts').innerHTML = mk(oppHearts, oppMax);
 }
 
 function rpsResult(a, b) {
@@ -10412,18 +11224,40 @@ function zhChoice(c) {
 function resolveDomainCheckerDies() {
     battleState.over = true;
     setBattleMessage('👑 國王勝！將軍者被消滅。');
+
+    // Victory animation for the player
+    const playerEl = document.getElementById('battlePlayer');
+    if (playerEl) playerEl.classList.add('victory-zoom');
+
+    // Defeat animation for the opponent
+    const oppEl = document.getElementById('battleOpponent');
+    if (oppEl) oppEl.classList.add('hit-shake');
+
+    playSFX('victory');
+
     setTimeout(() => {
         document.getElementById('battleOverlay').classList.add('hidden');
         if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
         if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
         const ctx = kingSkillState.context;
         if (ctx) playKillAnimation(ctx.color, ctx.checker);
-    }, 1400);
+    }, 2500); // Increased duration to let the victory animation play
 }
 
 function resolveDomainDefenderLose() {
     battleState.over = true;
     setBattleMessage('💀 國王生命耗盡...');
+
+    // Defeat animation for the player
+    const playerEl = document.getElementById('battlePlayer');
+    if (playerEl) playerEl.classList.add('hit-shake');
+
+    // Victory animation for the opponent
+    const oppEl = document.getElementById('battleOpponent');
+    if (oppEl) oppEl.classList.add('victory-zoom');
+
+    playSFX('gameover');
+
     setTimeout(() => {
         document.getElementById('battleOverlay').classList.add('hidden');
         if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
@@ -10457,7 +11291,7 @@ function resolveDomainDefenderLose() {
             text.textContent = (winner === 'white' ? '白方' : '黑方') + ' 獲勝!';
             text.className = 'game-over-text win';
         }
-    }, 1400);
+    }, 2500);
 }
 
 // ── Kill animation (3D magic laser blast) + board cleanup ──
@@ -10466,7 +11300,6 @@ function playKillAnimation(defenderColor, checker) {
 
     const king = gameState.findKing(defenderColor);
     if (!king) {
-        // Safety fallback — skip visuals, resolve immediately
         finalizeDomainKill(defenderColor, checker);
         return;
     }
@@ -10477,17 +11310,45 @@ function playKillAnimation(defenderColor, checker) {
     const kingObj = pieceObjects[`${king.r},${king.c}`];
     const victimObj = pieceObjects[`${checker.r},${checker.c}`];
 
-    const ORB_HEIGHT = 1.55;   // where the orb charges above the king
-    const IMPACT_Y = 0.45;   // mid-body height of the target piece
+    const ORB_HEIGHT = 1.55;
+    const IMPACT_Y = 0.45;
 
     const orbPos = new THREE.Vector3(kingPos.x, ORB_HEIGHT, kingPos.z);
     const impactPos = new THREE.Vector3(checkerPos.x, IMPACT_Y, checkerPos.z);
 
-    // ── Track every object we spawn so we can clean them all up ──
     const created = [];
     const track = (obj) => { created.push(obj); return obj; };
 
-    // ── Snapshot the involved pieces' materials so we can animate them ──
+    // ═════════════════════════════════════════════════════════
+    //  DOM OVERLAYS — vignette + screen flash
+    // ═════════════════════════════════════════════════════════
+    const vignette = document.createElement('div');
+    vignette.style.cssText = `
+        position: fixed; inset: 0; pointer-events: none; z-index: 490;
+        background: radial-gradient(circle at 50% 50%,
+            rgba(0,0,0,0) 30%,
+            rgba(8,0,20,0.55) 70%,
+            rgba(0,0,0,0.92) 100%);
+        opacity: 0; transition: opacity 0.5s ease;
+    `;
+    document.body.appendChild(vignette);
+    requestAnimationFrame(() => { vignette.style.opacity = '1'; });
+
+    const screenFlash = document.createElement('div');
+    screenFlash.style.cssText = `
+        position: fixed; inset: 0; pointer-events: none; z-index: 495;
+        background: radial-gradient(circle at 50% 50%,
+            #ffffff 0%,
+            rgba(255,240,200,0.9) 25%,
+            rgba(255,200,120,0.4) 50%,
+            rgba(0,0,0,0) 75%);
+        opacity: 0;
+    `;
+    document.body.appendChild(screenFlash);
+
+    // ═════════════════════════════════════════════════════════
+    //  SNAPSHOT MATERIALS
+    // ═════════════════════════════════════════════════════════
     const kingMats = [];
     if (kingObj) {
         kingObj.traverse(n => {
@@ -10496,7 +11357,6 @@ function playKillAnimation(defenderColor, checker) {
                     mesh: n,
                     color: n.material.color.clone(),
                     emissive: n.material.emissive ? n.material.emissive.clone() : null,
-                    emissiveIntensity: n.material.emissiveIntensity ?? 0,
                 });
             }
         });
@@ -10516,11 +11376,80 @@ function playKillAnimation(defenderColor, checker) {
         });
     }
 
-    const victimBasePos = victimObj ? victimObj.position.clone() : new THREE.Vector3();
-    const victimBaseScale = victimObj ? (victimObj.scale.x || 1) : 1;
+    // ═════════════════════════════════════════════════════════
+    //  1. GROUND RUNE CIRCLE (under the king)
+    // ═════════════════════════════════════════════════════════
+    const runeGroup = track(new THREE.Group());
+    runeGroup.position.set(kingPos.x, 0.08, kingPos.z);
+    scene.add(runeGroup);
+
+    const runeMat1 = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const runeRing1 = track(new THREE.Mesh(new THREE.RingGeometry(0.66, 0.74, 64), runeMat1));
+    runeRing1.rotation.x = -Math.PI / 2;
+    runeGroup.add(runeRing1);
+
+    const runeMat2 = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const runeRing2 = track(new THREE.Mesh(new THREE.RingGeometry(0.94, 1.0, 64), runeMat2));
+    runeRing2.rotation.x = -Math.PI / 2;
+    runeRing2.position.y = 0.004;
+    runeGroup.add(runeRing2);
+
+    const runeTicks = [];
+    const RUNE_TICKS = 12;
+    for (let i = 0; i < RUNE_TICKS; i++) {
+        const a = (i / RUNE_TICKS) * Math.PI * 2;
+        const tm = new THREE.MeshBasicMaterial({
+            color: 0xffe27a, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const tick = track(new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.035), tm));
+        tick.position.set(Math.cos(a) * 0.83, 0.002, Math.sin(a) * 0.83);
+        tick.rotation.x = -Math.PI / 2;
+        tick.rotation.z = -a;
+        runeGroup.add(tick);
+        runeTicks.push({ mesh: tick, mat: tm });
+    }
 
     // ═════════════════════════════════════════════════════════
-    //  1. CHARGING ORB  (three nested additive spheres)
+    //  2. RISING ENERGY PILLAR
+    // ═════════════════════════════════════════════════════════
+    const pillarMat = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const pillar = track(new THREE.Mesh(
+        new THREE.CylinderGeometry(0.38, 0.62, 3.6, 24, 1, true),
+        pillarMat
+    ));
+    pillar.position.set(kingPos.x, 1.8, kingPos.z);
+    pillar.renderOrder = 30;
+    scene.add(pillar);
+
+    const corePillarMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const corePillar = track(new THREE.Mesh(
+        new THREE.CylinderGeometry(0.10, 0.20, 3.6, 16, 1, true),
+        corePillarMat
+    ));
+    corePillar.position.set(kingPos.x, 1.8, kingPos.z);
+    corePillar.renderOrder = 31;
+    scene.add(corePillar);
+
+    // ═════════════════════════════════════════════════════════
+    //  3. CHARGING ORB (nested spheres + 2 rotating torus rings)
     // ═════════════════════════════════════════════════════════
     const orbCoreMat = new THREE.MeshBasicMaterial({
         color: 0xffffff, transparent: true, opacity: 0,
@@ -10550,12 +11479,32 @@ function playKillAnimation(defenderColor, checker) {
     orbAura.renderOrder = 48;
     scene.add(orbAura);
 
+    const orbTorusMat1 = new THREE.MeshBasicMaterial({
+        color: 0xffe27a, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const orbTorus1 = track(new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.018, 8, 40), orbTorusMat1));
+    orbTorus1.position.copy(orbPos);
+    orbTorus1.renderOrder = 47;
+    scene.add(orbTorus1);
+
+    const orbTorusMat2 = new THREE.MeshBasicMaterial({
+        color: 0xd9a6ff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        side: THREE.DoubleSide,
+    });
+    const orbTorus2 = track(new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.014, 8, 40), orbTorusMat2));
+    orbTorus2.position.copy(orbPos);
+    orbTorus2.renderOrder = 47;
+    scene.add(orbTorus2);
+
     // ═════════════════════════════════════════════════════════
-    //  2. CHARGE-IN PARTICLES  (spiral in toward the orb)
+    //  4. CHARGE-IN PARTICLES
     // ═════════════════════════════════════════════════════════
     const chargeParticles = [];
-    for (let i = 0; i < 40; i++) {
-        const pg = new THREE.SphereGeometry(0.022 + Math.random() * 0.022, 5, 5);
+    for (let i = 0; i < 48; i++) {
+        const pg = new THREE.SphereGeometry(0.020 + Math.random() * 0.024, 5, 5);
         const pm = new THREE.MeshBasicMaterial({
             color: Math.random() < 0.5 ? 0xffe27a : 0xd9a6ff,
             transparent: true, opacity: 0,
@@ -10565,21 +11514,19 @@ function playKillAnimation(defenderColor, checker) {
         p.position.copy(orbPos);
         p.renderOrder = 51;
         const a = Math.random() * Math.PI * 2;
-        const r = 0.9 + Math.random() * 0.8;
-        const y = ORB_HEIGHT - 0.6 + Math.random() * 1.1;
+        const r = 1.0 + Math.random() * 1.3;
+        const y = ORB_HEIGHT - 0.8 + Math.random() * 1.6;
         p.userData = {
-            baseAngle: a,
-            baseRadius: r,
-            baseY: y,
-            spinSpeed: 4 + Math.random() * 5,
-            delay: Math.random() * 0.65,
+            baseAngle: a, baseRadius: r, baseY: y,
+            spinSpeed: 3 + Math.random() * 5,
+            delay: Math.random() * 0.7,
         };
         scene.add(p);
         chargeParticles.push(p);
     }
 
     // ═════════════════════════════════════════════════════════
-    //  3. LASER BEAM  (three concentric cylinders, king → target)
+    //  5. LASER BEAM (3 concentric cylinders + spiral helix)
     // ═════════════════════════════════════════════════════════
     const beamDir = new THREE.Vector3().subVectors(impactPos, orbPos);
     const beamLen = beamDir.length();
@@ -10622,7 +11569,7 @@ function playKillAnimation(defenderColor, checker) {
         side: THREE.DoubleSide,
     });
     const beamOuter = track(new THREE.Mesh(
-        new THREE.CylinderGeometry(0.32, 0.32, beamLen, 12, 1, true),
+        new THREE.CylinderGeometry(0.34, 0.34, beamLen, 12, 1, true),
         beamOuterMat
     ));
     beamOuter.position.copy(beamMid);
@@ -10630,9 +11577,51 @@ function playKillAnimation(defenderColor, checker) {
     beamOuter.renderOrder = 58;
     scene.add(beamOuter);
 
+    // Spiral helix particles around the beam
+    const beamHelix = [];
+    const HELIX_COUNT = 36;
+    const HELIX_RADIUS = 0.28;
+
+    const beamDirN = beamDir.clone().normalize();
+    const beamRight = new THREE.Vector3(beamDirN.z, 0, -beamDirN.x);
+    if (beamRight.lengthSq() < 0.001) beamRight.set(1, 0, 0);
+    beamRight.normalize();
+    const beamUp = new THREE.Vector3().crossVectors(beamDirN, beamRight).normalize();
+
+    for (let i = 0; i < HELIX_COUNT; i++) {
+        const tLocal = i / (HELIX_COUNT - 1);
+        const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.022, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? 0xffffff : 0xffe27a,
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const p = track(new THREE.Mesh(pg, pm));
+        p.renderOrder = 61;
+        p.userData = { tLocal };
+        scene.add(p);
+        beamHelix.push(p);
+    }
+
     // ═════════════════════════════════════════════════════════
-    //  4. IMPACT FLASH SPHERE  (at the victim)
+    //  6. IMPACT — 3 staggered shock rings + flash sphere
     // ═════════════════════════════════════════════════════════
+    const shockRings = [];
+    for (let i = 0; i < 3; i++) {
+        const rm = new THREE.MeshBasicMaterial({
+            color: i === 0 ? 0xffffff : (i === 1 ? 0xffe27a : 0xd9a6ff),
+            transparent: true, opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const r = track(new THREE.Mesh(new THREE.RingGeometry(0.30, 0.48, 64), rm));
+        r.rotation.x = -Math.PI / 2;
+        r.position.set(impactPos.x, 0.05 + i * 0.01, impactPos.z);
+        r.renderOrder = 55 + i;
+        scene.add(r);
+        shockRings.push({ mesh: r, mat: rm, delay: i * 0.10, maxScale: 5.0 + i * 1.5 });
+    }
+
     const impactMat = new THREE.MeshBasicMaterial({
         color: 0xffffff, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
@@ -10642,37 +11631,86 @@ function playKillAnimation(defenderColor, checker) {
         impactMat
     ));
     impactSphere.position.copy(impactPos);
-    impactSphere.renderOrder = 61;
+    impactSphere.renderOrder = 62;
     scene.add(impactSphere);
 
     // ═════════════════════════════════════════════════════════
-    //  5. GROUND SHOCKWAVE RING  (radial blast on the board)
+    //  7. SHARD BURST — victim explodes into flying tetrahedrons
     // ═════════════════════════════════════════════════════════
-    const shockRingMat = new THREE.MeshBasicMaterial({
-        color: 0xffe27a, transparent: true, opacity: 0,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const shockRing = track(new THREE.Mesh(
-        new THREE.RingGeometry(0.30, 0.50, 48),
-        shockRingMat
-    ));
-    shockRing.rotation.x = -Math.PI / 2;
-    shockRing.position.copy(impactPos);
-    shockRing.position.y = 0.05;
-    shockRing.renderOrder = 55;
-    scene.add(shockRing);
+    const shards = [];
+    for (let i = 0; i < 40; i++) {
+        const sg = new THREE.TetrahedronGeometry(0.045 + Math.random() * 0.08, 0);
+        const sm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(
+                0.06 + Math.random() * 0.14,
+                1.0,
+                0.55 + Math.random() * 0.30
+            ),
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const shard = track(new THREE.Mesh(sg, sm));
+        shard.renderOrder = 65;
+        shard.position.copy(impactPos);
+        shard.userData.vel = new THREE.Vector3(
+            (Math.random() - 0.5) * 6,
+            2.2 + Math.random() * 4.5,
+            (Math.random() - 0.5) * 6
+        );
+        shard.userData.spin = new THREE.Vector3(
+            (Math.random() - 0.5) * 14,
+            (Math.random() - 0.5) * 14,
+            (Math.random() - 0.5) * 14
+        );
+        scene.add(shard);
+        shards.push(shard);
+    }
 
     // ═════════════════════════════════════════════════════════
-    //  6. EXPLOSION PARTICLES  (spawned the moment the beam lands)
+    //  8. SOUL MOTES (rising from victim)
+    // ═════════════════════════════════════════════════════════
+    const souls = [];
+    for (let i = 0; i < 28; i++) {
+        const sg = new THREE.SphereGeometry(0.022 + Math.random() * 0.028, 5, 5);
+        const sm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(
+                0.72 + Math.random() * 0.10,
+                0.9,
+                0.65 + Math.random() * 0.25
+            ),
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const soul = track(new THREE.Mesh(sg, sm));
+        soul.renderOrder = 66;
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.10 + Math.random() * 0.35;
+        soul.position.set(
+            impactPos.x + Math.cos(a) * r,
+            impactPos.y + Math.random() * 0.2,
+            impactPos.z + Math.sin(a) * r
+        );
+        soul.userData.vel = new THREE.Vector3(
+            Math.cos(a) * 0.30,
+            1.6 + Math.random() * 1.8,
+            Math.sin(a) * 0.30
+        );
+        soul.userData.life = 1.0 + Math.random() * 0.6;
+        soul.userData.phase = Math.random() * Math.PI * 2;
+        scene.add(soul);
+        souls.push(soul);
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  9. EXPLOSION SPARK CLOUD (spawned on impact)
     // ═════════════════════════════════════════════════════════
     const explosionParticles = [];
     let explosionSpawned = false;
 
     const spawnExplosion = () => {
-        for (let i = 0; i < 70; i++) {
-            const pg = new THREE.SphereGeometry(0.035 + Math.random() * 0.055, 5, 5);
-            const hue = 0.08 + Math.random() * 0.16;   // orange → gold → violet
+        for (let i = 0; i < 80; i++) {
+            const pg = new THREE.SphereGeometry(0.030 + Math.random() * 0.055, 5, 5);
+            const hue = 0.06 + Math.random() * 0.18;
             const pm = new THREE.MeshBasicMaterial({
                 color: new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.35),
                 transparent: true, opacity: 1,
@@ -10680,17 +11718,17 @@ function playKillAnimation(defenderColor, checker) {
             });
             const p = track(new THREE.Mesh(pg, pm));
             p.position.copy(impactPos);
-            p.renderOrder = 62;
+            p.renderOrder = 63;
             const a = Math.random() * Math.PI * 2;
             const phi = Math.random() * Math.PI;
-            const speed = 2.2 + Math.random() * 4.8;
+            const speed = 2.5 + Math.random() * 5.5;
             p.userData.vel = new THREE.Vector3(
                 Math.sin(phi) * Math.cos(a) * speed,
-                Math.abs(Math.cos(phi)) * speed * 1.25 + 1.3,
+                Math.abs(Math.cos(phi)) * speed * 1.3 + 1.5,
                 Math.sin(phi) * Math.sin(a) * speed
             );
             p.userData.bornAt = clock.getElapsedTime();
-            p.userData.life = 0.85 + Math.random() * 0.65;
+            p.userData.life = 0.9 + Math.random() * 0.7;
             scene.add(p);
             explosionParticles.push(p);
         }
@@ -10700,11 +11738,11 @@ function playKillAnimation(defenderColor, checker) {
     //  TIMELINE
     // ═════════════════════════════════════════════════════════
     const t0 = clock.getElapsedTime();
-    const CHARGE_END = 1.20;   // charge build-up
-    const FIRE_AT = 1.20;   // beam fires
-    const IMPACT_AT = 1.28;   // beam hits target
-    const EXPLODE_END = 2.10;   // dissolve + explosion done
-    const TOTAL = 2.45;   // full cinematic length
+    const CHARGE_END = 1.10;
+    const FIRE_AT = 1.10;
+    const IMPACT_AT = 1.22;
+    const VICTIM_HIDE_AT = 1.30;
+    const TOTAL = 3.40;
 
     const KING_GLOW = new THREE.Color(0xffe27a);
     const KING_AURA = new THREE.Color(0xd9a6ff);
@@ -10713,38 +11751,66 @@ function playKillAnimation(defenderColor, checker) {
     const animate = () => {
         const t = clock.getElapsedTime() - t0;
 
-        // ── King glow ramp (pulses faster as the charge builds) ──
+        // ── KING glow ramp ──
         if (kingMats.length > 0) {
             const k = Math.min(1, t / CHARGE_END);
-            const pulse = 0.5 + 0.5 * Math.sin(t * 18);
+            const pulse = 0.5 + 0.5 * Math.sin(t * 20);
             for (const m of kingMats) {
-                const c = m.color.clone().lerp(KING_GLOW, k * 0.9);
+                const c = m.color.clone().lerp(KING_GLOW, k * 0.95);
                 m.mesh.material.color.copy(c);
                 if (m.mesh.material.emissive) {
                     m.mesh.material.emissive.copy(KING_AURA)
-                        .multiplyScalar(k * (0.35 + pulse * 0.35));
+                        .multiplyScalar(k * (0.35 + pulse * 0.4));
                     m.mesh.material.emissiveIntensity = 1;
                 }
             }
         }
 
-        // ── CHARGE PHASE: orb grows, particles spiral in ──
+        // ── Ground rune ──
+        {
+            const appear = Math.min(1, t / 0.35);
+            const fadeOut = Math.max(0, 1 - Math.max(0, t - CHARGE_END + 0.3) / 0.4);
+            const k = appear * fadeOut;
+            runeMat1.opacity = 0.85 * k;
+            runeMat2.opacity = 0.70 * k;
+            for (const tk of runeTicks) tk.mat.opacity = 0.85 * k;
+            runeGroup.rotation.y += 0.025;
+        }
+
+        // ── Energy pillar ──
+        {
+            const up = Math.min(1, t / 0.5);
+            const fade = Math.max(0, 1 - Math.max(0, t - CHARGE_END + 0.2) / 0.4);
+            pillarMat.opacity = 0.42 * up * fade;
+            corePillarMat.opacity = 0.85 * up * fade;
+            pillar.rotation.y += 0.04;
+            corePillar.rotation.y -= 0.08;
+        }
+
+        // ── CHARGE phase ──
         if (t < CHARGE_END) {
             const k = Math.min(1, t / CHARGE_END);
             const ease = 1 - Math.pow(1 - k, 3);
 
             orbCoreMat.opacity = 0.95 * ease;
-            orbGlowMat.opacity = 0.75 * ease * (0.7 + 0.3 * Math.sin(t * 22));
+            orbGlowMat.opacity = 0.75 * ease * (0.7 + 0.3 * Math.sin(t * 24));
             orbAuraMat.opacity = 0.35 * ease;
 
             orbCore.scale.setScalar(0.6 + 0.5 * ease);
             orbGlow.scale.setScalar(0.8 + 0.4 * ease);
             orbAura.scale.setScalar(0.85 + 0.35 * ease);
 
+            orbTorusMat1.opacity = 0.75 * ease * (0.7 + 0.3 * Math.sin(t * 8));
+            orbTorusMat2.opacity = 0.55 * ease * (0.7 + 0.3 * Math.sin(t * 8 + 1));
+            orbTorus1.rotation.x = t * 2.5;
+            orbTorus1.rotation.y = t * 3.2;
+            orbTorus2.rotation.x = -t * 2.0;
+            orbTorus2.rotation.z = t * 2.8;
+
             for (const p of chargeParticles) {
                 const pt = t - p.userData.delay;
                 if (pt < 0) { p.material.opacity = 0; continue; }
-                const lk = Math.min(1, pt / 0.85);
+                const lk = Math.min(1, pt / 0.9);
                 const angle = p.userData.baseAngle + pt * p.userData.spinSpeed;
                 const r = p.userData.baseRadius * (1 - lk) * (1 - lk * 0.2);
                 const y = p.userData.baseY + (ORB_HEIGHT - p.userData.baseY) * lk;
@@ -10758,7 +11824,7 @@ function playKillAnimation(defenderColor, checker) {
             }
         }
 
-        // ── FIRE PHASE: beam bursts outward ──
+        // ── FIRE phase ──
         if (t >= FIRE_AT && t < FIRE_AT + 0.35) {
             const ft = t - FIRE_AT;
             const fade = Math.max(0, 1 - ft / 0.32);
@@ -10766,74 +11832,122 @@ function playKillAnimation(defenderColor, checker) {
 
             beamCoreMat.opacity = 0.98 * fade * pulse;
             beamMidMat.opacity = 0.80 * fade;
-            beamOuterMat.opacity = 0.40 * fade;
+            beamOuterMat.opacity = 0.45 * fade;
 
-            // Thickness wobble on the outer glow
             const wob = 1 + 0.15 * Math.sin(ft * 40);
             beamOuter.scale.set(wob, 1, wob);
+
+            // Helix wrapped around the beam
+            const helixSpin = ft * 30;
+            for (const p of beamHelix) {
+                const tLocal = p.userData.tLocal;
+                const angle = helixSpin + tLocal * Math.PI * 6;
+                const taper = 1 - tLocal * 0.5;
+                const worldPos = orbPos.clone()
+                    .add(beamDirN.clone().multiplyScalar(tLocal * beamLen))
+                    .add(beamRight.clone().multiplyScalar(Math.cos(angle) * HELIX_RADIUS * taper))
+                    .add(beamUp.clone().multiplyScalar(Math.sin(angle) * HELIX_RADIUS * taper));
+                p.position.copy(worldPos);
+                p.material.opacity = 0.95 * fade;
+                p.scale.setScalar(0.7 + 0.5 * fade);
+            }
         } else if (t >= FIRE_AT + 0.35) {
             beamCoreMat.opacity = 0;
             beamMidMat.opacity = 0;
             beamOuterMat.opacity = 0;
+            for (const p of beamHelix) p.material.opacity = 0;
+        } else {
+            for (const p of beamHelix) p.material.opacity = 0;
         }
 
-        // ── Orb collapses the instant the beam fires ──
+        // ── Orb collapse the instant the beam fires ──
         if (t >= FIRE_AT) {
             const killK = Math.min(1, (t - FIRE_AT) / 0.15);
             orbCoreMat.opacity = Math.max(0, 0.95 * (1 - killK));
             orbGlowMat.opacity = Math.max(0, 0.75 * (1 - killK));
             orbAuraMat.opacity = Math.max(0, 0.35 * (1 - killK));
+            orbTorusMat1.opacity = Math.max(0, orbTorusMat1.opacity * (1 - killK * 2));
+            orbTorusMat2.opacity = Math.max(0, orbTorusMat2.opacity * (1 - killK * 2));
         }
 
-        // ── IMPACT TRIGGER ──
+        // ── IMPACT trigger ──
         if (t >= IMPACT_AT && !explosionSpawned) {
             explosionSpawned = true;
             spawnExplosion();
+        }
+
+        // ── Screen flash ──
+        if (t >= IMPACT_AT && t < IMPACT_AT + 0.18) {
+            screenFlash.style.opacity = String(1 - (t - IMPACT_AT) / 0.18);
+        } else if (t >= IMPACT_AT + 0.18) {
+            screenFlash.style.opacity = '0';
         }
 
         // ── Impact flash sphere ──
         if (t >= IMPACT_AT && t < IMPACT_AT + 0.55) {
             const it = (t - IMPACT_AT) / 0.55;
             impactMat.opacity = 0.98 * (1 - it) * (1 - it);
-            impactSphere.scale.setScalar(0.5 + it * 4.5);
+            impactSphere.scale.setScalar(0.5 + it * 5.5);
         } else if (t >= IMPACT_AT + 0.55) {
             impactMat.opacity = 0;
         }
 
-        // ── Ground shockwave ring ──
-        if (t >= IMPACT_AT && t < IMPACT_AT + 0.65) {
-            const st = (t - IMPACT_AT) / 0.65;
-            shockRingMat.opacity = 0.85 * (1 - st);
-            shockRing.scale.setScalar(1 + st * 6);
-        } else if (t >= IMPACT_AT + 0.65) {
-            shockRingMat.opacity = 0;
+        // ── Shock rings ──
+        for (const sr of shockRings) {
+            const st = t - IMPACT_AT - sr.delay;
+            if (st < 0 || st > 0.75) {
+                sr.mat.opacity = 0;
+                continue;
+            }
+            const prog = st / 0.75;
+            sr.mat.opacity = 0.9 * (1 - prog);
+            const s = 1 + prog * sr.maxScale;
+            sr.mesh.scale.set(s, s, 1);
         }
 
-        // ── VICTIM dissolve: flash white, then shrink + fade + drift up ──
+        // ── Victim white-flash ──
         if (t >= IMPACT_AT && victimMats.length > 0 && victimObj) {
-            const vt = Math.min(1, (t - IMPACT_AT) / (EXPLODE_END - IMPACT_AT));
-
-            // White-out flash
+            const vt = Math.min(1, (t - IMPACT_AT) / 0.10);
             const whiteMix = Math.min(1, vt * 2.5);
             for (const m of victimMats) {
                 const c = m.color.clone().lerp(VICTIM_WHITE, whiteMix);
                 m.mesh.material.color.copy(c);
                 if (m.mesh.material.emissive) {
-                    m.mesh.material.emissive.setRGB(1, 0.85, 0.55);
-                    m.mesh.material.emissiveIntensity = whiteMix * 1.8;
+                    m.mesh.material.emissive.setRGB(1, 0.9, 0.65);
+                    m.mesh.material.emissiveIntensity = whiteMix * 2.0;
                 }
+                m.mesh.material.opacity = Math.max(0.05, 1 - vt * 0.8);
+            }
+        }
+
+        // ── Hide victim, spawn shards + souls ──
+        if (t >= VICTIM_HIDE_AT) {
+            if (victimObj && victimObj.visible) victimObj.visible = false;
+            const st = t - VICTIM_HIDE_AT;
+
+            // Shards fly outward
+            for (const shard of shards) {
+                if (st > 2.0) { shard.material.opacity = 0; continue; }
+                shard.position.addScaledVector(shard.userData.vel, 0.016);
+                shard.userData.vel.y -= 0.22;
+                shard.rotation.x += shard.userData.spin.x * 0.016;
+                shard.rotation.y += shard.userData.spin.y * 0.016;
+                shard.rotation.z += shard.userData.spin.z * 0.016;
+                const lifeT = Math.min(1, st / 1.8);
+                shard.material.opacity = Math.max(0, 1 - lifeT);
+                shard.scale.setScalar(Math.max(0.1, 1 - lifeT * 0.7));
             }
 
-            // Pop up + shrink + fade (starts after the flash peak)
-            if (vt > 0.35) {
-                const f = (vt - 0.35) / 0.65;
-                victimObj.position.y = victimBasePos.y + f * 0.55;
-                victimObj.position.x = victimBasePos.x + Math.sin(f * 15) * 0.04 * (1 - f);
-                victimObj.position.z = victimBasePos.z + Math.cos(f * 15) * 0.04 * (1 - f);
-                victimObj.scale.setScalar(Math.max(0.01, victimBaseScale * (1 - f * 0.9)));
-                for (const m of victimMats) {
-                    m.mesh.material.opacity = Math.max(0, 1 - f);
-                }
+            // Souls drift upward
+            for (const soul of souls) {
+                const lt = st / soul.userData.life;
+                if (lt < 0 || lt > 1) { soul.material.opacity = 0; continue; }
+                soul.position.addScaledVector(soul.userData.vel, 0.016);
+                soul.userData.vel.y -= 0.02;
+                soul.position.x += Math.sin(st * 5 + soul.userData.phase) * 0.003;
+                soul.position.z += Math.cos(st * 5 + soul.userData.phase) * 0.003;
+                soul.material.opacity = (1 - lt) * 0.95;
+                soul.scale.setScalar(1 - lt * 0.4);
             }
         }
 
@@ -10844,13 +11958,13 @@ function playKillAnimation(defenderColor, checker) {
             if (age >= p.userData.life) { p.visible = false; continue; }
             p.visible = true;
             p.position.addScaledVector(p.userData.vel, 0.016);
-            p.userData.vel.y -= 0.18;
+            p.userData.vel.y -= 0.20;
             const lt = age / p.userData.life;
             p.material.opacity = Math.max(0, 1 - lt) * (1 - lt);
             p.scale.setScalar(1 - lt * 0.4);
         }
 
-        // ── Advance timeline ──
+        // ── Advance ──
         if (t < TOTAL) {
             requestAnimationFrame(animate);
         } else {
@@ -10860,6 +11974,11 @@ function playKillAnimation(defenderColor, checker) {
     };
 
     const disposeAll = () => {
+        if (vignette.parentNode) {
+            vignette.style.opacity = '0';
+            setTimeout(() => vignette.remove(), 600);
+        }
+        if (screenFlash.parentNode) screenFlash.remove();
         for (const obj of created) {
             if (obj.parent) obj.parent.remove(obj);
             if (obj.geometry) obj.geometry.dispose();
@@ -11178,8 +12297,9 @@ function startMenuMusic() {
     if (gameSettings.musicVolume <= 0) return;
 
     if (!bgmAudio) {
-        bgmAudio = new Audio('Midnight_On_The_Board.mp3');
-        bgmAudio.loop = true;    // 循環播放
+        // ★ Make sure this path is correct
+        bgmAudio = new Audio('assets/sounds/Midnight_On_The_Board.mp3');
+        bgmAudio.loop = true;
         bgmAudio.preload = 'auto';
         bgmAudio.volume = gameSettings.musicVolume / 100;
     }
@@ -11209,6 +12329,76 @@ function updateMusicVolume() {
 // Public helper so any future SFX system can respect the user's volume.
 function getSfxVolume() {
     return gameSettings.sfxVolume / 100;
+}
+
+// ============================================================
+//  ★ Battle/Vs — visual FX triggers
+// ============================================================
+
+/** Flash the whole arena + shake the stage + ring sparks. */
+function triggerBattleImpact(intensity = 1) {
+    const flash = document.getElementById('battleScreenFlash');
+    const stage = document.querySelector('#battleOverlay .battle-stage');
+    const sparks = document.getElementById('battleHitSparks');
+
+    if (flash) {
+        flash.classList.remove('trigger');
+        void flash.offsetWidth;
+        flash.classList.add('trigger');
+    }
+    if (stage) {
+        stage.classList.remove('shake');
+        void stage.offsetWidth;
+        stage.classList.add('shake');
+    }
+    if (sparks) {
+        sparks.classList.remove('trigger');
+        void sparks.offsetWidth;
+        sparks.classList.add('trigger');
+    }
+}
+
+/** Show the combo badge ("COMBO x2" etc.) — optional flair. */
+function showComboBadge(count) {
+    if (count < 2) return;
+    const el = document.getElementById('battleComboBadge');
+    if (!el) return;
+    el.textContent = `COMBO ×${count}`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+}
+
+/** Spawn a floating damage number in the arena. */
+function spawnBattleDamageNumber(x, y, text, color = '#ffcc00') {
+    const layer = document.getElementById('battleDamageLayer');
+    if (!layer) return;
+    const el = document.createElement('div');
+    el.className = 'battle-damage-num';
+    el.textContent = text;
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.color = color;
+    layer.appendChild(el);
+    setTimeout(() => el.remove(), 1200);
+}
+
+/** Mark a combatant as "hit" (shake + white flash). */
+function markBattleCombatantHit(which) {
+    const el = document.querySelector(
+        which === 'player' ? '.battle-player' : '.battle-opponent'
+    );
+    if (!el) return;
+    el.classList.remove('hit');
+    void el.offsetWidth;
+    el.classList.add('hit');
+
+    const stats = el.querySelector('.battle-stats');
+    if (stats) {
+        stats.classList.remove('hit');
+        void stats.offsetWidth;
+        stats.classList.add('hit');
+    }
 }
 
 // ============================================================
@@ -11242,6 +12432,7 @@ window.onload = () => {
     setupForceLandscape();
     updateAIModeUI();
     updateTopBarReopenBtn();
+    updateFullscreenBtnPosition();
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {

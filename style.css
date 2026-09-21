@@ -1,3 +1,6 @@
+/* ============================================================
+   ROOT & RESET
+   ============================================================ */
 :root {
     --bg: #1a1a2e;
     --panel: #16213e;
@@ -19,17 +22,14 @@
 
 html,
 body {
-    /* Prevent pull-to-refresh + rubber-band on mobile */
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    /* Kill tap highlight & long-press callout */
     -webkit-touch-callout: none;
 }
 
 #gameCanvas,
 #gameCanvas canvas {
     touch-action: none;
-    /* let the game handle all gestures */
 }
 
 body {
@@ -55,13 +55,12 @@ body {
     cursor: pointer;
 }
 
+/* ============================================================
+   OVERLAYS & PANELS
+   ============================================================ */
 .overlay {
     position: fixed;
-    /* explicit fallback for browsers that don't support `inset` */
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     z-index: 10;
     display: flex;
     flex-direction: column;
@@ -72,7 +71,6 @@ body {
     -webkit-backdrop-filter: blur(8px);
     overflow: hidden;
     visibility: visible;
-    /* when showing: fade in + reveal instantly */
     transition: opacity 0.3s ease, visibility 0s linear 0s;
 }
 
@@ -80,11 +78,9 @@ body {
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
-    /* when hiding: fade out first, then hide (kills backdrop-filter) */
     transition: opacity 0.3s ease, visibility 0s linear 0.3s;
 }
 
-/* Restart modal: subtle pop-in when appearing */
 #restartConfirmOverlay:not(.hidden) .panel {
     animation: modalPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -144,6 +140,9 @@ body {
     line-height: 1.6;
 }
 
+/* ============================================================
+   BUTTONS
+   ============================================================ */
 .btn {
     display: inline-block;
     padding: 14px 32px;
@@ -221,7 +220,7 @@ body {
 }
 
 /* ============================================================
-   Main menu — 2×2 button grid
+   MAIN MENU
    ============================================================ */
 .main-menu-buttons {
     display: grid !important;
@@ -233,7 +232,6 @@ body {
 }
 
 .main-menu-buttons .btn {
-    /* Kill the default `margin: 8px` on .btn so the grid can control spacing */
     margin: 0;
     width: 100%;
     padding: 14px 12px;
@@ -246,7 +244,7 @@ body {
         font-size: 0.92rem;
         letter-spacing: 0;
     }
-}   
+}
 
 .difficulty-btn {
     padding: 12px 24px;
@@ -298,6 +296,9 @@ body {
     display: inline-block;
 }
 
+/* ============================================================
+   GAME TOP BAR
+   ============================================================ */
 .game-top-bar {
     position: fixed;
     top: 0;
@@ -307,7 +308,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 70px 8px 16px;
+    padding: 8px 16px;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -375,6 +376,9 @@ body {
     }
 }
 
+/* ============================================================
+   TIMER
+   ============================================================ */
 .timer-display {
     display: flex;
     align-items: center;
@@ -438,6 +442,9 @@ body {
     padding: 0 2px;
 }
 
+/* ============================================================
+   PROMOTION / GAME OVER
+   ============================================================ */
 .promotion-choices {
     display: flex;
     gap: 16px;
@@ -488,6 +495,9 @@ body {
     color: #f39c12;
 }
 
+/* ============================================================
+   ACTION BAR
+   ============================================================ */
 #actionBar {
     position: fixed;
     bottom: 30px;
@@ -573,6 +583,9 @@ body {
     letter-spacing: 1px;
 }
 
+/* ============================================================
+   AIM HINT / REMOTE AIM
+   ============================================================ */
 #aimHint {
     position: fixed;
     bottom: 100px;
@@ -603,6 +616,43 @@ body {
     margin-left: 6px;
 }
 
+.remote-aim-indicator {
+    position: fixed;
+    z-index: 50;
+    pointer-events: none;
+    border: 3px solid #ff8800;
+    border-radius: 50%;
+    box-shadow: 0 0 30px rgba(255, 136, 0, 0.6);
+    animation: aimPulse 0.8s infinite alternate;
+    display: none;
+}
+
+@keyframes aimPulse {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.6;
+    }
+
+    100% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+}
+
+.remote-aim-line {
+    position: fixed;
+    z-index: 49;
+    pointer-events: none;
+    height: 3px;
+    background: linear-gradient(90deg, #ff8800, #ffcc00);
+    box-shadow: 0 0 20px rgba(255, 136, 0, 0.5);
+    transform-origin: left center;
+    display: none;
+}
+
+/* ============================================================
+   ROOM SETTINGS UI
+   ============================================================ */
 .settings-group {
     text-align: left;
     margin: 16px 0;
@@ -709,40 +759,9 @@ body {
     font-style: italic;
 }
 
-.remote-aim-indicator {
-    position: fixed;
-    z-index: 50;
-    pointer-events: none;
-    border: 3px solid #ff8800;
-    border-radius: 50%;
-    box-shadow: 0 0 30px rgba(255, 136, 0, 0.6);
-    animation: aimPulse 0.8s infinite alternate;
-    display: none;
-}
-
-@keyframes aimPulse {
-    0% {
-        transform: scale(0.9);
-        opacity: 0.6;
-    }
-
-    100% {
-        transform: scale(1.2);
-        opacity: 1;
-    }
-}
-
-.remote-aim-line {
-    position: fixed;
-    z-index: 49;
-    pointer-events: none;
-    height: 3px;
-    background: linear-gradient(90deg, #ff8800, #ffcc00);
-    box-shadow: 0 0 20px rgba(255, 136, 0, 0.5);
-    transform-origin: left center;
-    display: none;
-}
-
+/* ============================================================
+   READY STATUS
+   ============================================================ */
 .ready-status-row {
     display: flex;
     justify-content: center;
@@ -778,62 +797,119 @@ body {
     box-shadow: 0 0 12px rgba(46, 204, 113, 0.5);
 }
 
+/* ============================================================
+   FLOATING TOP-LEFT BUTTONS (☰ / ⛶)
+   ============================================================ */
+#topBarReopenBtn,
 #globalFullscreenBtn {
     position: fixed;
     top: 10px;
-    right: 10px;
-    z-index: 300;
+    left: 10px;
     width: 44px;
     height: 44px;
+    padding: 0;
     border-radius: 10px;
     border: 2px solid var(--gold);
     background: rgba(22, 33, 62, 0.92);
     color: var(--gold);
-    font-size: 1.4rem;
+    font-family: inherit;
+    font-size: 1.3rem;
     font-weight: 900;
-    cursor: pointer;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
-    font-family: inherit;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
     pointer-events: auto;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     -webkit-user-select: none;
+    transition:
+        top 0.25s cubic-bezier(0.34, 1.4, 0.64, 1),
+        background 0.2s ease,
+        color 0.2s ease,
+        transform 0.15s ease;
 }
 
+#topBarReopenBtn:hover,
 #globalFullscreenBtn:hover {
     background: var(--gold);
     color: #1a1a2e;
     transform: scale(1.06);
 }
 
+#topBarReopenBtn:active,
 #globalFullscreenBtn:active {
     transform: scale(0.93);
 }
 
+#topBarReopenBtn {
+    z-index: 301;
+}
+
+#globalFullscreenBtn {
+    z-index: 300;
+}
+
+#topBarReopenBtn.hidden {
+    display: none;
+}
+
+#globalFullscreenBtn.below-topbar {
+    top: 90px;
+}
+
+#globalFullscreenBtn.below-reopen {
+    top: 60px;
+}
+
 @media (max-height: 500px) {
+
+    #topBarReopenBtn,
     #globalFullscreenBtn {
         width: 38px;
         height: 38px;
         font-size: 1.1rem;
-        top: 6px;
-        right: 6px;
+        top: 8px;
+        left: 8px;
+    }
+
+    #globalFullscreenBtn.below-topbar {
+        top: 52px;
+    }
+
+    #globalFullscreenBtn.below-reopen {
+        top: 52px;
     }
 }
 
+@media (orientation: landscape) and (pointer: coarse) {
+
+    #topBarReopenBtn,
+    #globalFullscreenBtn {
+        top: max(10px, env(safe-area-inset-top));
+        left: max(10px, env(safe-area-inset-left));
+        right: auto;
+    }
+
+    #globalFullscreenBtn.below-topbar {
+        top: calc(max(10px, env(safe-area-inset-top)) + 50px);
+    }
+
+    #globalFullscreenBtn.below-reopen {
+        top: calc(max(10px, env(safe-area-inset-top)) + 44px + 6px);
+    }
+}
+
+/* ============================================================
+   MOBILE CANNON CONTROLS (JOYSTICK + FIRE)
+   ============================================================ */
 #mobileCannonControls {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
     inset: 0;
     z-index: 250;
     pointer-events: none;
@@ -965,29 +1041,21 @@ body {
 }
 
 /* ============================================================
-   Animated chess background for menus
+   ANIMATED CHESS BACKGROUND (MENU)
    ============================================================ */
 .overlay {
     overflow: hidden;
-    /* keep drifting glyphs from leaking out */
 }
 
 .chess-bg {
     position: absolute;
     inset: 0;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    /* fallback */
     overflow: hidden;
     pointer-events: none;
     z-index: 0;
     transform: translateZ(0);
-    /* single shared layer */
 }
 
-/* ── Slow-drifting checkerboard ── */
 .bg-grid {
     position: absolute;
     inset: -25%;
@@ -1014,7 +1082,6 @@ body {
     }
 }
 
-/* ── Pulsing golden glow behind the panel ── */
 .bg-glow {
     position: absolute;
     left: 50%;
@@ -1045,7 +1112,6 @@ body {
     }
 }
 
-/* ── Floating chess glyphs ── */
 .piece {
     position: absolute;
     top: 0;
@@ -1136,13 +1202,11 @@ body {
     }
 }
 
-/* ── Panel must paint above the animated background ── */
 .overlay .panel {
     position: relative;
     z-index: 1;
 }
 
-/* ── Respect reduced-motion preference ── */
 @media (prefers-reduced-motion: reduce) {
 
     .bg-grid,
@@ -1157,34 +1221,24 @@ body {
     }
 }
 
-/* ============================================================
-   Mobile performance / stability overrides
-   ============================================================ */
 @media (pointer: coarse),
 (max-width: 900px) {
-
-    /* The blur is the main cause of glitching on mobile GPUs.
-       Fall back to a solid dark layer — visually similar, far cheaper. */
     .overlay {
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
         background: rgba(0, 0, 0, 0.88);
     }
 
-    /* Shrink the giant glow disc (was 140vmax → huge GPU layer) */
     .bg-glow {
         width: 90vmax;
         height: 90vmax;
         animation: none;
     }
 
-    /* Stop the drifting checkerboard animation */
     .bg-grid {
         animation: none;
     }
 
-    /* Park the floating glyphs (removes 8 compositor layers).
-       Keep a subtle static presence so menus don't look empty. */
     .piece {
         animation: none !important;
         opacity: 0.06;
@@ -1194,7 +1248,6 @@ body {
         text-shadow: none;
     }
 
-    /* Belt-and-braces: cap canvas pixel ratio on phones */
     #gameCanvas canvas {
         max-width: 100%;
         max-height: 100%;
@@ -1202,7 +1255,7 @@ body {
 }
 
 /* ============================================================
-   AI Game Mode Toggle Switch
+   AI MODE TOGGLE SWITCH
    ============================================================ */
 .game-mode-toggle-row {
     display: flex;
@@ -1225,8 +1278,6 @@ body {
     white-space: nowrap;
 }
 
-/* Highlight the label that matches the current toggle state.
-   We toggle `data-mode` on the wrapping `.panel` from JS. */
 .panel[data-mode="normal"] .mode-label:first-child,
 .panel[data-mode="totally"] .mode-label:last-child {
     opacity: 1;
@@ -1277,7 +1328,6 @@ body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* Checked (skills ON) */
 .toggle-switch input:checked+.toggle-slider {
     background: linear-gradient(90deg, #b8941f, #e8c547);
     border-color: var(--gold);
@@ -1291,7 +1341,6 @@ body {
 }
 
 .toggle-switch:active .toggle-slider::before {
-    /* Small squash feedback on tap */
     width: 28px;
 }
 
@@ -1332,7 +1381,7 @@ body {
 }
 
 /* ============================================================
-   Queen revive chooser
+   QUEEN REVIVE CHOOSER + SPEECH BUBBLE
    ============================================================ */
 #reviveChoices .promotion-btn {
     flex-direction: column;
@@ -1352,9 +1401,6 @@ body {
     border-color: #2ecc71;
 }
 
-/* ============================================================
-   Queen revive speech bubble
-   ============================================================ */
 .queen-speech-bubble {
     position: fixed;
     z-index: 150;
@@ -1382,7 +1428,6 @@ body {
     will-change: opacity, transform;
 }
 
-/* Tail (double-triangle → crisp outline + filled tip) */
 .queen-speech-bubble::before,
 .queen-speech-bubble::after {
     content: '';
@@ -1393,7 +1438,6 @@ body {
     height: 0;
 }
 
-/* Outer gold border of the tail */
 .queen-speech-bubble::before {
     bottom: -11px;
     border-left: 11px solid transparent;
@@ -1402,7 +1446,6 @@ body {
     filter: drop-shadow(0 0 6px rgba(232, 197, 71, 0.55));
 }
 
-/* Inner dark fill of the tail (1px inside) */
 .queen-speech-bubble::after {
     bottom: -8px;
     border-left: 9px solid transparent;
@@ -1422,10 +1465,8 @@ body {
 }
 
 /* ============================================================
-   DOMAIN EXPANSION — King passive skill
+   DOMAIN EXPANSION — prompt + pre-battle animation
    ============================================================ */
-
-/* ── Prompt overlay ── */
 #domainPromptOverlay {
     z-index: 400;
     background: rgba(0, 0, 0, 0.9);
@@ -1441,13 +1482,9 @@ body {
     text-shadow: 0 0 20px rgba(217, 166, 255, 0.55);
 }
 
-/* ── Full-screen domain animation ── */
 .domain-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     z-index: 500;
     background: #000;
     overflow: hidden;
@@ -1494,10 +1531,7 @@ body {
 
 .domain-flash {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     background: #fff;
     opacity: 0;
     animation: domainFlash 1.5s ease-out forwards;
@@ -1568,13 +1602,12 @@ body {
     color: #fff;
 }
 
-/* ── VS screen ── */
+/* ============================================================
+   VS SCREEN — cinematic pre-battle intro
+   ============================================================ */
 .vs-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     z-index: 600;
     background: #000;
     display: flex;
@@ -1583,13 +1616,54 @@ body {
     padding: 0 3vw;
     overflow: hidden;
     perspective: 1000px;
+    animation: vsCameraShake 0.65s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    animation-play-state: paused;
 }
 
 .vs-overlay.hidden {
     display: none;
 }
 
-/* Dynamic Red / Blue Split Background */
+.vs-overlay.animate {
+    animation-play-state: running;
+}
+
+@keyframes vsCameraShake {
+
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0);
+    }
+
+    10% {
+        transform: translate3d(-8px, 4px, 0);
+    }
+
+    20% {
+        transform: translate3d(7px, -3px, 0);
+    }
+
+    30% {
+        transform: translate3d(-6px, -2px, 0);
+    }
+
+    40% {
+        transform: translate3d(5px, 3px, 0);
+    }
+
+    55% {
+        transform: translate3d(-4px, 2px, 0);
+    }
+
+    70% {
+        transform: translate3d(3px, -2px, 0);
+    }
+
+    85% {
+        transform: translate3d(-2px, 1px, 0);
+    }
+}
+
 .vs-bg-split {
     position: absolute;
     top: 0;
@@ -1598,22 +1672,26 @@ body {
     z-index: 0;
     opacity: 0;
     transform: scaleX(0);
-    transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+    transition: transform 0.85s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.55s ease;
 }
 
 .vs-bg-red {
     left: 0;
     background:
-        radial-gradient(circle at 0% 50%, #000 0%, rgba(0, 0, 0, 0.85) 30%, transparent 70%),
-        repeating-linear-gradient(45deg, transparent, transparent 22px, rgba(255, 255, 255, 0.04) 22px, rgba(255, 255, 255, 0.04) 44px);
+        radial-gradient(circle at 0% 50%, #000 0%, rgba(60, 0, 20, 0.9) 30%, transparent 70%),
+        radial-gradient(circle at 20% 80%, rgba(255, 40, 80, 0.35) 0%, transparent 55%),
+        repeating-linear-gradient(45deg, transparent, transparent 22px,
+            rgba(255, 80, 80, 0.06) 22px, rgba(255, 80, 80, 0.06) 44px);
     transform-origin: left center;
 }
 
 .vs-bg-blue {
     right: 0;
     background:
-        radial-gradient(circle at 100% 50%, #fff 0%, rgba(255, 255, 255, 0.85) 30%, transparent 70%),
-        repeating-linear-gradient(45deg, transparent, transparent 22px, rgba(0, 0, 0, 0.05) 22px, rgba(0, 0, 0, 0.05) 44px);
+        radial-gradient(circle at 100% 50%, #fff 0%, rgba(255, 255, 255, 0.9) 30%, transparent 70%),
+        radial-gradient(circle at 80% 20%, rgba(122, 200, 255, 0.4) 0%, transparent 55%),
+        repeating-linear-gradient(45deg, transparent, transparent 22px,
+            rgba(0, 0, 0, 0.06) 22px, rgba(0, 0, 0, 0.06) 44px);
     transform-origin: right center;
 }
 
@@ -1622,66 +1700,367 @@ body {
     transform: scaleX(1);
 }
 
-/* Floating Geometric Shards */
-.vs-shards {
+.vs-vignette {
     position: absolute;
     inset: 0;
-    z-index: 1;
+    z-index: 7;
     pointer-events: none;
-    background-image:
-        radial-gradient(circle at 15% 20%, rgba(232, 197, 71, 0.15) 2px, transparent 2px),
-        radial-gradient(circle at 85% 80%, rgba(232, 197, 71, 0.15) 3px, transparent 3px),
-        radial-gradient(circle at 50% 50%, rgba(232, 197, 71, 0.10) 4px, transparent 4px);
-    background-size: 100px 100px, 150px 150px, 200px 200px;
-    animation: shardFloat 20s linear infinite;
-}
-
-@keyframes shardFloat {
-    0% {
-        background-position: 0 0, 0 0, 0 0;
-    }
-
-    100% {
-        background-position: 100px 100px, -150px 150px, 200px -200px;
-    }
-}
-
-/* Central Clash Shockwave */
-.vs-clash-flash {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%) scale(0);
-    width: 100vw;
-    height: 100vh;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 60%);
-    z-index: 3;
-    pointer-events: none;
+    background: radial-gradient(circle at 50% 50%,
+            transparent 30%,
+            rgba(0, 0, 0, 0.55) 72%,
+            rgba(0, 0, 0, 0.95) 100%);
     opacity: 0;
 }
 
-.vs-overlay.animate .vs-clash-flash {
-    animation: clashShockwave 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+.vs-overlay.animate .vs-vignette {
+    animation: vsVignettePulse 3.2s ease-in-out infinite;
 }
 
-@keyframes clashShockwave {
-    0% {
-        transform: translate(-50%, -50%) scale(0);
-        opacity: 1;
+@keyframes vsVignettePulse {
+
+    0%,
+    100% {
+        opacity: 0.55;
     }
 
     50% {
-        transform: translate(-50%, -50%) scale(1.5);
-        opacity: 0.8;
+        opacity: 1;
+    }
+}
+
+.vs-speedlines {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 200vmax;
+    height: 200vmax;
+    transform: translate(-50%, -50%) rotate(0deg);
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    background: repeating-conic-gradient(from 0deg,
+            transparent 0deg, transparent 3deg,
+            rgba(232, 197, 71, 0.14) 3deg, rgba(232, 197, 71, 0.14) 3.4deg,
+            transparent 3.4deg, transparent 12deg);
+    -webkit-mask-image: radial-gradient(circle, transparent 18%, #000 45%, transparent 78%);
+    mask-image: radial-gradient(circle, transparent 18%, #000 45%, transparent 78%);
+}
+
+.vs-overlay.animate .vs-speedlines {
+    animation: vsSpeedlineSweep 5s linear infinite,
+        vsSpeedlineFadeIn 0.6s ease-out 0.2s forwards;
+}
+
+@keyframes vsSpeedlineSweep {
+    from {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+@keyframes vsSpeedlineFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 0.9;
+    }
+}
+
+.vs-lightning {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 30vw;
+    height: 100vh;
+    z-index: 6;
+    pointer-events: none;
+}
+
+.vs-lightning span {
+    position: absolute;
+    left: 50%;
+    width: 3px;
+    border-radius: 3px;
+    background: linear-gradient(180deg,
+            transparent 0%,
+            #ffffff 20%,
+            #ffe27a 50%,
+            #ff88ff 80%,
+            transparent 100%);
+    box-shadow:
+        0 0 18px #fff,
+        0 0 40px #ffe27a,
+        0 0 70px #ff66cc;
+    opacity: 0;
+    transform-origin: center;
+}
+
+.vs-lightning span:nth-child(1) {
+    height: 42vh;
+    top: 20vh;
+    transform: translate(-50%, 0) rotate(8deg);
+}
+
+.vs-lightning span:nth-child(2) {
+    height: 55vh;
+    top: 15vh;
+    transform: translate(-50%, 0) rotate(-5deg);
+}
+
+.vs-lightning span:nth-child(3) {
+    height: 35vh;
+    top: 30vh;
+    transform: translate(-50%, 0) rotate(14deg);
+}
+
+.vs-lightning span:nth-child(4) {
+    height: 65vh;
+    top: 10vh;
+    transform: translate(-50%, 0) rotate(-12deg);
+}
+
+.vs-overlay.animate .vs-lightning span {
+    animation: vsLightningFlicker 0.4s ease-out 0.55s 4,
+        vsLightningDeath 0.5s ease-in 2.3s forwards;
+}
+
+.vs-lightning span:nth-child(1) {
+    animation-delay: 0.55s, 2.3s;
+}
+
+.vs-lightning span:nth-child(2) {
+    animation-delay: 0.62s, 2.3s;
+}
+
+.vs-lightning span:nth-child(3) {
+    animation-delay: 0.48s, 2.3s;
+}
+
+.vs-lightning span:nth-child(4) {
+    animation-delay: 0.70s, 2.3s;
+}
+
+@keyframes vsLightningFlicker {
+    0% {
+        opacity: 0;
+    }
+
+    15% {
+        opacity: 1;
+    }
+
+    30% {
+        opacity: 0.25;
+    }
+
+    45% {
+        opacity: 1;
+    }
+
+    70% {
+        opacity: 0.4;
     }
 
     100% {
-        transform: translate(-50%, -50%) scale(2);
         opacity: 0;
     }
 }
 
-/* Sides */
+@keyframes vsLightningDeath {
+    to {
+        opacity: 0;
+    }
+}
+
+.vs-shard-burst {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.vs-shard-burst span {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 14px;
+    height: 14px;
+    background: linear-gradient(45deg, #ffe27a, #ff4488);
+    box-shadow: 0 0 18px #ffe27a, 0 0 30px #ff4488;
+    transform: translate(-50%, -50%) rotate(45deg);
+    opacity: 0;
+}
+
+.vs-overlay.animate .vs-shard-burst span {
+    animation: vsShardFly 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+}
+
+.vs-shard-burst span:nth-child(1) {
+    --sx: 0px;
+    --sy: -420px;
+    animation-delay: 0.50s;
+}
+
+.vs-shard-burst span:nth-child(2) {
+    --sx: 210px;
+    --sy: -360px;
+    animation-delay: 0.52s;
+}
+
+.vs-shard-burst span:nth-child(3) {
+    --sx: 380px;
+    --sy: -180px;
+    animation-delay: 0.48s;
+}
+
+.vs-shard-burst span:nth-child(4) {
+    --sx: 420px;
+    --sy: 0px;
+    animation-delay: 0.51s;
+}
+
+.vs-shard-burst span:nth-child(5) {
+    --sx: 380px;
+    --sy: 180px;
+    animation-delay: 0.49s;
+}
+
+.vs-shard-burst span:nth-child(6) {
+    --sx: 210px;
+    --sy: 360px;
+    animation-delay: 0.53s;
+}
+
+.vs-shard-burst span:nth-child(7) {
+    --sx: 0px;
+    --sy: 420px;
+    animation-delay: 0.50s;
+}
+
+.vs-shard-burst span:nth-child(8) {
+    --sx: -210px;
+    --sy: 360px;
+    animation-delay: 0.52s;
+}
+
+.vs-shard-burst span:nth-child(9) {
+    --sx: -380px;
+    --sy: 180px;
+    animation-delay: 0.48s;
+}
+
+.vs-shard-burst span:nth-child(10) {
+    --sx: -420px;
+    --sy: 0px;
+    animation-delay: 0.51s;
+}
+
+.vs-shard-burst span:nth-child(11) {
+    --sx: -380px;
+    --sy: -180px;
+    animation-delay: 0.49s;
+}
+
+.vs-shard-burst span:nth-child(12) {
+    --sx: -210px;
+    --sy: -360px;
+    animation-delay: 0.53s;
+}
+
+@keyframes vsShardFly {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) rotate(45deg) scale(0.3);
+    }
+
+    15% {
+        opacity: 1;
+        transform: translate(-50%, -50%) rotate(45deg) scale(1.3);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) rotate(720deg) scale(0.4);
+    }
+}
+
+.vs-chromatic {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 6.5rem;
+    font-weight: 900;
+    pointer-events: none;
+    z-index: 4;
+    opacity: 0;
+    letter-spacing: 6px;
+    font-family: inherit;
+}
+
+.vs-chromatic-r {
+    color: #ff2d55;
+    text-shadow: 0 0 24px #ff2d55;
+    mix-blend-mode: screen;
+}
+
+.vs-chromatic-b {
+    color: #00e0ff;
+    text-shadow: 0 0 24px #00e0ff;
+    mix-blend-mode: screen;
+}
+
+.vs-overlay.animate .vs-chromatic-r {
+    animation: vsChromaR 0.7s ease-out 0.5s forwards;
+}
+
+.vs-overlay.animate .vs-chromatic-b {
+    animation: vsChromaB 0.7s ease-out 0.5s forwards;
+}
+
+@keyframes vsChromaR {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(4);
+    }
+
+    45% {
+        opacity: 0.9;
+        transform: translate(calc(-50% - 14px), calc(-50% + 4px)) scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+@keyframes vsChromaB {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(4);
+    }
+
+    45% {
+        opacity: 0.9;
+        transform: translate(calc(-50% + 14px), calc(-50% - 4px)) scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
 .vs-side {
     flex: 1;
     height: 82vh;
@@ -1695,46 +2074,71 @@ body {
 }
 
 .vs-overlay.animate .vs-side.vs-left {
-    animation: vsSideInLeft 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
+    animation: vsSideInLeft 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
 }
 
 .vs-overlay.animate .vs-side.vs-right {
-    animation: vsSideInRight 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+    animation: vsSideInRight 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.25s forwards;
 }
 
 @keyframes vsSideInLeft {
     0% {
         opacity: 0;
-        transform: translateX(-150px) scale(0.8);
+        transform: translateX(-260px) scale(0.6) rotate(-6deg);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateX(14px) scale(1.04) rotate(1deg);
     }
 
     100% {
         opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: translateX(0) scale(1) rotate(0);
     }
 }
 
 @keyframes vsSideInRight {
     0% {
         opacity: 0;
-        transform: translateX(150px) scale(0.8);
+        transform: translateX(260px) scale(0.6) rotate(6deg);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateX(-14px) scale(1.04) rotate(-1deg);
     }
 
     100% {
         opacity: 1;
-        transform: translateX(0) scale(1);
+        transform: translateX(0) scale(1) rotate(0);
     }
 }
 
-/* Canvases */
 .vs-canvas {
     width: 92%;
     max-width: 420px;
     height: 62%;
     display: block;
+    filter: drop-shadow(0 0 30px rgba(232, 197, 71, 0.45));
 }
 
-/* Labels */
+.vs-overlay.animate .vs-canvas {
+    animation: vsCanvasBreath 2.8s ease-in-out 1s infinite;
+}
+
+@keyframes vsCanvasBreath {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.06);
+    }
+}
+
 .vs-label {
     font-size: 1.7rem;
     font-weight: 900;
@@ -1749,34 +2153,40 @@ body {
 }
 
 .vs-overlay.animate .vs-label {
-    animation: labelPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s forwards;
+    animation: labelPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.85s forwards;
 }
 
 @keyframes labelPop {
     0% {
-        transform: scale(0);
+        transform: scale(0) rotate(-12deg);
         opacity: 0;
     }
 
+    70% {
+        transform: scale(1.18) rotate(2deg);
+        opacity: 1;
+    }
+
     100% {
-        transform: scale(1);
+        transform: scale(1) rotate(0);
         opacity: 1;
     }
 }
 
 .vs-label-black {
     color: #7ac8ff;
-    border: 2px solid rgba(122, 200, 255, 0.55);
-    box-shadow: 0 0 30px rgba(122, 200, 255, 0.35);
+    border: 2px solid rgba(122, 200, 255, 0.7);
+    box-shadow: 0 0 30px rgba(122, 200, 255, 0.55),
+        inset 0 0 14px rgba(122, 200, 255, 0.25);
 }
 
 .vs-label-white {
     color: #f5f0e1;
-    border: 2px solid rgba(245, 240, 225, 0.55);
-    box-shadow: 0 0 30px rgba(245, 240, 225, 0.35);
+    border: 2px solid rgba(245, 240, 225, 0.7);
+    box-shadow: 0 0 30px rgba(245, 240, 225, 0.55),
+        inset 0 0 14px rgba(245, 240, 225, 0.25);
 }
 
-/* VS Divider */
 .vs-divider {
     position: relative;
     flex: 0 0 auto;
@@ -1796,8 +2206,9 @@ body {
     paint-order: stroke fill;
     text-shadow:
         0 0 30px #fff,
-        0 0 60px #000,
-        0 0 100px #000;
+        0 0 60px #ffe27a,
+        0 0 100px #ff4488,
+        0 0 140px #000;
     letter-spacing: 6px;
     z-index: 5;
     transform: scale(5);
@@ -1806,30 +2217,72 @@ body {
 }
 
 .vs-overlay.animate .vs-vs {
-    animation: vsTextSlam 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards;
+    animation: vsTextSlam 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s forwards;
 }
 
 @keyframes vsTextSlam {
     0% {
         transform: scale(5);
         opacity: 0;
-        filter: blur(10px);
+        filter: blur(14px);
     }
 
-    40% {
-        transform: scale(0.9);
+    35% {
+        transform: scale(0.82);
         opacity: 1;
         filter: blur(0px);
     }
 
-    60% {
-        transform: scale(1.15);
+    55% {
+        transform: scale(1.25);
+        opacity: 1;
+    }
+
+    75% {
+        transform: scale(0.95);
         opacity: 1;
     }
 
     100% {
         transform: scale(1);
         opacity: 1;
+    }
+}
+
+.vs-clash-flash {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%,
+            rgba(255, 227, 122, 0.7) 22%,
+            rgba(255, 68, 136, 0.3) 45%,
+            rgba(255, 255, 255, 0) 65%);
+    z-index: 3;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.vs-overlay.animate .vs-clash-flash {
+    animation: clashShockwave 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.55s forwards;
+}
+
+@keyframes clashShockwave {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+
+    40% {
+        transform: translate(-50%, -50%) scale(1.6);
+        opacity: 0.9;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(2.6);
+        opacity: 0;
     }
 }
 
@@ -1838,8 +2291,8 @@ body {
     inset: -80%;
     background: radial-gradient(circle,
             #ffffff 0%,
-            rgba(232, 197, 71, 0.9) 20%,
-            rgba(232, 197, 71, 0.3) 40%,
+            rgba(232, 197, 71, 0.95) 20%,
+            rgba(255, 68, 136, 0.4) 42%,
             transparent 65%);
     opacity: 0;
     z-index: 1;
@@ -1847,80 +2300,33 @@ body {
 }
 
 .vs-overlay.animate .vs-vs-flash {
-    animation: vsFlash 0.8s ease-out 0.5s forwards;
+    animation: vsFlash 1s ease-out 0.5s forwards;
 }
 
 @keyframes vsFlash {
     0% {
         opacity: 0;
-        transform: scale(0.4);
+        transform: scale(0.3);
     }
 
-    40% {
+    35% {
         opacity: 1;
         transform: scale(1);
     }
 
     100% {
         opacity: 0;
-        transform: scale(1.5);
+        transform: scale(1.8);
     }
 }
 
-/* DOMAIN EXPANSION Text */
-.vs-domain-text {
-    position: absolute;
-    top: 15%;
-    left: 50%;
-    transform: translateX(-50%) scale(0);
-    font-size: 3.5rem;
-    font-weight: 900;
-    font-family: 'Courier New', monospace;
-    color: #fff;
-    text-align: center;
-    line-height: 1.2;
-    letter-spacing: 8px;
-    text-shadow:
-        2px 2px 0 #000,
-        -2px -2px 0 #000,
-        2px -2px 0 #000,
-        -2px 2px 0 #000,
-        0 0 20px #ff2200;
-    z-index: 6;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.vs-overlay.animate .vs-domain-text {
-    animation: domainTextPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.9s forwards;
-}
-
-@keyframes domainTextPop {
-    0% {
-        transform: translateX(-50%) scale(0.3);
-        opacity: 0;
-    }
-
-    60% {
-        transform: translateX(-50%) scale(1.1);
-        opacity: 1;
-    }
-
-    100% {
-        transform: translateX(-50%) scale(1);
-        opacity: 1;
-    }
-}
-
-/* Mobile adjustments */
 @media (max-width: 768px) {
     .vs-vs {
         font-size: 4rem;
     }
 
-    .vs-domain-text {
-        font-size: 2.2rem;
-        letter-spacing: 4px;
+    .vs-chromatic {
+        font-size: 4rem;
     }
 
     .vs-label {
@@ -1931,542 +2337,903 @@ body {
     .vs-side {
         height: 70vh;
     }
+
+    .vs-lightning {
+        width: 40vw;
+    }
 }
 
-/* ── Battle UI — monster-battler style layout + animated arena background ── */
+/* ============================================================
+   RPS BATTLE ARENA — CLEAN SINGLE IMPLEMENTATION
+   ------------------------------------------------------------
+   This is the only battle arena style block. All earlier
+   "ARENA 2.0 / 3.0 / 4.0" duplicates have been removed.
+   HTML references: .battle-overlay, .battle-bg-layer,
+   .battle-grid-floor, .battle-speed-lines, .battle-vignette,
+   .battle-flash, .battle-shockwave, .battle-hud-top,
+   .battle-round-badge, .battle-combo-badge, .battle-vs-center,
+   .battle-stage, .battle-combatant, .battle-sprite-container,
+   .battle-aura, .battle-stats, .battle-health-bar, .battle-hearts,
+   .battle-choice-bubble, .battle-bottom, .battle-message-box,
+   .battle-menu, .battle-menu-btn, .battle-damage-layer,
+   .battle-damage-num.
+   ============================================================ */
+
 .battle-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     z-index: 700;
-    background: radial-gradient(ellipse at center, #15153a 0%, #05051a 72%);
+    background: #05050a;
     overflow: hidden;
+    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    perspective: 1000px;
 }
 
 .battle-overlay.hidden {
     display: none;
 }
 
-/* ── Layer 1: breathing dual-glow (gold vs red) ── */
-.battle-overlay::before {
-    content: '';
-    position: absolute;
-    inset: -25%;
-    z-index: 0;
-    pointer-events: none;
-    background:
-        radial-gradient(circle at 22% 68%, rgba(232, 197, 71, 0.22) 0%, rgba(232, 197, 71, 0.06) 22%, transparent 48%),
-        radial-gradient(circle at 78% 32%, rgba(255, 80, 80, 0.22) 0%, rgba(255, 80, 80, 0.06) 22%, transparent 48%),
-        radial-gradient(circle at 50% 50%, rgba(122, 200, 255, 0.08) 0%, transparent 60%);
-    animation: battleGlowPulse 6s ease-in-out infinite;
+/* Screen-wide shake (triggered by JS on impact) */
+.battle-overlay.screen-shake {
+    animation: battleScreenShake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
 
-@keyframes battleGlowPulse {
+@keyframes battleScreenShake {
 
     0%,
     100% {
-        transform: scale(1) rotate(0deg);
-        opacity: 0.9;
+        transform: translate3d(0, 0, 0);
     }
 
-    50% {
-        transform: scale(1.15) rotate(3deg);
-        opacity: 1;
+    15% {
+        transform: translate3d(-12px, 5px, 0);
+    }
+
+    30% {
+        transform: translate3d(11px, -4px, 0);
+    }
+
+    45% {
+        transform: translate3d(-8px, -3px, 0);
+    }
+
+    60% {
+        transform: translate3d(6px, 4px, 0);
+    }
+
+    80% {
+        transform: translate3d(-4px, 2px, 0);
     }
 }
 
-/* ── Layer 2: scrolling diagonal energy stripes ── */
-.battle-overlay::after {
-    content: '';
+/* ── Background layers ── */
+.battle-bg-layer {
     position: absolute;
     inset: -50%;
     z-index: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(-35deg,
-            transparent 0,
-            transparent 50px,
-            rgba(232, 197, 71, 0.05) 50px,
-            rgba(232, 197, 71, 0.09) 55px,
-            transparent 55px,
-            transparent 110px);
-    animation: battleStripeScroll 3.2s linear infinite;
+    background:
+        radial-gradient(circle at 20% 50%, rgba(255, 50, 80, 0.4) 0%, transparent 40%),
+        radial-gradient(circle at 80% 50%, rgba(50, 150, 255, 0.4) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(200, 50, 255, 0.2) 0%, transparent 60%);
+    animation: battleBgPulse 4s ease-in-out infinite alternate;
 }
 
-@keyframes battleStripeScroll {
-    from {
-        transform: translate(0, 0);
-    }
-
-    to {
-        transform: translate(110px, 80px);
-    }
-}
-
-/* ── Stage: content paints above the animated background ── */
-.battle-stage {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-}
-
-/* ── Layer 3: perspective grid floor (retro arena) ── */
-.battle-stage::before {
-    content: '';
-    position: absolute;
-    left: -10%;
-    right: -10%;
-    bottom: 0;
-    height: 34vh;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 0.55;
-    background-image:
-        linear-gradient(180deg, transparent 0%, rgba(232, 197, 71, 0.10) 100%),
-        repeating-linear-gradient(90deg,
-            rgba(232, 197, 71, 0.22) 0px, rgba(232, 197, 71, 0.22) 1px,
-            transparent 1px, transparent 70px),
-        repeating-linear-gradient(0deg,
-            rgba(232, 197, 71, 0.22) 0px, rgba(232, 197, 71, 0.22) 1px,
-            transparent 1px, transparent 70px);
-    transform: perspective(500px) rotateX(65deg);
-    transform-origin: bottom center;
-    animation: gridFloorScroll 2.8s linear infinite;
-}
-
-@keyframes gridFloorScroll {
-    from {
-        background-position: 0 0, 0 0, 0 0;
-    }
-
-    to {
-        background-position: 0 0, 0 0, 0 70px;
-    }
-}
-
-/* ── Combatants — horizontal sprite + stat box ── */
-.battle-combatant {
-    position: absolute;
-    z-index: 2;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 14px;
-    pointer-events: none;
-    animation: battleCombatantIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-.battle-opponent {
-    top: 5vh;
-    right: 3vw;
-    flex-direction: row-reverse;
-}
-
-.battle-player {
-    left: 3vw;
-    bottom: 27vh;
-    animation-delay: 0.18s;
-}
-
-@keyframes battleCombatantIn {
+@keyframes battleBgPulse {
     0% {
-        opacity: 0;
-        transform: scale(0.7);
+        transform: scale(1) rotate(0deg);
+        filter: brightness(1);
     }
 
     100% {
+        transform: scale(1.1) rotate(5deg);
+        filter: brightness(1.3);
+    }
+}
+
+.battle-grid-floor {
+    position: absolute;
+    bottom: -20vh;
+    left: -20vw;
+    right: -20vw;
+    height: 60vh;
+    background-image:
+        linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 60px 60px;
+    transform: perspective(500px) rotateX(75deg);
+    transform-origin: bottom center;
+    animation: battleGridScroll 2s linear infinite;
+    z-index: 0;
+}
+
+@keyframes battleGridScroll {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0 60px;
+    }
+}
+
+.battle-speed-lines {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: repeating-conic-gradient(from 0deg at 50% 50%,
+            transparent 0deg, transparent 5deg,
+            rgba(255, 255, 255, 0.05) 5.5deg,
+            transparent 6deg);
+    animation: battleSpeedLinesSpin 10s linear infinite;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+@keyframes battleSpeedLinesSpin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── Screen effect layers ── */
+.battle-vignette {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 50%, transparent 30%, rgba(0, 0, 0, 0.8) 80%, #000 100%);
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.battle-flash {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    pointer-events: none;
+    background: #fff;
+    opacity: 0;
+    mix-blend-mode: overlay;
+}
+
+.battle-flash.trigger {
+    animation: battleFlashAnim 0.4s ease-out;
+}
+
+@keyframes battleFlashAnim {
+    0% {
         opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+.battle-shockwave {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 8px solid #fff;
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+    z-index: 14;
+    pointer-events: none;
+    box-shadow: 0 0 40px #fff, inset 0 0 40px #fff;
+}
+
+.battle-shockwave.trigger {
+    animation: battleShockwaveAnim 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes battleShockwaveAnim {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+        border-width: 20px;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(50);
+        opacity: 0;
+        border-width: 1px;
+    }
+}
+
+/* ── Top HUD ── */
+.battle-hud-top {
+    position: absolute;
+    top: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 30px;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.battle-combo-badge {
+    background: linear-gradient(180deg, #b71c1c, #5a0a0a);
+    border: 3px solid #ff4488;
+    color: #ffcc00;
+    font-family: 'Courier New', monospace;
+    font-weight: 900;
+    padding: 8px 24px;
+    border-radius: 8px;
+    box-shadow: 0 0 30px #ff4488;
+    transform: scale(0) skewX(10deg);
+    opacity: 0;
+}
+
+.battle-combo-badge.show {
+    animation: battleComboPop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes battleComboPop {
+    0% {
+        transform: scale(0.5) skewX(10deg);
+        opacity: 0;
+    }
+
+    30% {
+        transform: scale(1.2) skewX(10deg);
+        opacity: 1;
+    }
+
+    80% {
+        transform: scale(1) skewX(10deg);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1) skewX(10deg) translateY(-30px);
+        opacity: 0;
+    }
+}
+
+/* ── Center VS text ── */
+.battle-vs-center {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    transform: translate(-50%, -50%) scale(0) rotate(-20deg);
+    font-size: 10rem;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 40px #fff, 0 0 80px #ff4488, 0 0 120px #00e0ff;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.battle-vs-center.slam {
+    animation: battleVsSlam 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes battleVsSlam {
+    0% {
+        transform: translate(-50%, -50%) scale(5) rotate(-20deg);
+        opacity: 0;
+        filter: blur(20px);
+    }
+
+    40% {
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+        opacity: 1;
+        filter: blur(0);
+    }
+
+    60% {
+        transform: translate(-50%, -50%) scale(1.2) rotate(0deg);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+/* ── Combatant stage ── */
+.battle-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+}
+
+.battle-combatant {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.battle-opponent {
+    top: 15vh;
+    right: 10vw;
+    align-items: flex-end;
+}
+
+.battle-player {
+    bottom: 25vh;
+    left: 10vw;
+    align-items: flex-start;
+}
+
+.battle-combatant.hit-shake {
+    animation: battleCombatantHit 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes battleCombatantHit {
+    0% {
+        transform: translateX(0);
+        filter: brightness(1);
+    }
+
+    10% {
+        transform: translateX(-30px) rotate(-5deg);
+        filter: brightness(3) saturate(0);
+    }
+
+    20% {
+        transform: translateX(25px) rotate(4deg);
+        filter: brightness(2);
+    }
+
+    30% {
+        transform: translateX(-15px) rotate(-2deg);
+    }
+
+    40% {
+        transform: translateX(10px) rotate(1deg);
+    }
+
+    50% {
+        transform: translateX(-5px) rotate(-1deg);
+    }
+
+    100% {
+        transform: translateX(0);
+        filter: brightness(1);
+    }
+}
+
+.battle-combatant.victory-zoom {
+    animation: battleVictoryZoom 1.5s ease-in-out forwards;
+}
+
+@keyframes battleVictoryZoom {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.3);
+        filter: brightness(1.5) drop-shadow(0 0 50px #fff);
+    }
+
+    100% {
         transform: scale(1);
     }
 }
 
-/* ── Sprites + pulsing glow behind each fighter ── */
-.battle-sprite {
+/* ── Sprite + aura ── */
+.battle-sprite-container {
     position: relative;
-    width: 200px;
-    height: 200px;
-    flex-shrink: 0;
+    width: 300px;
+    height: 300px;
     display: flex;
-    align-items: center;
     justify-content: center;
+    align-items: center;
 }
 
-.battle-sprite::before {
-    content: '';
+.battle-opponent .battle-sprite-container {
+    width: 220px;
+    height: 220px;
+}
+
+.battle-sprite-container canvas {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.5));
+}
+
+.battle-aura {
     position: absolute;
-    inset: -25%;
+    inset: -20%;
     border-radius: 50%;
-    z-index: -1;
-    pointer-events: none;
-    background: radial-gradient(circle,
-            rgba(232, 197, 71, 0.55) 0%,
-            rgba(232, 197, 71, 0.15) 38%,
-            transparent 68%);
-    animation: combatantGlow 2.4s ease-in-out infinite;
+    z-index: 1;
+    animation: battleAuraPulse 2s ease-in-out infinite;
 }
 
-.battle-opponent .battle-sprite::before {
-    background: radial-gradient(circle,
-            rgba(255, 80, 80, 0.55) 0%,
-            rgba(255, 80, 80, 0.15) 38%,
-            transparent 68%);
-    animation-delay: 0.3s;
+.player-aura {
+    background: radial-gradient(circle, rgba(232, 197, 71, 0.6) 0%, transparent 70%);
+    box-shadow: 0 0 60px rgba(232, 197, 71, 0.8);
 }
 
-@keyframes combatantGlow {
+.opponent-aura {
+    background: radial-gradient(circle, rgba(255, 80, 80, 0.6) 0%, transparent 70%);
+    box-shadow: 0 0 60px rgba(255, 80, 80, 0.8);
+    animation-delay: 0.5s;
+}
+
+@keyframes battleAuraPulse {
 
     0%,
     100% {
-        transform: scale(0.85);
-        opacity: 0.5;
+        transform: scale(0.9);
+        opacity: 0.7;
     }
 
     50% {
-        transform: scale(1.15);
+        transform: scale(1.1);
         opacity: 1;
     }
 }
 
-.battle-opponent .battle-sprite {
-    width: 170px;
-    height: 170px;
-}
-
-.battle-sprite canvas {
-    position: relative;
-    z-index: 1;
-    width: 100% !important;
-    height: 100% !important;
-    display: block;
-    filter: drop-shadow(0 0 22px rgba(232, 197, 71, 0.32));
-}
-
-/* ── Stat boxes ── */
+/* ── Stats panel ── */
 .battle-stats {
-    background: linear-gradient(180deg, rgba(22, 33, 62, 0.96), rgba(10, 15, 35, 0.96));
+    background: rgba(0, 0, 0, 0.8);
     border: 3px solid #e8c547;
     border-radius: 10px;
-    padding: 8px 16px;
-    min-width: 210px;
-    box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.65),
-        0 0 22px rgba(232, 197, 71, 0.18);
+    padding: 10px 20px;
+    min-width: 250px;
+    box-shadow: 0 0 30px rgba(232, 197, 71, 0.3);
+    position: relative;
+    z-index: 5;
+    margin-top: -20px;
+}
+
+.battle-stats-left {
+    border-color: #e8c547;
+    box-shadow: 0 0 30px rgba(232, 197, 71, 0.4);
+}
+
+.battle-stats-right {
+    border-color: #ff5050;
+    box-shadow: 0 0 30px rgba(255, 80, 80, 0.4);
 }
 
 .battle-name {
-    color: #e8c547;
+    font-size: 1.2rem;
     font-weight: 900;
-    letter-spacing: 1.5px;
-    font-size: 1rem;
-    margin-bottom: 4px;
-    text-transform: capitalize;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    text-align: center;
+}
+
+.battle-stats-left .battle-name {
+    color: #e8c547;
+    text-shadow: 0 0 10px #e8c547;
+}
+
+.battle-stats-right .battle-name {
+    color: #ff5050;
+    text-shadow: 0 0 10px #ff5050;
+}
+
+.battle-health-bar {
+    width: 100%;
+    height: 12px;
+    background: #222;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    border: 1px solid #444;
+}
+
+.battle-health-fill {
+    height: 100%;
+    width: 100%;
+    transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.battle-stats-left .battle-health-fill {
+    background: linear-gradient(90deg, #e8c547, #f0d860);
+    box-shadow: 0 0 10px #e8c547;
+}
+
+.battle-stats-right .battle-health-fill {
+    background: linear-gradient(90deg, #ff5050, #ff8080);
+    box-shadow: 0 0 10px #ff5050;
 }
 
 .battle-hearts {
     display: flex;
-    gap: 6px;
+    justify-content: center;
+    gap: 8px;
 }
 
 .heart {
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     line-height: 1;
-    transition: all 0.3s ease;
+    transition: all 0.3s;
+    display: inline-block;
 }
 
 .heart.full {
     color: #ff4466;
-    text-shadow: 0 0 12px #ff4466;
+    text-shadow: 0 0 15px #ff4466, 0 0 30px #ff4466;
+    animation: battleHeartBeat 1s ease-in-out infinite;
 }
 
 .heart.empty {
     color: #444;
-    opacity: 0.5;
+    opacity: 0.4;
+    text-shadow: none;
 }
 
-/* ── Bottom bar — message box + 2×2 menu ── */
-.battle-bottom {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 3;
-    padding: 2vh 3vw 3vh;
-    display: flex;
-    gap: 14px;
-    align-items: stretch;
-    height: 23vh;
-    min-height: 150px;
+.heart.shatter {
+    animation: battleHeartShatter 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+    filter: drop-shadow(0 0 20px #fff) drop-shadow(0 0 40px #ff3366);
 }
 
-.battle-message-box {
-    flex: 1.4;
-    background: linear-gradient(180deg, #fefefe, #e8e0d0);
-    border: 4px solid #1a1a2e;
-    border-radius: 12px;
-    padding: 14px 22px;
-    display: flex;
-    align-items: center;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #e8c547;
-}
+@keyframes battleHeartBeat {
 
-.battle-message {
-    color: #1a1a2e;
-    font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: 1px;
-    line-height: 1.45;
-    font-family: 'Microsoft JhengHei', sans-serif;
-}
-
-.battle-menu {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 8px;
-    max-width: 420px;
-}
-
-.battle-menu-btn {
-    background: linear-gradient(180deg, #fefefe, #e8e0d0);
-    border: 4px solid #1a1a2e;
-    border-radius: 10px;
-    padding: 6px 10px;
-    font-family: inherit;
-    font-weight: 900;
-    font-size: 1rem;
-    color: #1a1a2e;
-    cursor: pointer;
-    transition: all 0.15s;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 4px 0 #666, 0 6px 14px rgba(0, 0, 0, 0.4);
-}
-
-.battle-menu-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 0 #666, 0 10px 20px rgba(0, 0, 0, 0.5);
-    background: linear-gradient(180deg, #ffffff, #f0e8d8);
-}
-
-.battle-menu-btn:active:not(:disabled) {
-    transform: translateY(2px);
-    box-shadow: 0 2px 0 #666, 0 4px 10px rgba(0, 0, 0, 0.4);
-}
-
-.battle-menu-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.battle-menu-icon {
-    font-size: 1.7rem;
-    line-height: 1;
-}
-
-.battle-menu-label {
-    font-size: 1rem;
-    letter-spacing: 2px;
-}
-
-/* ── Mobile ── */
-@media (max-width: 768px) {
-
-    /* Slightly calmer animations to keep phones cool */
-    .battle-overlay::before {
-        animation-duration: 8s;
+    0%,
+    100% {
+        transform: scale(1);
     }
 
-    .battle-overlay::after {
-        animation-duration: 4.5s;
-    }
-
-    .battle-stage::before {
-        animation-duration: 4s;
-        opacity: 0.4;
-    }
-
-    .battle-sprite::before {
-        animation-duration: 3.2s;
-    }
-
-    .battle-opponent {
-        top: 3vh;
-        right: 2vw;
-        gap: 8px;
-    }
-
-    .battle-player {
-        bottom: 24vh;
-        left: 2vw;
-        gap: 8px;
-    }
-
-    .battle-sprite {
-        width: 120px;
-        height: 120px;
-    }
-
-    .battle-opponent .battle-sprite {
-        width: 100px;
-        height: 100px;
-    }
-
-    .battle-stats {
-        min-width: 130px;
-        padding: 5px 10px;
-    }
-
-    .battle-name {
-        font-size: 0.78rem;
-        letter-spacing: 1px;
-    }
-
-    .heart {
-        font-size: 1.05rem;
-    }
-
-    .battle-bottom {
-        padding: 2vh 2vw;
-        gap: 8px;
-        min-height: 120px;
-    }
-
-    .battle-message-box {
-        padding: 10px 14px;
-    }
-
-    .battle-message {
-        font-size: 0.85rem;
-    }
-
-    .battle-menu {
-        gap: 5px;
-        max-width: 260px;
-    }
-
-    .battle-menu-btn {
-        border-width: 3px;
-        padding: 4px 6px;
-        gap: 4px;
-    }
-
-    .battle-menu-icon {
-        font-size: 1.2rem;
-    }
-
-    .battle-menu-label {
-        font-size: 0.72rem;
-        letter-spacing: 1px;
+    50% {
+        transform: scale(1.15);
     }
 }
 
-/* ============================================================
-   Battle — opponent's RPS choice bubble
-   ============================================================ */
+@keyframes battleHeartShatter {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+        color: #ff4466;
+        text-shadow: 0 0 15px #ff4466;
+    }
+
+    20% {
+        transform: scale(2.6);
+        opacity: 1;
+        color: #ffffff;
+        text-shadow: 0 0 40px #fff, 0 0 80px #ff3366, 0 0 120px #ffcc00;
+    }
+
+    45% {
+        transform: scale(1.4) rotate(80deg);
+        opacity: 0.85;
+        color: #ffcc00;
+    }
+
+    70% {
+        transform: scale(0.6) rotate(160deg);
+        opacity: 0.5;
+        color: #ff3366;
+    }
+
+    100% {
+        transform: scale(0) rotate(220deg);
+        opacity: 0;
+    }
+}
+
+/* ── Choice bubbles (opponent / player) ── */
 .battle-choice-bubble {
     position: absolute;
-    top: 40%;
-    right: calc(100% + 16px);
-    /* fallback for older browsers without calc-on-right */
-    left: -110px;
-    right: auto;
-    width: 92px;
-    height: 92px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #fff6c9, #e8c547);
+    top: 50%;
+    left: -80px;
+    transform: translateY(-50%) scale(0) rotate(-45deg);
+    width: 80px;
+    height: 80px;
+    background: radial-gradient(circle at 30% 30%, #fff, #e8c547);
     border: 4px solid #1a1a2e;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 3.2rem;
-    line-height: 1;
+    font-size: 2.5rem;
+    box-shadow: 0 0 30px #e8c547, 0 0 60px #e8c547;
     opacity: 0;
-    transform: scale(0.3) rotate(-40deg);
-    transition:
-        opacity 0.32s ease,
-        transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
-    pointer-events: none;
-    z-index: 5;
-    box-shadow:
-        0 0 40px rgba(232, 197, 71, 0.75),
-        0 6px 18px rgba(0, 0, 0, 0.55),
-        inset 0 0 14px rgba(255, 255, 255, 0.35);
-    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 10;
 }
 
 .battle-choice-bubble.show {
     opacity: 1;
-    transform: scale(1) rotate(0deg);
+    transform: translateY(-50%) scale(1) rotate(0deg);
 }
 
-/* Small tail on the right, pointing at the opponent's piece */
-.battle-choice-bubble::after {
+.battle-choice-bubble-player {
+    left: auto;
+    right: -80px;
+    background: radial-gradient(circle at 30% 30%, #fff, #7ac8ff);
+    box-shadow: 0 0 30px #7ac8ff, 0 0 60px #7ac8ff;
+}
+
+/* ── Bottom control deck ── */
+.battle-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 22vh;
+    min-height: 140px;
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.7));
+    border-top: 4px solid #e8c547;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5vw;
+    z-index: 20;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8);
+}
+
+.battle-message-box {
+    flex: 1;
+    max-width: 50%;
+    background: #fefefe;
+    border: 4px solid #1a1a2e;
+    border-radius: 12px;
+    padding: 15px 25px;
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1), 0 5px 20px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+}
+
+.battle-message-box::after {
     content: '';
     position: absolute;
-    right: -14px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 0;
-    height: 0;
-    border-top: 10px solid transparent;
-    border-bottom: 10px solid transparent;
-    border-left: 14px solid #e8c547;
-    filter: drop-shadow(0 0 6px rgba(232, 197, 71, 0.6));
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+    animation: battleMessageShine 3s infinite;
 }
 
-@media (max-width: 768px) {
+@keyframes battleMessageShine {
+    0% {
+        left: -100%;
+    }
+
+    20% {
+        left: 200%;
+    }
+
+    100% {
+        left: 200%;
+    }
+}
+
+.battle-message {
+    color: #1a1a2e;
+    font-size: 1.3rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    position: relative;
+    z-index: 1;
+}
+
+/* ── RPS buttons ── */
+.battle-menu {
+    display: flex;
+    gap: 15px;
+}
+
+.battle-menu-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 110px;
+    height: 90px;
+    background: linear-gradient(180deg, #3a3a5c, #1a1a2e);
+    border: 3px solid #7ac8ff;
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 6px 0 #111, 0 10px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(122, 200, 255, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.battle-menu-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.battle-menu-btn:hover:not(:disabled) {
+    transform: translateY(-5px);
+    box-shadow: 0 11px 0 #111, 0 15px 30px rgba(0, 0, 0, 0.6), 0 0 40px rgba(122, 200, 255, 0.6);
+    border-color: #fff;
+}
+
+.battle-menu-btn:hover:not(:disabled)::before {
+    opacity: 1;
+}
+
+.battle-menu-btn:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #111, 0 5px 10px rgba(0, 0, 0, 0.5), 0 0 20px rgba(122, 200, 255, 0.8);
+}
+
+.battle-menu-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #111;
+}
+
+.battle-menu-icon {
+    font-size: 2.2rem;
+    line-height: 1;
+    margin-bottom: 5px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.battle-menu-label {
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: #7ac8ff;
+    text-shadow: 0 0 10px rgba(122, 200, 255, 0.5);
+}
+
+/* ── Floating damage numbers ── */
+.battle-damage-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.battle-damage-num {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-family: 'Courier New', monospace;
+    font-weight: 900;
+    font-size: 3.4rem;
+    color: #ffcc00;
+    letter-spacing: 2px;
+    text-shadow:
+        0 0 24px #ff4488,
+        0 0 48px #ffe27a,
+        4px 4px 0 #000,
+        -4px -4px 0 #000,
+        4px -4px 0 #000,
+        -4px 4px 0 #000;
+    animation: battleDamageFloat 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes battleDamageFloat {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.2) rotate(-22deg);
+    }
+
+    20% {
+        opacity: 1;
+        transform: translate(-50%, -85%) scale(1.7) rotate(8deg);
+    }
+
+    55% {
+        opacity: 1;
+        transform: translate(-50%, -150%) scale(1.15) rotate(-2deg);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -260%) scale(0.9) rotate(0deg);
+    }
+}
+
+/* ── Battle arena mobile ── */
+@media (max-width: 900px) {
+    .battle-vs-center {
+        font-size: 6rem;
+    }
+
+    .battle-sprite-container {
+        width: 180px;
+        height: 180px;
+    }
+
+    .battle-opponent .battle-sprite-container {
+        width: 140px;
+        height: 140px;
+    }
+
+    .battle-stats {
+        min-width: 180px;
+        padding: 6px 12px;
+    }
+
+    .battle-name {
+        font-size: 1rem;
+    }
+
+    .heart {
+        font-size: 1.4rem;
+    }
+
+    .battle-bottom {
+        flex-direction: column;
+        height: auto;
+        padding: 10px;
+    }
+
+    .battle-message-box {
+        max-width: 100%;
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 10px;
+    }
+
+    .battle-message {
+        font-size: 1rem;
+    }
+
+    .battle-menu {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .battle-menu-btn {
+        width: 30%;
+        height: 70px;
+    }
+
+    .battle-menu-icon {
+        font-size: 1.6rem;
+    }
+
+    .battle-menu-label {
+        font-size: 0.8rem;
+    }
+
     .battle-choice-bubble {
-        width: 64px;
-        height: 64px;
-        left: -78px;
-        font-size: 2.2rem;
-        border-width: 3px;
+        width: 60px;
+        height: 60px;
+        font-size: 1.8rem;
+        left: -60px;
     }
 
-    .battle-choice-bubble::after {
-        right: -10px;
-        border-top-width: 7px;
-        border-bottom-width: 7px;
-        border-left-width: 10px;
-    }
-}
-
-/* ── Player's own choice bubble — mirrors the opponent's, on the right ── */
-.battle-choice-bubble-player {
-    left: calc(100% + 16px);
-    right: auto;
-    top: 40%;
-}
-
-/* Tail now points LEFT (toward the player's own piece) */
-.battle-choice-bubble-player::after {
-    right: auto;
-    left: -14px;
-    border-left: none;
-    border-right: 14px solid #e8c547;
-}
-
-@media (max-width: 768px) {
     .battle-choice-bubble-player {
-        left: calc(100% + 10px);
+        right: -60px;
+    }
+}
+
+/* ── Reduce heavy motion on low-end / mobile ── */
+@media (pointer: coarse),
+(max-width: 900px),
+(prefers-reduced-motion: reduce) {
+
+    .battle-bg-layer,
+    .battle-speed-lines,
+    .battle-grid-floor {
+        animation: none;
     }
 
-    .battle-choice-bubble-player::after {
-        left: -10px;
-        border-right-width: 10px;
-        border-top-width: 7px;
-        border-bottom-width: 7px;
+    .battle-aura {
+        animation-duration: 3s;
     }
 }
 
 /* ============================================================
-   Force Landscape — rotate prompt overlay
+   FORCE LANDSCAPE OVERLAY
    ============================================================ */
 #rotateDeviceOverlay {
     display: none;
@@ -2537,38 +3304,30 @@ body {
     }
 }
 
-/* 只在「手機 + 直向」時才顯示 */
 body.force-landscape #rotateDeviceOverlay {
     display: flex;
 }
 
-/* 手機橫向時，讓全螢幕按鈕避開劉海 / 動態島 */
-@media (orientation: landscape) and (pointer: coarse) {
-    #globalFullscreenBtn {
-        top: max(10px, env(safe-area-inset-top));
-        right: max(10px, env(safe-area-inset-right));
-    }
-}
-
 /* ============================================================
-   Top Bar — universal close / reopen buttons
+   TOP BAR CLOSE BUTTON
    ============================================================ */
-
-/* ── 頂部選單右側的「✕ 關閉」按鈕 ── */
 .topbar-close-btn {
-    padding: 6px 12px;
-    font-size: 0.9rem;
+    padding: 8px 14px;
+    font-size: 1rem;
     line-height: 1;
     font-family: inherit;
     font-weight: 900;
-
+    min-width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 8px;
     border: 2px solid rgba(232, 197, 71, 0.6);
     background: rgba(22, 33, 62, 0.9);
     color: var(--gold);
-
     cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
     user-select: none;
@@ -2578,73 +3337,15 @@ body.force-landscape #rotateDeviceOverlay {
 .topbar-close-btn:hover {
     background: var(--gold);
     color: #1a1a2e;
+    border-color: var(--gold);
 }
 
 .topbar-close-btn:active {
     transform: scale(0.94);
 }
 
-/* ── 左上角浮動「☰ 開啟選單」按鈕 ── */
-#topBarReopenBtn {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    z-index: 300;
-
-    width: 44px;
-    height: 44px;
-    padding: 0;
-
-    border-radius: 10px;
-    border: 2px solid var(--gold);
-    background: rgba(22, 33, 62, 0.92);
-    color: var(--gold);
-
-    font-family: inherit;
-    font-size: 1.3rem;
-    font-weight: 900;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-
-    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
-    pointer-events: auto;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-#topBarReopenBtn:hover {
-    background: var(--gold);
-    color: #1a1a2e;
-    transform: scale(1.06);
-}
-
-#topBarReopenBtn:active {
-    transform: scale(0.93);
-}
-
-#topBarReopenBtn.hidden {
-    display: none;
-}
-
-/* 手機橫向時避開劉海 */
-@media (orientation: landscape) and (pointer: coarse) {
-    #topBarReopenBtn {
-        top: max(10px, env(safe-area-inset-top));
-        left: max(10px, env(safe-area-inset-left));
-    }
-}
-
 /* ============================================================
-   Settings panel
+   SETTINGS PANEL
    ============================================================ */
 .settings-panel {
     max-width: 460px;
@@ -2675,7 +3376,6 @@ body.force-landscape #rotateDeviceOverlay {
     line-height: 1.4;
 }
 
-/* ── Volume slider row ── */
 .slider-row {
     display: flex;
     align-items: center;
@@ -2722,7 +3422,6 @@ body.force-landscape #rotateDeviceOverlay {
     font-size: 0.9rem;
 }
 
-/* ── Toggle row (label + switch on same line) ── */
 .toggle-row {
     display: flex;
     justify-content: space-between;
@@ -2738,7 +3437,6 @@ body.force-landscape #rotateDeviceOverlay {
     flex: 1;
 }
 
-/* Smaller variant of the toggle switch for the settings panel */
 .toggle-switch.small-switch {
     width: 56px;
     height: 28px;
@@ -2755,7 +3453,6 @@ body.force-landscape #rotateDeviceOverlay {
     transform: translate(28px, -50%);
 }
 
-/* Quality buttons: full width rows so the labels fit nicely */
 .settings-block .mode-btn {
     flex: 1;
     min-width: 0;
@@ -2769,17 +3466,185 @@ body.force-landscape #rotateDeviceOverlay {
     color: #1a1a2e;
 }
 
-/* ============================================================
-   Settings overlay — must sit above top bar, action bar,
-   floating buttons, but below the domain-expansion modals.
-   ============================================================ */
 #settingsOverlay {
     z-index: 350;
-    /* above #topBar(5), #actionBar(100), #topBarReopenBtn(300) */
 }
 
-/* The in-game settings button should use the same visual weight
-   as the other top-bar controls — no special styling needed. */
 #inGameSettingsBtn {
     white-space: nowrap;
+}
+
+/* ============================================================
+   WIKI EFFECT LABEL (wiki.js uses this)
+   ============================================================ */
+.wiki-effect-label {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    padding: 5px 16px;
+    border-radius: 20px;
+    background: rgba(10, 15, 35, 0.85);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    pointer-events: none;
+    text-shadow: 0 0 10px currentColor;
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.wiki-canvas-wrap {
+    position: relative;
+}
+
+@keyframes wikiEffectLabelPop {
+    0% {
+        transform: translateX(-50%) translateY(-6px) scale(0.85);
+        opacity: 0;
+    }
+
+    60% {
+        transform: translateX(-50%) translateY(0) scale(1.06);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(-50%) translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* ============================================================
+   GAME OVER — floating "final board" status bar
+   ============================================================ */
+.game-over-status-bar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 101;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    padding: 10px 14px 10px 22px;
+    max-width: calc(100vw - 32px);
+
+    background: rgba(22, 33, 62, 0.95);
+    border: 2px solid var(--gold);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.65),
+        0 0 24px rgba(232, 197, 71, 0.18);
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    pointer-events: auto;
+    animation: gameOverBarSlideIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.game-over-status-bar.hidden {
+    display: none;
+}
+
+@keyframes gameOverBarSlideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 24px) scale(0.94);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
+}
+
+.game-over-status-text {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    min-width: 0;
+}
+
+.game-over-status-result {
+    font-weight: 900;
+    font-size: 1.15rem;
+    letter-spacing: 1.5px;
+    white-space: nowrap;
+}
+
+.game-over-status-result.win {
+    color: #2ecc71;
+    text-shadow: 0 0 12px rgba(46, 204, 113, 0.45);
+}
+
+.game-over-status-result.lose {
+    color: #e74c3c;
+    text-shadow: 0 0 12px rgba(231, 76, 60, 0.45);
+}
+
+.game-over-status-result.draw {
+    color: #f39c12;
+    text-shadow: 0 0 12px rgba(243, 156, 18, 0.45);
+}
+
+.game-over-status-reason {
+    font-size: 0.88rem;
+    opacity: 0.78;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.game-over-status-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.game-over-status-actions .btn {
+    margin: 0;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    min-width: 0;
+}
+
+.btn-sm {
+    padding: 8px 16px !important;
+    font-size: 0.85rem !important;
+}
+
+@media (max-width: 480px) {
+    .game-over-status-bar {
+        bottom: 16px;
+        padding: 10px 12px;
+        gap: 10px;
+        border-radius: 14px;
+        width: calc(100vw - 24px);
+    }
+
+    .game-over-status-result {
+        font-size: 1rem;
+    }
+
+    .game-over-status-reason {
+        font-size: 0.8rem;
+        white-space: normal;
+    }
+
+    .game-over-status-actions .btn {
+        padding: 8px 12px !important;
+        font-size: 0.8rem !important;
+    }
 }
