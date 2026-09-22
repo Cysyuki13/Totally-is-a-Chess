@@ -308,10 +308,11 @@ function setupForceLandscape() {
         screen.orientation.addEventListener('change', updateRotateOverlay);
     }
     window.addEventListener('orientationchange', () => {
-        // 有些瀏覽器 orientationchange 會早於 layout 完成，稍等一下
-        setTimeout(updateRotateOverlay, 60);
+        setTimeout(updateFullscreenBtnPosition, 120);
     });
-    window.addEventListener('resize', updateRotateOverlay);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateFullscreenBtnPosition);
+    }
 
     // ── 視窗重新取得焦點時（從背景切回）再檢查一次 ──
     document.addEventListener('visibilitychange', () => {
@@ -3613,6 +3614,8 @@ function onResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+
+    requestAnimationFrame(updateFullscreenBtnPosition);
 }
 
 // ============================================================
@@ -8092,19 +8095,24 @@ function updateTurnIndicator() {
 // ============================================================
 
 function showTopBar() {
+    if (!currentMode) return;
+
     document.getElementById('topBar')?.classList.remove('hidden');
     updateTopBarReopenBtn();
+    requestAnimationFrame(updateFullscreenBtnPosition);
 }
 
 function hideTopBar() {
     document.getElementById('topBar')?.classList.add('hidden');
     updateTopBarReopenBtn();
+    requestAnimationFrame(updateFullscreenBtnPosition);
 }
 
 /** 玩家按 ✕ */
 function closeTopBar() {
     document.getElementById('topBar')?.classList.add('hidden');
     updateTopBarReopenBtn();
+    requestAnimationFrame(updateFullscreenBtnPosition);
 }
 
 /** ☰ 只在「遊戲中 + 選單被關掉」時顯示 */
@@ -8129,12 +8137,25 @@ function updateFullscreenBtnPosition() {
     const barVisible = !!bar && !bar.classList.contains('hidden');
     const reopenVisible = !!reopen && !reopen.classList.contains('hidden');
 
-    // ★ Three states:
-    //   1. Top bar visible   → drop below the top bar
-    //   2. Top bar hidden + ☰ shown → drop below the ☰ button
-    //   3. Neither (menus)   → stay at the very top-left
+    // ── 舊的 class 保留（給任何還依賴它們的樣式用） ──
     btn.classList.toggle('below-topbar', barVisible);
     btn.classList.toggle('below-reopen', !barVisible && reopenVisible);
+
+    // ── 動態量測「應該從哪裡開始往下放」 ──
+    let topPx = 10;   // fallback：選單畫面時回到最上方
+
+    if (barVisible && bar) {
+        // 用 getBoundingClientRect 拿「top bar 底部」的真實 viewport 座標
+        const rect = bar.getBoundingClientRect();
+        // +8 是留給按鈕和 top bar 之間的間距
+        topPx = Math.round(rect.bottom + 8);
+    } else if (reopenVisible && reopen) {
+        const rect = reopen.getBoundingClientRect();
+        topPx = Math.round(rect.bottom + 8);
+    }
+
+    // ── 直接寫 inline style，優先權高於任何 media query ──
+    btn.style.top = topPx + 'px';
 }
 
 // ★ Alias — called from startAIGame / backToMenu / initNewGame.
@@ -8614,6 +8635,14 @@ function backToMenu() {
     myReady = false;
     opponentReady = false;
     gameStarted = false;
+
+    // ★ FIX: reset currentMode / gameOverFlag BEFORE touching the
+    //         top bar and the ☰ reopen button, otherwise
+    //         updateTopBarReopenBtn() sees the stale value
+    //         ('ai' / 'multiplayer') and shows ☰ on the main menu.
+    currentMode = null;
+    gameOverFlag = false;
+
     document.getElementById('mainMenu').classList.remove('hidden');
     document.getElementById('aiDifficultyMenu').classList.add('hidden');
     document.getElementById('multiplayerMenu').classList.add('hidden');
@@ -8624,7 +8653,6 @@ function backToMenu() {
     document.getElementById('restartConfirmOverlay').classList.add('hidden');
     document.getElementById('backToMenuConfirmOverlay').classList.add('hidden');
 
-    // ★ NEW — clean up the settings overlay and its origin flag
     document.getElementById('settingsOverlay').classList.add('hidden');
     _settingsOpenedFrom = null;
 
@@ -8637,8 +8665,13 @@ function backToMenu() {
     if (piecesGroup) scene.remove(piecesGroup);
     clearHighlights();
     clearGhostLine();
-    currentMode = null;
-    gameOverFlag = false;
+
+    // ★ FIX (belt & suspenders): re-sync both floating buttons on the next
+    //         frame, once all the classList changes above have settled.
+    requestAnimationFrame(() => {
+        updateTopBarReopenBtn();
+        updateFullscreenBtnPosition();
+    });
 }
 
 function backToMultiplayerMenu() {
@@ -12293,33 +12326,64 @@ function resetSettingsToDefaults() {
 }
 
 // ============================================================
-//  ★ Background music — plays a local MP3 file on loop
+//  ★ Background music — preloaded at page load, played on first gesture
 // ============================================================
 let bgmAudio = null;
+let bgmWantsToPlay = false;   // set true when a gesture or setting change
+// asks for playback, even if the file isn't
+// buffered yet
+
+/**
+ * Create the Audio element EARLY — during window.onload — so the browser
+ * starts downloading the MP3 immediately, in parallel with the rest of
+ * the page. Do NOT wait for the first user gesture.
+ *
+ * Call this once from window.onload, right after loadGameSettings().
+ */
+function preloadBGM() {
+    if (bgmAudio) return;
+    bgmAudio = new Audio('assets/sounds/Midnight_On_The_Board.mp3');
+    bgmAudio.loop = true;
+    bgmAudio.preload = 'auto';                    // allow full download
+    bgmAudio.volume = gameSettings.musicVolume / 100;
+
+    // Force the browser to start the request now
+    try { bgmAudio.load(); } catch (_) { }
+
+    // If a gesture asked for playback before the file was ready,
+    // auto-play the moment the browser has enough data.
+    bgmAudio.addEventListener('canplaythrough', () => {
+        if (bgmWantsToPlay && bgmAudio.paused) {
+            bgmAudio.play().catch(err => {
+                console.warn('🎵 BGM 播放被阻擋:', err.message);
+            });
+        }
+    });
+}
 
 function startMenuMusic() {
     if (!gameSettings.musicEnabled) return;
     if (gameSettings.musicVolume <= 0) return;
 
-    if (!bgmAudio) {
-        // ★ Make sure this path is correct
-        bgmAudio = new Audio('assets/sounds/Midnight_On_The_Board.mp3');
-        bgmAudio.loop = true;
-        bgmAudio.preload = 'auto';
-        bgmAudio.volume = gameSettings.musicVolume / 100;
-    }
+    if (!bgmAudio) preloadBGM();          // safety net if called too early
 
-    // 已經在播就不重複觸發
-    if (bgmAudio.paused) {
-        bgmAudio.play().catch(err => {
-            // 瀏覽器政策擋掉時（沒有使用者手勢）就會落到這裡
-            console.warn('🎵 BGM 播放被阻擋:', err.message);
-        });
+    bgmWantsToPlay = true;
+
+    // ★ If the file is already buffered (thanks to preloadBGM) → play now.
+    //   readyState ≥ 3 means HAVE_FUTURE_DATA (enough data to play through).
+    if (bgmAudio.readyState >= 3) {
+        if (bgmAudio.paused) {
+            bgmAudio.play().catch(err => {
+                console.warn('🎵 BGM 播放被阻擋:', err.message);
+            });
+        }
     }
+    // ★ Otherwise the 'canplaythrough' listener above will fire when ready.
 }
 
 function stopMenuMusic() {
     if (!bgmAudio) return;
+    bgmWantsToPlay = false;
     bgmAudio.pause();
     // 保留 currentTime，下次 resume 時從中斷處繼續
 }
@@ -12415,6 +12479,10 @@ window.onload = () => {
     // ★ NEW — load saved settings before anything else uses them
     loadGameSettings();
     applyGraphicsQuality(gameSettings.graphicsQuality);
+
+    // ★ NEW — start downloading the BGM immediately, so by the time
+    //         the user taps anything the file is already buffered.
+    preloadBGM();
 
     initQueenVoice();
     hideRemoteAim();
