@@ -1042,6 +1042,8 @@ body {
 
 /* ============================================================
    ANIMATED CHESS BACKGROUND (MENU)
+   — optimized for mobile: GPU-only transforms, vendor prefixes,
+     fewer layers on small screens, no expensive filter/blur.
    ============================================================ */
 .overlay {
     overflow: hidden;
@@ -1053,9 +1055,14 @@ body {
     overflow: hidden;
     pointer-events: none;
     z-index: 0;
+    /* Force a GPU compositing layer so children animate smoothly */
+    -webkit-transform: translateZ(0);
     transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
+/* ── Grid ─────────────────────────────────────────────────── */
 .bg-grid {
     position: absolute;
     inset: -25%;
@@ -1066,10 +1073,23 @@ body {
             transparent 75%, rgba(232, 197, 71, 0.06) 75%);
     background-size: 140px 140px;
     background-position: 0 0, 70px 70px;
+    -webkit-animation: bgGridDrift 80s linear infinite;
     animation: bgGridDrift 80s linear infinite;
     -webkit-mask-image: radial-gradient(ellipse at center, #000 20%, transparent 72%);
     mask-image: radial-gradient(ellipse at center, #000 20%, transparent 72%);
     opacity: 0.9;
+    /* Pre-declare so the browser promotes it immediately */
+    will-change: transform;
+}
+
+@-webkit-keyframes bgGridDrift {
+    from {
+        -webkit-transform: translate3d(0, 0, 0);
+    }
+
+    to {
+        -webkit-transform: translate3d(140px, 140px, 0);
+    }
 }
 
 @keyframes bgGridDrift {
@@ -1082,20 +1102,36 @@ body {
     }
 }
 
+/* ── Center glow ──────────────────────────────────────────── */
 .bg-glow {
     position: absolute;
     left: 50%;
     top: 50%;
     width: 140vmax;
     height: 140vmax;
-    transform: translate(-50%, -50%);
     background: radial-gradient(circle,
             rgba(232, 197, 71, 0.16) 0%,
             rgba(232, 197, 71, 0.06) 22%,
             rgba(232, 197, 71, 0.02) 42%,
             transparent 62%);
+    -webkit-animation: bgGlowPulse 9s ease-in-out infinite;
     animation: bgGlowPulse 9s ease-in-out infinite;
     pointer-events: none;
+    will-change: transform, opacity;
+}
+
+@-webkit-keyframes bgGlowPulse {
+
+    0%,
+    100% {
+        opacity: 0.75;
+        -webkit-transform: translate(-50%, -50%) scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        -webkit-transform: translate(-50%, -50%) scale(1.08);
+    }
 }
 
 @keyframes bgGlowPulse {
@@ -1112,6 +1148,7 @@ body {
     }
 }
 
+/* ── Floating chess pieces ────────────────────────────────── */
 .piece {
     position: absolute;
     top: 0;
@@ -1122,64 +1159,106 @@ body {
     -webkit-user-select: none;
     filter: blur(0.5px);
     text-shadow: 0 0 32px rgba(232, 197, 71, 0.25);
+    -webkit-animation: pieceFloat linear infinite;
     animation: pieceFloat linear infinite;
     will-change: transform, opacity;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    /* Start off-screen so nothing flashes before the animation begins */
+    -webkit-transform: translate3d(0, 110vh, 0);
+    transform: translate3d(0, 110vh, 0);
 }
 
 .piece.p1 {
     left: 4%;
     font-size: 130px;
+    -webkit-animation-duration: 44s;
     animation-duration: 44s;
+    -webkit-animation-delay: -2s;
     animation-delay: -2s;
 }
 
 .piece.p2 {
     left: 18%;
     font-size: 70px;
+    -webkit-animation-duration: 58s;
     animation-duration: 58s;
+    -webkit-animation-delay: -18s;
     animation-delay: -18s;
 }
 
 .piece.p3 {
     left: 32%;
     font-size: 100px;
+    -webkit-animation-duration: 50s;
     animation-duration: 50s;
+    -webkit-animation-delay: -30s;
     animation-delay: -30s;
 }
 
 .piece.p4 {
     left: 46%;
     font-size: 60px;
+    -webkit-animation-duration: 64s;
     animation-duration: 64s;
+    -webkit-animation-delay: -10s;
     animation-delay: -10s;
 }
 
 .piece.p5 {
     left: 60%;
     font-size: 110px;
+    -webkit-animation-duration: 46s;
     animation-duration: 46s;
+    -webkit-animation-delay: -40s;
     animation-delay: -40s;
 }
 
 .piece.p6 {
     left: 74%;
     font-size: 75px;
+    -webkit-animation-duration: 56s;
     animation-duration: 56s;
+    -webkit-animation-delay: -24s;
     animation-delay: -24s;
 }
 
 .piece.p7 {
     left: 86%;
     font-size: 95px;
+    -webkit-animation-duration: 52s;
     animation-duration: 52s;
+    -webkit-animation-delay: -6s;
     animation-delay: -6s;
 }
 
 .piece.p8 {
     left: 94%;
     font-size: 55px;
+    -webkit-animation-duration: 62s;
     animation-duration: 62s;
+    -webkit-animation-delay: -36s;
     animation-delay: -36s;
+}
+
+@-webkit-keyframes pieceFloat {
+    0% {
+        -webkit-transform: translate3d(0, 110vh, 0) rotate(0deg);
+        opacity: 0;
+    }
+
+    8% {
+        opacity: 1;
+    }
+
+    92% {
+        opacity: 1;
+    }
+
+    100% {
+        -webkit-transform: translate3d(30px, -25vh, 0) rotate(28deg);
+        opacity: 0;
+    }
 }
 
 @keyframes pieceFloat {
@@ -1207,45 +1286,69 @@ body {
     z-index: 1;
 }
 
+/* ── Accessibility: still respect reduced-motion ──────────── */
 @media (prefers-reduced-motion: reduce) {
 
     .bg-grid,
     .bg-glow,
     .piece {
+        -webkit-animation: none !important;
         animation: none !important;
     }
 
     .piece {
         opacity: 0.08;
+        -webkit-transform: translateY(50vh);
         transform: translateY(50vh);
     }
 }
 
+/* ============================================================
+   Mobile / touch devices
+   — KEEP the animations running, but lighter:
+     • fewer layers  (hide 4 of the 8 pieces)
+     • bigger tiles  (less overdraw in the grid)
+     • no blur/text-shadow  (biggest mobile GPU cost)
+     • no backdrop-filter   (perf + iOS Safari flicker bug)
+   ============================================================ */
 @media (pointer: coarse),
 (max-width: 900px) {
     .overlay {
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
         background: rgba(0, 0, 0, 0.88);
+        /* backdrop-filter intentionally omitted on mobile */
     }
 
-    .bg-glow {
-        width: 90vmax;
-        height: 90vmax;
-        animation: none;
-    }
-
+    /* Grid: same drift, just slower + coarser */
     .bg-grid {
-        animation: none;
+        background-size: 100px 100px;
+        background-position: 0 0, 50px 50px;
+        -webkit-animation-duration: 60s;
+        animation-duration: 60s;
+        opacity: 0.75;
     }
 
+    /* Glow: still pulses, just a bit slower and smaller */
+    .bg-glow {
+        width: 100vmax;
+        height: 100vmax;
+        -webkit-animation-duration: 12s;
+        animation-duration: 12s;
+    }
+
+    /* Pieces: keep floating, kill the expensive effects */
     .piece {
-        animation: none !important;
-        opacity: 0.06;
-        transform: translateY(40vh) rotate(0deg);
-        will-change: auto;
         filter: none;
         text-shadow: none;
+        opacity: 0.08;
+    }
+
+    /* Hide half the pieces on small screens.
+       Animations still run for the remaining 4. */
+    .piece.p2,
+    .piece.p4,
+    .piece.p6,
+    .piece.p8 {
+        display: none;
     }
 
     #gameCanvas canvas {
