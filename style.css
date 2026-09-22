@@ -3243,79 +3243,119 @@ body {
     }
 }
 
-/* ── Battle arena mobile ── */
+/* ── Battle arena mobile — COMPACT VERSION ── */
 @media (max-width: 900px) {
     .battle-vs-center {
         font-size: 6rem;
     }
 
+    /* 1. Make sprites smaller so they don't take up the whole screen */
     .battle-sprite-container {
-        width: 180px;
-        height: 180px;
+        width: 120px;
+        height: 120px;
     }
 
     .battle-opponent .battle-sprite-container {
-        width: 140px;
-        height: 140px;
+        width: 100px;
+        height: 100px;
     }
 
     .battle-stats {
-        min-width: 180px;
-        padding: 6px 12px;
+        min-width: 130px;
+        padding: 4px 8px;
+        margin-top: -10px;
+        /* Pull it closer to the sprite */
     }
 
     .battle-name {
-        font-size: 1rem;
+        font-size: 0.85rem;
+        margin-bottom: 2px;
     }
 
     .heart {
-        font-size: 1.4rem;
+        font-size: 1.1rem;
     }
 
+    /* 2. Position combatants away from the bottom bar */
+    .battle-player {
+        bottom: 75px;
+        /* Sits just above the new 60px bar + margin */
+        left: 5vw;
+    }
+
+    .battle-opponent {
+        top: 75px;
+        right: 5vw;
+    }
+
+    /* 3. Compact Bottom Control Deck */
     .battle-bottom {
-        flex-direction: column;
-        height: auto;
-        padding: 10px;
+        flex-direction: row;
+        /* Keep everything in ONE line */
+        height: 60px;
+        /* Shorter height */
+        min-height: 0;
+        /* IMPORTANT: Removes the default 140px minimum */
+        padding: 0 10px;
+        align-items: center;
     }
 
     .battle-message-box {
-        max-width: 100%;
-        width: 100%;
-        margin-bottom: 10px;
-        padding: 10px;
+        flex: 0 0 35%;
+        /* Take up 35% of width */
+        max-width: 35%;
+        width: auto;
+        margin-bottom: 0;
+        margin-right: 10px;
+        padding: 4px 8px;
     }
 
     .battle-message {
-        font-size: 1rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .battle-menu {
-        width: 100%;
+        flex: 1;
+        /* Take the remaining 65% */
+        width: auto;
         justify-content: center;
+        gap: 8px;
     }
 
     .battle-menu-btn {
-        width: 30%;
-        height: 70px;
+        flex: 1;
+        /* Distribute evenly */
+        width: auto;
+        height: 46px;
+        /* Shorter button */
+        flex-direction: row;
+        /* Icon and text side-by-side */
+        gap: 6px;
+        padding: 0 4px;
     }
 
     .battle-menu-icon {
-        font-size: 1.6rem;
+        font-size: 1.2rem;
+        margin-bottom: 0;
     }
 
     .battle-menu-label {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
     }
 
+    /* Adjust floating choice bubbles to match smaller sprites */
     .battle-choice-bubble {
-        width: 60px;
-        height: 60px;
-        font-size: 1.8rem;
-        left: -60px;
+        width: 50px;
+        height: 50px;
+        font-size: 1.5rem;
+        left: -50px;
     }
 
     .battle-choice-bubble-player {
-        right: -60px;
+        right: -50px;
     }
 }
 
