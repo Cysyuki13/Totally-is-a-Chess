@@ -33,7 +33,9 @@ body {
 }
 
 body {
-    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    /* ★ Suez One (Latin) → Chiron Hei HK (繁體中文) → system fallbacks */
+    font-family: 'Suez One', 'Chiron Hei HK',
+        'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
     background: var(--bg);
     color: var(--text);
     overflow: hidden;
@@ -1510,7 +1512,8 @@ body {
     pointer-events: none;
     background: linear-gradient(180deg, rgba(22, 33, 62, 0.96), rgba(10, 15, 35, 0.96));
     color: #e8c547;
-    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    font-family: 'Suez One', 'Chiron Hei HK',
+        'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
     font-weight: 800;
     font-size: 0.95rem;
     padding: 10px 18px;
@@ -2468,7 +2471,8 @@ body {
     z-index: 700;
     background: #05050a;
     overflow: hidden;
-    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    font-family: 'Suez One', 'Chiron Hei HK',
+        'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
     perspective: 1000px;
 }
 
@@ -2547,6 +2551,105 @@ body {
     transform-origin: bottom center;
     animation: battleGridScroll 2s linear infinite;
     z-index: 0;
+}
+
+/* ============================================================
+   BATTLE ARENA — DOMAIN COLOR THEMES
+   ------------------------------------------------------------
+   .domain-white  → radiant / warm gold arena (White King)
+   .domain-black  → abyssal / violet arena  (Black King)
+   ============================================================ */
+
+/* ───────────────────────── WHITE KING ───────────────────────── */
+#battleOverlay.domain-white .battle-bg-layer {
+    background:
+        radial-gradient(circle at 20% 50%, rgba(255, 200, 90, 0.55) 0%, transparent 44%),
+        radial-gradient(circle at 80% 50%, rgba(255, 240, 200, 0.35) 0%, transparent 44%),
+        radial-gradient(circle at 50% 50%, rgba(180, 130, 30, 0.35) 0%, transparent 68%);
+}
+
+#battleOverlay.domain-white .battle-grid-floor {
+    background-image:
+        linear-gradient(rgba(255, 200, 100, 0.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 200, 100, 0.16) 1px, transparent 1px);
+}
+
+#battleOverlay.domain-white .battle-speed-lines {
+    background: repeating-conic-gradient(from 0deg at 50% 50%,
+            transparent 0deg, transparent 5deg,
+            rgba(255, 220, 140, 0.07) 5.5deg,
+            transparent 6deg);
+}
+
+#battleOverlay.domain-white .battle-vignette {
+    background: radial-gradient(circle at 50% 50%,
+            transparent 30%,
+            rgba(40, 20, 0, 0.75) 80%,
+            #000 100%);
+}
+
+#battleOverlay.domain-white .battle-vs-center {
+    text-shadow: 0 0 40px #fff,
+        0 0 80px #ffd766,
+        0 0 120px #ffa040;
+}
+
+#battleOverlay.domain-white .battle-message-box {
+    border-color: #e8c547;
+    background: #fff8e0;
+}
+
+#battleOverlay.domain-white .battle-bottom {
+    border-top-color: #e8c547;
+    background: linear-gradient(0deg,
+            rgba(40, 24, 0, 0.95),
+            rgba(60, 40, 8, 0.75));
+}
+
+/* ───────────────────────── BLACK KING ───────────────────────── */
+#battleOverlay.domain-black .battle-bg-layer {
+    background:
+        radial-gradient(circle at 20% 50%, rgba(180, 40, 255, 0.5) 0%, transparent 44%),
+        radial-gradient(circle at 80% 50%, rgba(90, 20, 160, 0.55) 0%, transparent 44%),
+        radial-gradient(circle at 50% 50%, rgba(255, 40, 130, 0.28) 0%, transparent 68%);
+}
+
+#battleOverlay.domain-black .battle-grid-floor {
+    background-image:
+        linear-gradient(rgba(190, 90, 255, 0.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(190, 90, 255, 0.16) 1px, transparent 1px);
+}
+
+#battleOverlay.domain-black .battle-speed-lines {
+    background: repeating-conic-gradient(from 0deg at 50% 50%,
+            transparent 0deg, transparent 5deg,
+            rgba(200, 120, 255, 0.09) 5.5deg,
+            transparent 6deg);
+}
+
+#battleOverlay.domain-black .battle-vignette {
+    background: radial-gradient(circle at 50% 50%,
+            transparent 30%,
+            rgba(15, 0, 30, 0.8) 80%,
+            #000 100%);
+}
+
+#battleOverlay.domain-black .battle-vs-center {
+    text-shadow: 0 0 40px #fff,
+        0 0 80px #c44dff,
+        0 0 120px #ff2d80;
+}
+
+#battleOverlay.domain-black .battle-message-box {
+    border-color: #c44dff;
+    background: #f6e6ff;
+}
+
+#battleOverlay.domain-black .battle-bottom {
+    border-top-color: #c44dff;
+    background: linear-gradient(0deg,
+            rgba(15, 0, 30, 0.95),
+            rgba(40, 10, 70, 0.75));
 }
 
 @keyframes battleGridScroll {
@@ -3180,6 +3283,52 @@ body {
     box-shadow: 0 2px 0 #111;
 }
 
+/* Surrender button — red/danger themed, clearly separate from RPS */
+.battle-menu-btn-surrender {
+    background: linear-gradient(180deg, #4a2020, #1a0a0a);
+    border-color: #ff6666;
+    box-shadow: 0 6px 0 #111, 0 10px 20px rgba(0, 0, 0, 0.5),
+        0 0 20px rgba(255, 102, 102, 0.3);
+}
+
+.battle-menu-btn-surrender::before {
+    background: linear-gradient(180deg, rgba(255, 200, 200, 0.2), transparent);
+}
+
+.battle-menu-btn-surrender .battle-menu-icon {
+    font-size: 1.9rem;
+}
+
+.battle-menu-btn-surrender .battle-menu-label {
+    color: #ff9999;
+    text-shadow: 0 0 10px rgba(255, 102, 102, 0.55);
+}
+
+.battle-menu-btn-surrender:hover:not(:disabled) {
+    transform: translateY(-5px);
+    border-color: #ff9999;
+    box-shadow: 0 11px 0 #111, 0 15px 30px rgba(0, 0, 0, 0.6),
+        0 0 40px rgba(255, 102, 102, 0.6);
+}
+
+.battle-menu-btn-surrender:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #111, 0 5px 10px rgba(0, 0, 0, 0.5),
+        0 0 20px rgba(255, 102, 102, 0.8);
+}
+
+@media (max-width: 900px) {
+    .battle-menu-btn-surrender {
+        flex: 0 0 auto;
+        padding: 0 10px;
+        min-width: 56px;
+    }
+
+    .battle-menu-btn-surrender .battle-menu-icon {
+        font-size: 1.1rem;
+    }
+}
+
 .battle-menu-icon {
     font-size: 2.2rem;
     line-height: 1;
@@ -3355,7 +3504,8 @@ body {
     }
 
     .battle-choice-bubble-player {
-        right: -50px;
+        /* Push it further right so it sits clearly beside the piece */
+        right: -75px;
     }
 }
 
@@ -3389,7 +3539,8 @@ body {
     justify-content: center;
     gap: 14px;
     color: var(--gold);
-    font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+    font-family: 'Suez One', 'Chiron Hei HK',
+        'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
     text-align: center;
     padding: 24px;
     user-select: none;
@@ -3927,5 +4078,602 @@ body.force-landscape #rotateDeviceOverlay {
     /* ── 6. Game-over floating status bar ── */
     .game-over-status-bar {
         zoom: 0.85;
+    }
+}
+
+/* ============================================================
+   ★ GAME STATS / EXPORT MENU
+   ============================================================ */
+.export-panel {
+    max-width: 640px;
+    padding: 22px 26px;
+    text-align: left;
+}
+
+.export-name-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(232, 197, 71, 0.3);
+    border-radius: 12px;
+}
+
+.export-name-row label {
+    font-weight: 700;
+    color: var(--gold);
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.export-name-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 2px solid rgba(232, 197, 71, 0.4);
+    background: #0d1528;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.export-name-input:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 16px rgba(232, 197, 71, 0.35);
+}
+
+/* ── Export card (this is what gets rendered to image) ── */
+.export-card {
+    position: relative;
+    background: linear-gradient(160deg, #1c2848 0%, #121a35 55%, #080b1a 100%);
+    border: 2px solid rgba(232, 197, 71, 0.55);
+    border-radius: 16px;
+    padding: 20px 22px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6),
+        inset 0 0 60px rgba(232, 197, 71, 0.05);
+}
+
+.export-card::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border: 1px solid rgba(232, 197, 71, 0.18);
+    border-radius: 12px;
+    pointer-events: none;
+}
+
+.export-card-header {
+    position: relative;
+    text-align: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(232, 197, 71, 0.25);
+    margin-bottom: 14px;
+}
+
+.export-card-glyph {
+    position: absolute;
+    color: rgba(232, 197, 71, 0.10);
+    font-family: "Segoe UI Symbol", "Apple Symbols", serif;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+}
+
+.export-card-glyph.g1 {
+    top: -12px;
+    left: 4px;
+    font-size: 68px;
+}
+
+.export-card-glyph.g2 {
+    top: -18px;
+    right: 4px;
+    font-size: 54px;
+}
+
+.export-card-glyph.g3 {
+    bottom: -22px;
+    left: 12px;
+    font-size: 60px;
+}
+
+.export-card-glyph.g4 {
+    bottom: -18px;
+    right: 14px;
+    font-size: 50px;
+}
+
+.export-card-title {
+    position: relative;
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(232, 197, 71, 0.5);
+}
+
+.export-card-subtitle {
+    position: relative;
+    font-size: 0.65rem;
+    color: rgba(232, 197, 71, 0.55);
+    letter-spacing: 3px;
+    margin-top: 2px;
+}
+
+.export-player-plate {
+    text-align: center;
+    padding: 10px 0 14px;
+}
+
+.export-player-label {
+    font-size: 0.75rem;
+    color: rgba(232, 197, 71, 0.6);
+    letter-spacing: 2px;
+}
+
+.export-card-name {
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: #f0e6d3;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+.export-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.export-stat {
+    background: rgba(10, 15, 35, 0.75);
+    border: 1px solid rgba(232, 197, 71, 0.3);
+    border-radius: 10px;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+.export-stat-value {
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.5px;
+}
+
+.export-stat-label {
+    font-size: 0.65rem;
+    color: rgba(240, 230, 211, 0.55);
+    letter-spacing: 1px;
+    margin-top: 2px;
+}
+
+.export-moves-title {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--gold);
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+}
+
+.export-moves {
+    max-height: 260px;
+    overflow-y: auto;
+    background: rgba(10, 15, 35, 0.75);
+    border: 1px solid rgba(232, 197, 71, 0.3);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+}
+
+.export-move-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    line-height: 1.4;
+}
+
+.export-move-row:nth-child(odd) {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.export-move-row.white-side {
+    color: #f0e6d3;
+}
+
+.export-move-row.black-side {
+    color: #c44dff;
+}
+
+.export-move-num {
+    color: rgba(232, 197, 71, 0.6);
+    min-width: 26px;
+}
+
+.export-move-glyph {
+    font-size: 1.05rem;
+}
+
+.export-move-text {
+    flex: 1;
+    letter-spacing: 0.5px;
+}
+
+.export-move-coord {
+    opacity: 0.65;
+    font-size: 0.85em;
+}
+
+.export-move-cap {
+    color: #ff6b6b;
+    margin-left: 4px;
+}
+
+.export-move-empty {
+    text-align: center;
+    color: rgba(240, 230, 211, 0.45);
+    font-style: italic;
+    padding: 12px;
+}
+
+.export-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(232, 197, 71, 0.2);
+    font-size: 0.75rem;
+    color: rgba(240, 230, 211, 0.55);
+    font-family: 'Courier New', monospace;
+}
+
+.export-brand {
+    color: rgba(232, 197, 71, 0.85);
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+/* Compact on mobile */
+@media (pointer: coarse),
+(max-width: 900px) {
+    .export-panel {
+        zoom: 0.85;
+    }
+
+    .export-moves {
+        max-height: 200px;
+    }
+
+    .export-stats {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+
+    .export-stat-value {
+        font-size: 1rem;
+    }
+}
+
+/* ============================================================
+   ★ EXPORT — "include moves" toggle row
+   ============================================================ */
+.export-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(232, 197, 71, 0.3);
+    border-radius: 12px;
+}
+
+.export-toggle-label {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--gold);
+    letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   ★ MOVE-PREVIEW BOARD — floating hover preview
+   ============================================================ */
+.move-preview-board {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 260px;
+    height: 260px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border: 3px solid var(--gold);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #2a2a3a;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.92);
+    transition: opacity 0.14s ease, transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 2000;
+    box-shadow:
+        0 14px 40px rgba(0, 0, 0, 0.75),
+        0 0 24px rgba(232, 197, 71, 0.35);
+    will-change: opacity, transform, left, top;
+}
+
+.move-preview-board.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.move-preview-cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", serif;
+    line-height: 1;
+    font-size: 22px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.move-preview-cell.light {
+    background: #d4b896;
+}
+
+.move-preview-cell.dark {
+    background: #8b5e3c;
+}
+
+/* Highlight the moving piece's origin square (blue) */
+.move-preview-cell.from::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 3px #4a90ff;
+    background: rgba(74, 144, 255, 0.22);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Highlight the destination square (orange) */
+.move-preview-cell.to::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 3px #ffaa00;
+    background: rgba(255, 170, 0, 0.28);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* A move that lands on its own from-square should show both rings — nudge
+   the "to" ring slightly inward so it's still visible. */
+.move-preview-cell.from.to::before {
+    inset: 0;
+    box-shadow: inset 0 0 0 3px #ffaa00;
+    background: rgba(255, 170, 0, 0.28);
+}
+
+.preview-piece {
+    position: relative;
+    z-index: 2;
+    font-size: 26px;
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+}
+
+.preview-piece.white {
+    color: #f5f0e1;
+    text-shadow:
+        0 0 4px rgba(0, 0, 0, 0.9),
+        0 0 2px rgba(0, 0, 0, 1);
+}
+
+.preview-piece.black {
+    color: #1a1a1a;
+    text-shadow:
+        0 0 4px rgba(255, 255, 255, 0.35),
+        0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+/* Subtle row highlight while hovering */
+.export-move-row:hover {
+    background: rgba(232, 197, 71, 0.15) !important;
+    cursor: help;
+}
+
+/* Compact on mobile — slightly smaller preview board */
+@media (pointer: coarse),
+(max-width: 900px) {
+    .move-preview-board {
+        width: 200px;
+        height: 200px;
+    }
+
+    .preview-piece {
+        font-size: 20px;
+    }
+}
+
+/* ============================================================
+   ★ EXPORT CARD — AI difficulty line (under player name)
+   ============================================================ */
+.export-difficulty-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 5px 16px;
+    background: rgba(232, 197, 71, 0.10);
+    border: 1px solid rgba(232, 197, 71, 0.45);
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--gold);
+}
+
+.export-difficulty-label {
+    opacity: 0.72;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+}
+
+.export-difficulty-sep {
+    opacity: 0.45;
+}
+
+.export-difficulty-value {
+    color: #f0e6d3;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(232, 197, 71, 0.35);
+}
+
+/* Compact on mobile */
+@media (pointer: coarse),
+(max-width: 900px) {
+    .export-difficulty-line {
+        font-size: 0.75rem;
+        padding: 4px 12px;
+    }
+}
+
+/* ============================================================
+   GAME OVER MENU — Align buttons in a clean 2x2 grid
+   ============================================================ */
+.game-over-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    /* Two equal columns */
+    gap: 12px;
+    /* Even spacing between buttons */
+    max-width: 400px;
+    /* Prevents buttons from stretching too wide */
+    margin: 16px auto 0;
+    width: 100%;
+}
+
+.game-over-actions .btn {
+    margin: 0;
+    /* Removes the default 8px margin causing misalignment */
+    width: 100%;
+    /* Ensures both columns are exactly equal width */
+    padding: 14px 10px;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    /* Prevents text from breaking into two lines */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    /* Space between icon and text */
+}
+
+/* ============================================================
+   ★ MULTIPLAYER ROOM CODE DISPLAY
+   ============================================================ */
+.room-code-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px;
+    background: rgba(232, 197, 71, 0.15);
+    border: 2px solid rgba(232, 197, 71, 0.55);
+    border-radius: 20px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    margin: 0 4px;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 12px rgba(232, 197, 71, 0.2);
+}
+
+.room-code-display.hidden {
+    display: none;
+}
+
+.room-code-display .room-code-label {
+    font-size: 0.8rem;
+    opacity: 0.85;
+    color: #e8c547;
+    white-space: nowrap;
+}
+
+.room-code-display .room-code-value {
+    font-size: 1rem;
+    color: #e8c547;
+    letter-spacing: 3px;
+    text-shadow: 0 0 10px rgba(232, 197, 71, 0.55);
+}
+
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 600px) {
+    .room-code-display {
+        padding: 2px 8px;
+    }
+
+    .room-code-display .room-code-value {
+        font-size: 0.8rem;
+        letter-spacing: 2px;
+    }
+
+    .room-code-display .room-code-label {
+        font-size: 0.68rem;
+    }
+}
+
+/* ============================================================
+   ★ RECONNECT OVERLAY (dynamically created by main.js)
+   ============================================================ */
+#reconnectOverlay {
+    z-index: 900;
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+#reconnectOverlay .panel {
+    border-color: #7ac8ff;
+    box-shadow: 0 0 60px rgba(122, 200, 255, 0.35),
+        0 20px 60px rgba(0, 0, 0, 0.7);
+}
+
+#reconnectOverlay h2 {
+    color: #7ac8ff;
+    text-shadow: 0 0 20px rgba(122, 200, 255, 0.55);
+    animation: pulse 1.4s infinite;
+}
+
+#reconnectOverlay .reconnect-spinner {
+    display: inline-block;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 3px solid rgba(122, 200, 255, 0.25);
+    border-top-color: #7ac8ff;
+    animation: reconnectSpin 0.9s linear infinite;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+@keyframes reconnectSpin {
+    to {
+        transform: rotate(360deg);
     }
 }

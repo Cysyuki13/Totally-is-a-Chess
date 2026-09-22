@@ -166,6 +166,37 @@ const IS_IPHONE = /iPhone|iPod/.test(navigator.userAgent) ||
 const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true;
 
+// ============================================================
+//  ★ MULTIPLAYER RECONNECTION STATE
+// ============================================================
+//  A persistent session ID lets the host recognize a returning
+//  client (even across a page reload) so it can hand back the
+//  current board state instead of starting a fresh game.
+let clientSessionId;
+try {
+    clientSessionId = localStorage.getItem('chessSessionId');
+    if (!clientSessionId) {
+        clientSessionId = 'sess-' + Math.random().toString(36).slice(2, 10) +
+            Date.now().toString(36);
+        localStorage.setItem('chessSessionId', clientSessionId);
+    }
+} catch (_) {
+    clientSessionId = 'sess-' + Math.random().toString(36).slice(2, 10);
+}
+
+// Host-side: remembers which session was the active client
+let hostKnownClientSessionId = null;
+
+// Client-side: reconnection loop state
+let isReconnecting = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let reconnectGraceTimer = null;
+
+const MAX_RECONNECT_ATTEMPTS = 20;
+const RECONNECT_INTERVAL_MS = 2500;
+const RECONNECT_GRACE_MS = 60000;   // 1 min for host to wait for client
+
 let _mobileFsAttempted = false;
 
 /**
@@ -397,6 +428,271 @@ let joystickSetup = false;
 let lastFrameTime = 0;
 
 let cannonRangeGroup = null;
+
+// ============================================================
+//  ★ SELECTION AURA — per-piece animated glow around selected piece
+// ============================================================
+let selectionAuraGroup = null;
+let selectionAuraKind = null;
+let selectionAuraStart = 0;
+let selectionAuraParts = { rings: [], orbs: [], sparks: [] };
+let selectionAuraPiece = null;
+
+// Per-piece-type aura identity: unique color pair + unique animation style
+const AURA_STYLES = {
+    // Pawn  — fiery orange embers rising upward
+    pawn: { primary: 0xff6622, secondary: 0xffcc44, style: 'embers' },
+    // Rook  — cold steel-blue targeting rings (rotating)
+    rook: { primary: 0x7ac8ff, secondary: 0xffffff, style: 'rings' },
+    // Knight — hot gold streak-sparks (fast swirl)
+    knight: { primary: 0xffcc44, secondary: 0xff6622, style: 'streaks' },
+    // Bishop — violet orbiting orbs (mystic)
+    bishop: { primary: 0xc44dff, secondary: 0xff66cc, style: 'orbs' },
+    // Queen  — pink/green dual-layer orbs + soft glow disc
+    queen: { primary: 0xff69b4, secondary: 0x6dffb0, style: 'dualOrb' },
+    // King   — regal violet crown spikes
+    king: { primary: 0xd9a6ff, secondary: 0xffe27a, style: 'crown' },
+};
+
+function clearSelectionAura() {
+    if (selectionAuraGroup) {
+        scene.remove(selectionAuraGroup);
+        selectionAuraGroup.traverse(n => {
+            if (n.geometry) n.geometry.dispose();
+            if (n.material) {
+                if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                else n.material.dispose();
+            }
+        });
+    }
+    selectionAuraGroup = null;
+    selectionAuraKind = null;
+    selectionAuraParts = { rings: [], orbs: [], sparks: [] };
+    selectionAuraPiece = null;
+}
+
+function createSelectionAura(pieceObj, type) {
+    clearSelectionAura();
+    if (!pieceObj || !scene) return;
+
+    const style = AURA_STYLES[type] || AURA_STYLES.pawn;
+    const group = new THREE.Group();
+    group.position.set(pieceObj.position.x, 0, pieceObj.position.z);
+    scene.add(group);
+
+    const parts = { rings: [], orbs: [], sparks: [] };
+    const c1 = new THREE.Color(style.primary);
+    const c2 = new THREE.Color(style.secondary);
+
+    // ── Ground ring (shared by every type) ──
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: c1, transparent: true, opacity: 0.85,
+        side: THREE.DoubleSide, depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.38, 0.5, 48), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.06;
+    group.add(ring);
+    parts.rings.push({ mesh: ring, baseScale: 1, phase: 0, type: 'main' });
+
+    // ══════════════════════════════════════════════════════════
+    //  STYLE-SPECIFIC DECORATIONS
+    // ══════════════════════════════════════════════════════════
+
+    if (style.style === 'rings') {
+        // Rook: rotating hexagonal reticle + vertical torus
+        const ringMat2 = new THREE.MeshBasicMaterial({
+            color: c2, transparent: true, opacity: 0.7,
+            side: THREE.DoubleSide, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.6, 6), ringMat2);
+        ring2.rotation.x = -Math.PI / 2;
+        ring2.position.y = 0.062;
+        group.add(ring2);
+        parts.rings.push({ mesh: ring2, baseScale: 1, phase: Math.PI, rotSpeed: 0.9 });
+
+        const vRingMat = new THREE.MeshBasicMaterial({
+            color: c1, transparent: true, opacity: 0.55,
+            side: THREE.DoubleSide, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const vRing = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.012, 8, 40), vRingMat);
+        vRing.position.y = 0.4;
+        group.add(vRing);
+        parts.rings.push({ mesh: vRing, baseScale: 1, phase: 0, type: 'vertical', rotSpeed: 1.6 });
+    }
+
+    if (style.style === 'crown') {
+        // King: double ring + crown spikes that bob up/down
+        const ringMat2 = new THREE.MeshBasicMaterial({
+            color: c2, transparent: true, opacity: 0.7,
+            side: THREE.DoubleSide, depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        });
+        const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.6, 48), ringMat2);
+        ring2.rotation.x = -Math.PI / 2;
+        ring2.position.y = 0.062;
+        group.add(ring2);
+        parts.rings.push({ mesh: ring2, baseScale: 1, phase: Math.PI, rotSpeed: 0.5 });
+
+        const spikeCount = 8;
+        for (let i = 0; i < spikeCount; i++) {
+            const a = (i / spikeCount) * Math.PI * 2;
+            const spikeGeo = new THREE.ConeGeometry(0.045, 0.22, 6);
+            const spikeMat = new THREE.MeshBasicMaterial({
+                color: c2, transparent: true, opacity: 0.85,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const spike = new THREE.Mesh(spikeGeo, spikeMat);
+            spike.position.set(Math.cos(a) * 0.36, 0.14, Math.sin(a) * 0.36);
+            spike.userData = { phase: a, baseY: 0.14 };
+            group.add(spike);
+            parts.orbs.push(spike);
+        }
+    }
+
+    if (style.style === 'embers' || style.style === 'streaks') {
+        // Pawn / Knight: rising spiral sparks
+        const isStreak = style.style === 'streaks';
+        const count = isStreak ? 18 : 26;
+        for (let i = 0; i < count; i++) {
+            const sparkGeo = new THREE.SphereGeometry(0.024 + Math.random() * 0.022, 5, 5);
+            const sparkMat = new THREE.MeshBasicMaterial({
+                color: Math.random() < 0.5 ? c1 : c2,
+                transparent: true, opacity: 0.9,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const spark = new THREE.Mesh(sparkGeo, sparkMat);
+            const a = Math.random() * Math.PI * 2;
+            const r = 0.08 + Math.random() * 0.32;
+            spark.position.set(Math.cos(a) * r, 0.05 + Math.random() * 0.5, Math.sin(a) * r);
+            spark.userData = {
+                baseAngle: a,
+                baseRadius: r,
+                phase: Math.random() * Math.PI * 2,
+                riseSpeed: isStreak ? 1.3 + Math.random() * 1.5 : 0.7 + Math.random() * 0.9,
+                spinSpeed: isStreak ? 2.5 + Math.random() * 2.5 : 0.8 + Math.random() * 1.2,
+            };
+            group.add(spark);
+            parts.sparks.push(spark);
+        }
+    }
+
+    if (style.style === 'orbs' || style.style === 'dualOrb') {
+        // Bishop / Queen: orbiting orbs
+        const isDual = style.style === 'dualOrb';
+        const orbCount = isDual ? 6 : 4;
+        for (let i = 0; i < orbCount; i++) {
+            const orbGeo = new THREE.SphereGeometry(0.06 + Math.random() * 0.02, 8, 8);
+            const orbMat = new THREE.MeshBasicMaterial({
+                color: i % 2 === 0 ? c1 : c2,
+                transparent: true, opacity: 0.9,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const orb = new THREE.Mesh(orbGeo, orbMat);
+            orb.userData = {
+                baseAngle: (i / orbCount) * Math.PI * 2,
+                radius: isDual ? 0.42 : 0.38,
+                yOffset: 0.2 + Math.random() * 0.35,
+                // Queen alternates directions (dual tone)
+                speed: isDual ? (i % 2 === 0 ? 1.4 : -1.4) : 1.3,
+                bobPhase: Math.random() * Math.PI * 2,
+            };
+            group.add(orb);
+            parts.orbs.push(orb);
+        }
+        // Queen gets an extra soft ground-glow disc
+        if (isDual) {
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: c2, transparent: true, opacity: 0.35,
+                side: THREE.DoubleSide, depthWrite: false,
+                blending: THREE.AdditiveBlending,
+            });
+            const glowDisc = new THREE.Mesh(new THREE.CircleGeometry(0.55, 32), glowMat);
+            glowDisc.rotation.x = -Math.PI / 2;
+            glowDisc.position.y = 0.055;
+            group.add(glowDisc);
+            parts.rings.push({ mesh: glowDisc, baseScale: 1, phase: 0, type: 'glow' });
+        }
+    }
+
+    selectionAuraGroup = group;
+    selectionAuraKind = style.style;
+    selectionAuraStart = clock ? clock.getElapsedTime() : performance.now() / 1000;
+    selectionAuraParts = parts;
+    selectionAuraPiece = pieceObj;
+}
+
+function updateSelectionAura() {
+    if (!selectionAuraGroup || !selectionAuraPiece) return;
+
+    // Safety: if the piece was destroyed (re-created by syncPiecesAfterMove),
+    // tear the aura down rather than let it hang in the wrong place.
+    if (!selectionAuraPiece.parent || selectionAuraPiece.parent !== piecesGroup) {
+        clearSelectionAura();
+        return;
+    }
+
+    // Follow the piece (moves during animation)
+    selectionAuraGroup.position.x = selectionAuraPiece.position.x;
+    selectionAuraGroup.position.z = selectionAuraPiece.position.z;
+
+    const now = clock ? clock.getElapsedTime() : performance.now() / 1000;
+    const t = now - selectionAuraStart;
+
+    const boost = 1.6;
+
+    // ── Rings ──
+    for (const r of selectionAuraParts.rings) {
+        if (r.type === 'vertical') {
+            r.mesh.rotation.y = t * (r.rotSpeed || 1.5);
+            r.mesh.rotation.x = Math.sin(t * 0.8) * 0.4;
+        } else if (r.type === 'glow') {
+            const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+            r.mesh.material.opacity = (0.25 + 0.25 * pulse) * boost;
+            r.mesh.scale.setScalar(0.9 + 0.2 * pulse);
+        } else {
+            if (r.rotSpeed !== undefined) r.mesh.rotation.z = t * r.rotSpeed;
+            const pulse = 0.5 + 0.5 * Math.sin(t * 4 + r.phase);
+            r.mesh.material.opacity = (0.55 + 0.35 * pulse) * boost;
+            const s = 1 + 0.08 * pulse;
+            r.mesh.scale.set(s, s, 1);
+        }
+    }
+
+    // ── Rising sparks ──
+    for (const s of selectionAuraParts.sparks) {
+        const rise = (t * s.userData.riseSpeed + s.userData.phase * 0.4) % 1;
+        const y = 0.05 + rise * 0.95;
+        const angle = s.userData.baseAngle + t * s.userData.spinSpeed;
+        const r = s.userData.baseRadius * (1 + rise * 0.45);
+        s.position.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
+        const fade = Math.sin(Math.PI * rise);
+        s.material.opacity = fade * 0.95 * boost;
+        s.scale.setScalar(0.7 + 0.6 * fade);
+    }
+
+    // ── Orbs (orbiting) & Crown spikes (bobbing) ──
+    for (const o of selectionAuraParts.orbs) {
+        if (o.userData.radius !== undefined) {
+            // Orbiting orb
+            const angle = o.userData.baseAngle + t * o.userData.speed;
+            const r = o.userData.radius;
+            const y = o.userData.yOffset + Math.sin(t * 2 + o.userData.bobPhase) * 0.08;
+            o.position.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
+            const pulse = 0.7 + 0.3 * Math.sin(t * 5 + o.userData.bobPhase);
+            o.material.opacity = pulse * 0.9 * boost;
+            o.scale.setScalar(0.9 + 0.2 * pulse);
+        } else if (o.userData.baseY !== undefined) {
+            // Crown spike — subtle bob + pulse
+            o.position.y = o.userData.baseY + Math.sin(t * 3 + o.userData.phase * 2) * 0.04;
+            const pulse = 0.6 + 0.4 * Math.sin(t * 4 + o.userData.phase * 3);
+            o.material.opacity = pulse * 0.85 * boost;
+        }
+    }
+}
 
 // ★ 主教地板特效 registry — 讓殘留特效可被新動作強制提早淡出
 let activeBishopLeapEffects = [];
@@ -1162,6 +1458,17 @@ function isAbilityEnabledForColor(color) {
 //   false = no skills      ("normal")
 let aiGameModeEnabled = true;
 
+// ★ AI mode player color choice — which colour the human plays in singleplayer.
+//   'white' = human moves first, 'black' = human moves second (AI moves first).
+let aiPlayerColorChoice = 'white';
+
+function setAIPlayerColor(color) {
+    aiPlayerColorChoice = (color === 'black') ? 'black' : 'white';
+    document.querySelectorAll('#aiDifficultyMenu .ai-color-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.color === aiPlayerColorChoice);
+    });
+}
+
 function onAIModeToggleChange() {
     const cb = document.getElementById('aiGameModeToggle');
     aiGameModeEnabled = !!cb.checked;
@@ -1309,8 +1616,9 @@ function updateTimerDisplay() {
         bEl.classList.toggle('infinity', timerState.isInfinite || val === -1);
     }
     if (wItem && bItem) {
-        wItem.classList.toggle('active', timerState.currentPlayer === 'white' && timerState.active);
-        bItem.classList.toggle('active', timerState.currentPlayer === 'black' && timerState.active);
+        const showActive = timerState.active && !timerState.paused;
+        wItem.classList.toggle('active', timerState.currentPlayer === 'white' && showActive);
+        bItem.classList.toggle('active', timerState.currentPlayer === 'black' && showActive);
     }
     if (wEl && !timerState.isInfinite) wEl.classList.toggle('warning', timerState.white < 30);
     if (bEl && !timerState.isInfinite) bEl.classList.toggle('warning', timerState.black < 30);
@@ -1338,11 +1646,45 @@ function startTimer() {
     }, 1000);
 }
 
-function pauseTimer() { timerState.paused = true; }
-function resumeTimer() { timerState.paused = false; }
+function pauseTimer() {
+    timerState.paused = true;
+    // ★ Truly stop the interval so no time is consumed while paused.
+    //   Setting the flag alone leaves the interval alive (it fires
+    //   once per second and immediately returns), which means a fast
+    //   reconnect or an in-flight animation could un-pause it and
+    //   silently drain the clock.
+    if (timerState.interval) {
+        clearInterval(timerState.interval);
+        timerState.interval = null;
+    }
+    updateTimerDisplay();
+}
+
+function resumeTimer() {
+    timerState.paused = false;
+    // ★ Recreate the interval if pauseTimer() killed it.
+    //   startTimer() re-checks all the guards (infinite mode,
+    //   timePerPlayer, currentMode) internally, so it's safe to call.
+    if (!timerState.interval &&
+        !timerState.isInfinite &&
+        roomSettings.timePerPlayer > 0 &&
+        currentMode === 'multiplayer' &&
+        !gameOverFlag) {
+        startTimer();
+    }
+    updateTimerDisplay();
+}
 
 function switchTimer(nextPlayer) {
     timerState.currentPlayer = nextPlayer;
+
+    // ★ Don't touch the pause state if we're mid-reconnect. The
+    //   state_sync from the host will resume us at the right moment.
+    if (isReconnecting) {
+        updateTimerDisplay();
+        return;
+    }
+
     timerState.active = true;
     timerState.paused = false;
     updateTimerDisplay();
@@ -4001,6 +4343,8 @@ function createCooldownSprite(cooldown, colorHex = 0x7ac8ff) {
 }
 
 function createPieces3D() {
+    clearSelectionAura();
+
     if (piecesGroup) scene.remove(piecesGroup);
     piecesGroup = new THREE.Group();
     pieceObjects = {};
@@ -4752,6 +5096,7 @@ function cancelKnightAbilityMode() {
     document.getElementById('aimHint').classList.remove('visible');
 
     actionMode = 'move';
+    clearSelectionAura();
     if (selectedPiece) {
         const hasAbility = pieceHasAbility(selectedPiece.piece);
         if (hasAbility) {
@@ -4909,15 +5254,39 @@ function animateVictimPush(fromR, fromC, toR, toC, onComplete) {
     if (!obj) { onComplete(); return; }
     const startPos = obj.position.clone();
     const targetPos = get3DPosition(toR, toC, 0);
-    const duration = 0.18;
+    const duration = 0.25;                 // slightly longer for the trail
     const startTime = clock.getElapsedTime();
+    let lastSparkTime = 0;
+
+    // Save the original orientation so the tumble is purely cosmetic
+    const baseRotY = obj.rotation.y;
+    const baseRotZ = obj.rotation.z;
+
     const animate = () => {
         const now = clock.getElapsedTime();
         const t = Math.min((now - startTime) / duration, 1);
         const ease = x => x * (2 - x);
         obj.position.lerpVectors(startPos, targetPos, ease(t));
+
+        // ★ Arc + tumble
+        obj.position.y = Math.sin(t * Math.PI) * 0.25;
+        obj.rotation.y = baseRotY + t * Math.PI * 1.2;
+        obj.rotation.z = baseRotZ + Math.sin(t * Math.PI * 2) * 0.30;
+
+        // ★ Hot spark trail behind the victim
+        if (now - lastSparkTime > 0.028) {
+            lastSparkTime = now;
+            spawnKnockbackSpark(obj.position);
+        }
+
         if (t < 1) requestAnimationFrame(animate);
-        else { obj.position.copy(targetPos); onComplete(); }
+        else {
+            obj.position.copy(targetPos);
+            obj.position.y = 0;
+            obj.rotation.y = baseRotY;
+            obj.rotation.z = baseRotZ;
+            onComplete();
+        }
     };
     animate();
 }
@@ -4929,15 +5298,35 @@ function animateVictimBump(victimR, victimC, dirR, dirC, onComplete) {
     const peakPos = startPos.clone();
     peakPos.x += dirC * 0.42;
     peakPos.z += -dirR * 0.42;
-    const duration = 0.18;
+    const duration = 0.22;
     const startTime = clock.getElapsedTime();
+
+    const baseRotZ = obj.rotation.z;
+    const rotDir = (dirR !== 0 ? 1 : -1);
+    let sparkCooldown = 0;
+
     const animate = () => {
         const now = clock.getElapsedTime();
         const t = Math.min((now - startTime) / duration, 1);
         const phase = t < 0.5 ? t * 2 : (1 - t) * 2;
         obj.position.lerpVectors(startPos, peakPos, phase);
+
+        // ★ Slight recoil tumble
+        obj.rotation.z = baseRotZ + Math.sin(t * Math.PI) * 0.32 * rotDir;
+
+        // ★ Red-tinted sparks fly off the bump
+        sparkCooldown -= 0.016;
+        if (t < 0.55 && sparkCooldown <= 0) {
+            sparkCooldown = 0.035;
+            spawnKnockbackSpark(obj.position, 0xff5544);
+        }
+
         if (t < 1) requestAnimationFrame(animate);
-        else { obj.position.copy(startPos); onComplete(); }
+        else {
+            obj.position.copy(startPos);
+            obj.rotation.z = baseRotZ;
+            onComplete();
+        }
     };
     animate();
 }
@@ -5152,6 +5541,286 @@ function spawnKnightDashWind(fromR, fromC, landingR, landingC, duration) {
 }
 
 // ============================================================
+//  ★ KNIGHT CHARGE EFFECT — rune ring + inward spiral particles
+//    Plays during the wind-up before the dash. Leaves the piece
+//    in place, purely a visual "gathering energy" beat.
+// ============================================================
+function spawnKnightChargeEffect(pieceObj, duration) {
+    if (!pieceObj || !scene) return;
+
+    const anchor = pieceObj.position.clone();
+    const group = new THREE.Group();
+    group.position.set(anchor.x, 0, anchor.z);
+    scene.add(group);
+
+    // ── Outer rune ring (icy blue) ──
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xb8ecff, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.38, 44), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.04;
+    group.add(ring);
+
+    // ── Inner ring (white) ──
+    const ring2Mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.48, 44), ring2Mat);
+    ring2.rotation.x = -Math.PI / 2;
+    ring2.position.y = 0.045;
+    group.add(ring2);
+
+    // ── Spiral charge particles (converge inward) ──
+    const particles = [];
+    for (let i = 0; i < 36; i++) {
+        const pg = new THREE.SphereGeometry(0.022 + Math.random() * 0.022, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? 0xb8ecff : 0xffffff,
+            transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.85 + Math.random() * 0.7;
+        const y0 = 0.20 + Math.random() * 1.0;
+        p.position.set(Math.cos(a) * r, y0, Math.sin(a) * r);
+        p.userData = {
+            startAngle: a,
+            startRadius: r,
+            startY: y0,
+            spinSpeed: 4 + Math.random() * 5,
+            delay: Math.random() * (duration * 0.4),
+        };
+        group.add(p);
+        particles.push(p);
+    }
+
+    const startTime = clock.getElapsedTime();
+    const FADE_TAIL = 0.12;
+    const totalDuration = duration + FADE_TAIL;
+
+    const animate = () => {
+        const t = clock.getElapsedTime() - startTime;
+        if (t >= totalDuration) {
+            scene.remove(group);
+            group.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) n.material.dispose();
+            });
+            return;
+        }
+
+        const k = Math.min(1, t / duration);
+        const fadeOut = Math.max(0, 1 - Math.max(0, t - duration) / FADE_TAIL);
+
+        // Rings: fade in, gentle pulse
+        ringMat.opacity = Math.min(1, k * 2.2) * 0.85 * (0.6 + 0.4 * Math.sin(t * 14)) * fadeOut;
+        ring2Mat.opacity = Math.min(1, k * 2.2) * 0.65 * (0.6 + 0.4 * Math.sin(t * 10 + 1)) * fadeOut;
+        ring.scale.setScalar(1 + Math.sin(t * 10) * 0.12);
+        ring2.scale.setScalar(1 + Math.sin(t * 8 + 1) * 0.15);
+
+        // Particles spiral inward
+        for (const p of particles) {
+            const pt = t - p.userData.delay;
+            if (pt < 0) { p.material.opacity = 0; continue; }
+            const lk = Math.min(1, pt / (duration * 0.85));
+            const a = p.userData.startAngle + pt * p.userData.spinSpeed;
+            const r = p.userData.startRadius * (1 - lk) * (1 - lk * 0.3);
+            const y = p.userData.startY * (1 - lk) + 0.16 * lk;
+            p.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+            p.material.opacity = (1 - lk) * 0.95 * fadeOut;
+            p.scale.setScalar(1 - lk * 0.5);
+        }
+
+        requestAnimationFrame(animate);
+    };
+    animate();
+}
+
+// ============================================================
+//  ★ KNIGHT IMPACT EFFECT — landing shockwave + dust + flash
+//    Fires at the moment the knight touches down. Themed in
+//    ice-blue (matching the knight identity) with warm dust.
+// ============================================================
+function spawnKnightImpactEffect(row, col, color) {
+    if (!scene) return;
+
+    const center = get3DPosition(row, col, 0);
+    const group = new THREE.Group();
+    group.position.set(center.x, 0, center.z);
+    scene.add(group);
+
+    // ── 3 expanding shockwave rings ──
+    const rings = [];
+    const ringColors = [0xffffff, 0xb8ecff, 0xe8c547];
+    for (let i = 0; i < 3; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+            color: ringColors[i],
+            transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const r = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.34, 48), mat);
+        r.rotation.x = -Math.PI / 2;
+        r.position.y = 0.05 + i * 0.006;
+        group.add(r);
+        rings.push({ mesh: r, mat, delay: i * 0.06 });
+    }
+
+    // ── White flash sphere at the landing ──
+    const flashMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.95,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 14), flashMat);
+    flash.position.y = 0.35;
+    group.add(flash);
+
+    // ── Warm dust burst (ground kick-up) ──
+    const dust = [];
+    for (let i = 0; i < 24; i++) {
+        const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.030, 4, 4);
+        const pm = new THREE.MeshBasicMaterial({
+            color: 0xd4b896, transparent: true, opacity: 1,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        p.position.y = 0.05;
+        const a = Math.random() * Math.PI * 2;
+        const speed = 1.0 + Math.random() * 1.8;
+        p.userData = {
+            vel: new THREE.Vector3(
+                Math.cos(a) * speed,
+                0.7 + Math.random() * 1.3,
+                Math.sin(a) * speed
+            ),
+            life: 0.7 + Math.random() * 0.4,
+            maxLife: 0,
+        };
+        p.userData.maxLife = p.userData.life;
+        group.add(p);
+        dust.push(p);
+    }
+
+    // ── Ice-blue knight sparks (identity colour) ──
+    for (let i = 0; i < 18; i++) {
+        const pg = new THREE.SphereGeometry(0.024 + Math.random() * 0.022, 4, 4);
+        const pm = new THREE.MeshBasicMaterial({
+            color: 0xb8ecff, transparent: true, opacity: 1,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        p.position.y = 0.10;
+        const a = Math.random() * Math.PI * 2;
+        const speed = 1.5 + Math.random() * 2.0;
+        p.userData = {
+            vel: new THREE.Vector3(
+                Math.cos(a) * speed,
+                1.0 + Math.random() * 1.5,
+                Math.sin(a) * speed
+            ),
+            life: 0.5 + Math.random() * 0.3,
+            maxLife: 0,
+        };
+        p.userData.maxLife = p.userData.life;
+        group.add(p);
+        dust.push(p);
+    }
+
+    const startTime = clock.getElapsedTime();
+    const DURATION = 0.9;
+
+    const animate = () => {
+        const t = clock.getElapsedTime() - startTime;
+        if (t >= DURATION) {
+            scene.remove(group);
+            group.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) n.material.dispose();
+            });
+            return;
+        }
+
+        // Shockwave rings expand outward
+        for (const r of rings) {
+            const st = Math.max(0, (t - r.delay) / 0.5);
+            if (st >= 1) { r.mat.opacity = 0; continue; }
+            r.mat.opacity = 0.9 * (1 - st);
+            const s = 1 + st * 4.5;
+            r.mesh.scale.set(s, s, 1);
+        }
+
+        // Flash pop
+        flashMat.opacity = Math.max(0, 0.95 - t * 3.0);
+        flash.scale.setScalar(1 + t * 3.5);
+
+        // Dust + sparks
+        for (const d of dust) {
+            d.userData.life -= 0.016;
+            if (d.userData.life <= 0) { d.material.opacity = 0; continue; }
+            d.position.addScaledVector(d.userData.vel, 0.016);
+            d.userData.vel.y -= 0.10;
+            d.userData.vel.multiplyScalar(0.94);
+            d.material.opacity = Math.max(0, d.userData.life / d.userData.maxLife) * 0.9;
+        }
+
+        requestAnimationFrame(animate);
+    };
+    animate();
+}
+
+// ============================================================
+//  ★ KNOCKBACK SPARK — tiny reusable particle used by the
+//    victim push / bump trail. Self-manages its lifetime.
+// ============================================================
+function spawnKnockbackSpark(worldPos, color) {
+    if (!scene) return;
+
+    const geo = new THREE.SphereGeometry(0.026 + Math.random() * 0.024, 5, 5);
+    const mat = new THREE.MeshBasicMaterial({
+        color: color || (Math.random() < 0.5 ? 0xff6644 : 0xffcc44),
+        transparent: true, opacity: 0.95,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(worldPos);
+    p.position.x += (Math.random() - 0.5) * 0.14;
+    p.position.y += 0.10 + Math.random() * 0.15;
+    p.position.z += (Math.random() - 0.5) * 0.14;
+    scene.add(p);
+
+    const startTime = clock.getElapsedTime();
+    const LIFE = 0.5;
+    const driftVel = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.6,
+        0.4 + Math.random() * 0.5,
+        (Math.random() - 0.5) * 0.6
+    );
+
+    const animate = () => {
+        const t = clock.getElapsedTime() - startTime;
+        if (t >= LIFE) {
+            scene.remove(p);
+            p.geometry.dispose();
+            p.material.dispose();
+            return;
+        }
+        p.position.addScaledVector(driftVel, 0.016);
+        driftVel.y -= 0.05;
+        const lt = t / LIFE;
+        p.material.opacity = (1 - lt) * 0.95;
+        p.scale.setScalar(1 - lt * 0.4);
+        requestAnimationFrame(animate);
+    };
+    animate();
+}
+
+// ============================================================
 //  ★ Knight Ghost Squad — 4 spectral mini-knights in an ARROW
 //    formation pointing along the dash direction.
 //    Main knight = tip of the arrow; ghosts = trailing wings
@@ -5167,17 +5836,13 @@ function spawnKnightGhostSquad(pieceObj, color, dashDuration, fromPos, toPos) {
     travel.y = 0;
     if (travel.lengthSq() < 1e-6) travel.set(0, 0, 1);   // safety
     travel.normalize();
-    // Rotate travel -90° around Y → right-hand perpendicular
     const right = new THREE.Vector3(-travel.z, 0, travel.x);
 
     // ── Arrow formation: 2 wings per side, trailing behind the knight ──
-    //    Order matters for the staggered fade-in:
-    //      [0] inner-left, [1] inner-right,
-    //      [2] outer-left, [3] outer-right
-    const INNER_BACK = 0.32;   // how far behind the tip the inner pair sits
-    const INNER_SIDE = 0.34;   // lateral spread of the inner pair
-    const OUTER_BACK = 0.72;   // further back
-    const OUTER_SIDE = 0.68;   // wider spread
+    const INNER_BACK = 0.32;
+    const INNER_SIDE = 0.34;
+    const OUTER_BACK = 0.72;
+    const OUTER_SIDE = 0.68;
 
     const offsets = [
         travel.clone().multiplyScalar(-INNER_BACK).add(right.clone().multiplyScalar(-INNER_SIDE)),
@@ -5186,35 +5851,63 @@ function spawnKnightGhostSquad(pieceObj, color, dashDuration, fromPos, toPos) {
         travel.clone().multiplyScalar(-OUTER_BACK).add(right.clone().multiplyScalar(OUTER_SIDE)),
     ];
 
-    // All ghosts face the travel direction (local +Z → travel)
     const facingYaw = Math.atan2(travel.x, travel.z);
 
+    // ══════════════════════════════════════════════════════════
+    //  ★ COLOR-AWARE GHOST APPEARANCE
+    //    White knight → bright ethereal ice-blue wisp (additive)
+    //    Black knight → dark abyssal violet wraith  (normal blend)
+    // ══════════════════════════════════════════════════════════
+    const isWhiteKnight = (color === 'white');
+
+    // Base tint colour that the piece's own colours get lerped toward
+    const ghostTint = isWhiteKnight
+        ? new THREE.Color(0x9fe8ff)      // ethereal ice-blue
+        : new THREE.Color(0x7a1fd9);     // abyssal violet (dark)
+
+    const tintStrength = isWhiteKnight ? 0.65 : 0.55;
+
+    // Opacity + blend mode:
+    //   • white  → additive glow, lower opacity (still very bright)
+    //   • black  → normal blend so the dark colour is actually visible
+    //              (additive blending would make a black ghost invisible)
+    const ghostOpacity = isWhiteKnight ? 0.55 : 0.80;
+    const ghostBlend = isWhiteKnight
+        ? THREE.AdditiveBlending
+        : THREE.NormalBlending;
+
+    // Inner emissive glow — bright cyan for white, deep violet for black
+    const ghostEmissive = isWhiteKnight
+        ? new THREE.Color(0x9fe8ff)
+        : new THREE.Color(0x3a0060);
+
+    const emissiveIntensity = isWhiteKnight ? 0.6 : 0.5;
+
     const ghosts = [];
-    const ghostTint = new THREE.Color(0x9fe8ff);   // spectral cyan
 
     for (let i = 0; i < 4; i++) {
         const ghost = createPieceModel(
             'knight', color, 100, 100, PIECE_PARAMS.knight || {}
         );
 
-        // Strip health bar sprite (defensive; full-HP should have none)
+        // Strip health-bar sprite (defensive; full-HP should have none)
         if (ghost.userData.hpSprite) {
             ghost.remove(ghost.userData.hpSprite);
             ghost.userData.hpSprite = null;
         }
 
-        // Ghostify → transparent, additive, cyan-tinted, no shadows
+        // Ghostify → transparent, tinted, no shadows
         ghost.traverse(n => {
             if (!n.isMesh || !n.material || !n.material.color) return;
             n.material = n.material.clone();
             n.material.transparent = true;
-            n.material.opacity = 0.55;
+            n.material.opacity = ghostOpacity;
             n.material.depthWrite = false;
-            n.material.blending = THREE.AdditiveBlending;
-            n.material.color.lerp(ghostTint, 0.65);
+            n.material.blending = ghostBlend;
+            n.material.color.lerp(ghostTint, tintStrength);
             if (n.material.emissive) {
-                n.material.emissive = ghostTint.clone();
-                n.material.emissiveIntensity = 0.6;
+                n.material.emissive = ghostEmissive.clone();
+                n.material.emissiveIntensity = emissiveIntensity;
             }
             n.castShadow = false;
             n.receiveShadow = false;
@@ -5225,10 +5918,8 @@ function spawnKnightGhostSquad(pieceObj, color, dashDuration, fromPos, toPos) {
         ghost.renderOrder = 5;
 
         ghost.userData.offset = offsets[i];
-        // Stagger so the arrow "assembles" outward from the tip:
-        //   inner pair first, then outer pair.
         ghost.userData.spawnDelay = (i < 2 ? 0.00 : 0.06) + (i % 2) * 0.03;
-        ghost.userData.baseOpacity = 0.55;
+        ghost.userData.baseOpacity = ghostOpacity;   // ← used by the fade loop
 
         squadGroup.add(ghost);
         ghosts.push(ghost);
@@ -5262,7 +5953,6 @@ function spawnKnightGhostSquad(pieceObj, color, dashDuration, fromPos, toPos) {
             const targetScale = 0.5 * localT * fade;
             g.scale.setScalar(Math.max(0.001, targetScale));
 
-            // Ride in formation relative to the knight's current position
             g.position.set(
                 pieceObj.position.x + off.x,
                 pieceObj.position.y + 0.05,
@@ -7105,21 +7795,37 @@ function setActionMode(mode) {
         hideKnockbackArrows();
         document.getElementById('aimHint').classList.remove('visible');
     }
+
+    // Attack chosen but there is nothing to attack → fall back to move,
+    // and make sure no aura is left hanging.
     if (mode === 'attack' && abilityTargets.length === 0) {
         actionMode = 'move';
         hideCannonRange();
+        clearSelectionAura();        // ★ no targets → no aura
         if (selectedPiece) showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
         updateActionButtonStates();
         return;
     }
+
     actionMode = mode;
+
     if (mode === 'move') {
         hideCannonRange();
         document.getElementById('aimHint').classList.remove('visible');
         hideGhostLine();
+        clearSelectionAura();        // ★ back to move → remove the aura
         if (selectedPiece) showValidMoveHighlights(validMoves, selectedPiece.row, selectedPiece.col);
     } else {
         document.getElementById('aimHint').classList.remove('visible');
+
+        // ★ NEW — attack mode: this is the only place the aura is born.
+        if (selectedPiece && pieceObjects[`${selectedPiece.row},${selectedPiece.col}`]) {
+            createSelectionAura(
+                pieceObjects[`${selectedPiece.row},${selectedPiece.col}`],
+                selectedPiece.piece.type
+            );
+        }
+
         const piece = gameState.getPiece(selectedPiece.row, selectedPiece.col);
         if (piece && piece.type === 'rook') {
             showCannonRange(selectedPiece.row, selectedPiece.col);
@@ -7318,6 +8024,7 @@ function cancelAiming() {
     aimTargetPiece = null;
     aimValid = false;
     actionMode = 'move';
+    clearSelectionAura();
     hideCannonRange();
     if (selectedPiece) {
         const hasAbility = pieceHasAbility(selectedPiece.piece);
@@ -7340,6 +8047,8 @@ function selectPiece(row, col) {
     if (!isPlayerTurn()) return;
     if (isAiming) cancelAiming();
     if (knightAbilityActive) cancelKnightAbilityMode();
+
+    clearSelectionAura();
 
     selectedPiece = { row, col, piece };
     validMoves = gameState.getLegalMoves(row, col);
@@ -7379,11 +8088,17 @@ function selectPiece(row, col) {
     showValidMoveHighlights(validMoves, row, col);
     updateActionButtonStates();
 
-    if (pieceObjects[`${row},${col}`]) selectedPiecePulse = 0;
+    if (pieceObjects[`${row},${col}`]) {
+        selectedPiecePulse = 0;
+        // ★ The aura is only created when the player switches to
+        //   "特殊技能" mode (see setActionMode). Just picking a piece
+        //   does NOT show the aura.
+    }
 }
 
 function deselectPiece() {
     if (pendingRevive) cancelRevive();
+    clearSelectionAura();
     if (isAiming) cancelAiming();
     if (knightAbilityActive) {
         knightAbilityActive = false;
@@ -8083,6 +8798,7 @@ function updateTurnIndicator() {
         turnDot.className = 'turn-dot black';
     }
     updateTurnMessage();
+    updateRoomCodeDisplay();
 }
 
 // ============================================================
@@ -8163,6 +8879,300 @@ function updateFullscreenBtnPosition() {
 function updateTopBarToggleVisibility() {
     updateTopBarReopenBtn();
 }
+
+// ============================================================
+//  ★ Room code display in the top bar (multiplayer only)
+// ============================================================
+function updateRoomCodeDisplay() {
+    const wrap = document.getElementById('roomCodeDisplay');
+    const val = document.getElementById('roomCodeValue');
+    if (!wrap || !val) return;
+
+    const show = currentMode === 'multiplayer' && !!roomCode;
+    wrap.classList.toggle('hidden', !show);
+    if (show) val.textContent = roomCode;
+}
+
+// ============================================================
+//  ★ Game-state serialization (for reconnect sync)
+// ============================================================
+function serializeGameState() {
+    if (!gameState) return null;
+    return {
+        board: gameState.board.map(row => row.map(p => p ? { ...p } : null)),
+        turn: gameState.turn,
+        castlingRights: { ...gameState.castlingRights },
+        enPassantTarget: gameState.enPassantTarget,
+        moveHistory: gameState.moveHistory,
+        halfMoveClock: gameState.halfMoveClock,
+        fullMoveNumber: gameState.fullMoveNumber,
+        initialPieces: gameState.initialPieces,
+        kingSkillState: {
+            uses: { ...kingSkillState.uses },
+            lastUsedMove: { ...kingSkillState.lastUsedMove },
+            // Never resume mid-domain-battle on reconnect — just abort it
+            active: false,
+            context: null,
+        },
+        timerState: {
+            white: timerState.white,
+            black: timerState.black,
+            currentPlayer: timerState.currentPlayer,
+            isInfinite: timerState.isInfinite,
+        },
+        roomSettings: { ...roomSettings },
+    };
+}
+
+function applySerializedState(state) {
+    if (!state) return;
+
+    // Rebuild gameState without re-running initBoard()
+    gameState = Object.create(ChessGame.prototype);
+    gameState.board = state.board.map(row => row.map(p => p ? { ...p } : null));
+    gameState.turn = state.turn;
+    gameState.castlingRights = state.castlingRights;
+    gameState.enPassantTarget = state.enPassantTarget || null;
+    gameState.moveHistory = state.moveHistory || [];
+    gameState.halfMoveClock = state.halfMoveClock || 0;
+    gameState.fullMoveNumber = state.fullMoveNumber || 1;
+    gameState.initialPieces = state.initialPieces || [];
+    gameState.gameOver = false;
+    gameState.gameResult = null;
+
+    if (state.kingSkillState) {
+        kingSkillState.uses = state.kingSkillState.uses;
+        kingSkillState.lastUsedMove = state.kingSkillState.lastUsedMove;
+        kingSkillState.active = false;
+        kingSkillState.context = null;
+    }
+    if (state.timerState) {
+        timerState.white = state.timerState.white;
+        timerState.black = state.timerState.black;
+        timerState.currentPlayer = state.timerState.currentPlayer;
+        timerState.isInfinite = state.timerState.isInfinite;
+    }
+    if (state.roomSettings) {
+        roomSettings = { ...state.roomSettings };
+    }
+
+    // Reset all transient state
+    gameOverFlag = false;
+    isAnimating = false;
+    aiThinking = false;
+    selectedPiece = null;
+    validMoves = [];
+    abilityTargets = [];
+    actionMode = 'move';
+    pendingPromotion = null;
+    pendingRevive = null;
+    knightAbilityActive = false;
+    knightAbilityState = null;
+
+    // Rebuild the 3D view
+    createBoard3D();
+    createPieces3D();
+    resetCameraForPlayer();
+    updateTurnIndicator();
+    updateTimerDisplay();
+    updateCameraTargets();
+    clearHighlights();
+    clearSelectionAura();
+    hideCannonRange();
+    hideKnockbackArrows();
+    updateActionBar(false, false);
+
+    // Show the timer if the game uses one
+    if (roomSettings.timePerPlayer > 0) {
+        document.getElementById('timerDisplay').style.display = 'flex';
+    }
+}
+
+// ============================================================
+//  ★ Reconnect overlay UI
+// ============================================================
+function showReconnectOverlay(isHostSide) {
+    let overlay = document.getElementById('reconnectOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'reconnectOverlay';
+        overlay.className = 'overlay';
+        overlay.innerHTML = `
+            <div class="panel" style="max-width: 440px; text-align:center;">
+                <h2>📡 連線中斷</h2>
+                <p id="reconnectMessage" style="opacity:0.9;">
+                    <span class="reconnect-spinner"></span>
+                    正在嘗試重新連線...
+                </p>
+                <p id="reconnectAttempt"
+                   style="opacity:0.55; font-size:0.85rem; font-family:'Courier New',monospace;">
+                    嘗試次數：0
+                </p>
+                <p id="reconnectRoomHint"
+                   style="opacity:0.65; font-size:0.85rem; margin-top:10px;">
+                </p>
+                <div class="btn-row" style="margin-top:18px;">
+                    <button class="btn btn-danger" onclick="giveUpReconnect()">
+                        ✕ 放棄連線
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+    overlay.classList.remove('hidden');
+
+    const msg = document.getElementById('reconnectMessage');
+    const hint = document.getElementById('reconnectRoomHint');
+    if (isHostSide) {
+        msg.innerHTML =
+            `<span class="reconnect-spinner"></span>等待對手重新連線...`;
+        if (hint) hint.textContent =
+            `請對手使用房號 ${roomCode || '----'} 重新加入`;
+    } else {
+        msg.innerHTML =
+            `<span class="reconnect-spinner"></span>正在嘗試重新連線至房主...`;
+        if (hint) hint.textContent =
+            `房號：${roomCode || '----'}`;
+    }
+}
+
+function hideReconnectOverlay() {
+    const overlay = document.getElementById('reconnectOverlay');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+function updateReconnectAttempt(n) {
+    const el = document.getElementById('reconnectAttempt');
+    if (el) el.textContent = `嘗試次數：${n}`;
+}
+
+function giveUpReconnect() {
+    isReconnecting = false;
+    stopReconnectLoop();
+    stopReconnectGraceTimer();
+    hideReconnectOverlay();
+
+    destroyPeer();
+    gameOverFlag = true;
+    stopTimer();
+
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    document.getElementById('gameOverReason').textContent = '連線中斷（放棄重連）';
+    const text = document.getElementById('gameOverText');
+    if (isHost) {
+        text.textContent = '對手已離線';
+        text.className = 'game-over-text win';
+    } else {
+        text.textContent = '與房主的連線已中斷';
+        text.className = 'game-over-text lose';
+    }
+}
+
+// ============================================================
+//  ★ Client-side reconnect loop
+// ============================================================
+function stopReconnectLoop() {
+    if (reconnectTimer) {
+        clearInterval(reconnectTimer);
+        reconnectTimer = null;
+    }
+}
+
+function startClientReconnectLoop() {
+    stopReconnectLoop();
+    reconnectAttempts = 0;
+
+    const attempt = () => {
+        if (!isReconnecting) return;
+        if (gameOverFlag) { stopReconnectLoop(); return; }
+
+        reconnectAttempts++;
+        updateReconnectAttempt(reconnectAttempts);
+
+        if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+            giveUpReconnect();
+            return;
+        }
+        tryReconnectToHost();
+    };
+
+    // First attempt immediately, then every interval
+    attempt();
+    reconnectTimer = setInterval(attempt, RECONNECT_INTERVAL_MS);
+}
+
+function tryReconnectToHost() {
+    if (!roomCode) return;
+
+    // Tear down whatever is left over from the old session
+    if (peerConnection) {
+        try { peerConnection.close(); } catch (_) { }
+        peerConnection = null;
+    }
+    if (peer) {
+        try { peer.destroy(); } catch (_) { }
+        peer = null;
+    }
+
+    peer = new Peer({ debug: 1, config: ICE_SERVERS });
+
+    peer.on('open', () => {
+        const targetId = PEER_ID_PREFIX + roomCode;
+        const conn = peer.connect(targetId, { reliable: true });
+        if (!conn) return;
+
+        peerConnection = conn;
+        setupPeerConnection();
+
+        conn.on('open', () => {
+            peerConnection.send({
+                type: 'hello',
+                color: playerColor,
+                sessionId: clientSessionId,
+                reconnecting: true,
+            });
+        });
+    });
+
+    peer.on('error', (err) => {
+        // Silently retry — the interval will fire again
+        console.warn('Reconnect attempt failed:', err.type);
+    });
+}
+
+// ============================================================
+//  ★ Host-side reconnect grace timer
+// ============================================================
+function stopReconnectGraceTimer() {
+    if (reconnectGraceTimer) {
+        clearTimeout(reconnectGraceTimer);
+        reconnectGraceTimer = null;
+    }
+}
+
+function startReconnectGraceTimer() {
+    stopReconnectGraceTimer();
+    reconnectGraceTimer = setTimeout(() => {
+        if (!peerConnection || !peerConnection.open) {
+            // Opponent never came back — end the game
+            isReconnecting = false;
+            hideReconnectOverlay();
+            gameOverFlag = true;
+            stopTimer();
+
+            document.getElementById('gameOverOverlay').classList.remove('hidden');
+            document.getElementById('gameOverReason').textContent =
+                '對手已斷開連線（重連逾時）';
+            const text = document.getElementById('gameOverText');
+            text.textContent = '你贏了!';
+            text.className = 'game-over-text win';
+        }
+    }, RECONNECT_GRACE_MS);
+}
+
+// Expose for the inline onclick
+window.giveUpReconnect = giveUpReconnect;
 
 function updateTurnMessage() {
     const el = document.getElementById('checkWarning');
@@ -8558,6 +9568,8 @@ function animate() {
 
     if (IS_MOBILE) updateJoystickAim(dt);
 
+    updateSelectionAura();
+
     if (isFreeCameraActive) {
         const x = cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
         const y = cameraRadius * Math.cos(cameraPhi);
@@ -8610,6 +9622,12 @@ function showAIDifficulty() {
     aiGameModeEnabled = true;
     updateAIModeUI();
 
+    // ★ Reset player colour choice to White
+    aiPlayerColorChoice = 'white';
+    document.querySelectorAll('#aiDifficultyMenu .ai-color-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.color === 'white');
+    });
+
     document.getElementById('mainMenu').classList.add('hidden');
     document.getElementById('aiDifficultyMenu').classList.remove('hidden');
 }
@@ -8652,12 +9670,20 @@ function backToMenu() {
     document.getElementById('gameOverStatusBar')?.classList.add('hidden');
     document.getElementById('restartConfirmOverlay').classList.add('hidden');
     document.getElementById('backToMenuConfirmOverlay').classList.add('hidden');
+    document.getElementById('battleSurrenderConfirmOverlay')?.classList.add('hidden');
 
     document.getElementById('settingsOverlay').classList.add('hidden');
     _settingsOpenedFrom = null;
 
     document.getElementById('topBar').classList.add('hidden');
     updateTopBarToggleVisibility();
+    hideReconnectOverlay();
+    isReconnecting = false;
+    stopReconnectLoop();
+    stopReconnectGraceTimer();
+    hostKnownClientSessionId = null;
+    try { localStorage.removeItem('chessRoomCode'); } catch (_) { }
+    updateRoomCodeDisplay();
 
     document.getElementById('actionBar').classList.remove('visible');
     document.getElementById('aimHint').classList.remove('visible');
@@ -8755,15 +9781,26 @@ function sendSettingsToPeer() {
 
 function handleDisconnect() {
     if (gameOverFlag) return;
+
     const waitingStatusEl = document.getElementById('waitingStatus');
     if (waitingStatusEl) waitingStatusEl.textContent = '⚠️ 對手已斷開連線';
-    if (gameStarted) {
-        gameOverFlag = true;
-        stopTimer();
-        document.getElementById('gameOverOverlay').classList.remove('hidden');
-        document.getElementById('gameOverReason').textContent = '對手斷線';
-        document.getElementById('gameOverText').textContent = '你贏了!';
-        document.getElementById('gameOverText').className = 'game-over-text win';
+
+    // ── Lobby phase: nothing to preserve ──
+    if (currentMode !== 'multiplayer' || !gameStarted) {
+        return;
+    }
+
+    // ── In-game disconnect — pause and try to recover ──
+    pauseTimer();
+    isReconnecting = true;
+    showReconnectOverlay(isHost);
+
+    if (isHost) {
+        // Keep our Peer ID alive; wait for the client to reconnect
+        startReconnectGraceTimer();
+    } else {
+        // Try to re-establish the connection to the host
+        startClientReconnectLoop();
     }
 }
 
@@ -8784,6 +9821,7 @@ function createRoomWithSettings() {
     document.getElementById('waitingOverlay').classList.remove('hidden');
     document.getElementById('waitingStatus').textContent = '⏳ 正在初始化連線...';
     updateReadyUI();
+    updateRoomCodeDisplay();
 
     const hostId = PEER_ID_PREFIX + roomCode;
     peer = new Peer(hostId, { debug: 2, config: ICE_SERVERS });
@@ -8791,6 +9829,12 @@ function createRoomWithSettings() {
     peer.on('open', (id) => {
         document.getElementById('waitingStatus').textContent = '⏳ 等待對手加入...';
     });
+
+    const syncState = () => {
+        sendSettingsToPeer();
+        if (myReady && conn.open) conn.send({ type: 'ready' });
+    };
+
     peer.on('connection', (conn) => {
         if (peerConnection && peerConnection.open) {
             conn.close();
@@ -8798,12 +9842,19 @@ function createRoomWithSettings() {
         }
         peerConnection = conn;
         currentMode = 'multiplayer';
+
+        // ★ If we were waiting for the client to come back, keep it that way
+        //   until we see a matching sessionId in their hello message.
+        //   (The hello handler decides whether to resume or start fresh.)
+
         setupPeerConnection();
-        if (conn.open) sendSettingsToPeer();
-        else conn.on('open', () => sendSettingsToPeer());
+        if (conn.open) syncState();
+        else conn.on('open', syncState);
         updateReadyUI();
         document.getElementById('topBar').classList.remove('hidden');
+        updateRoomCodeDisplay();
     });
+
     peer.on('error', (err) => {
         let msg = '⚠️ 創建房間失敗：' + (err.type || err.message);
         if (err.type === 'unavailable-id') msg = '⚠️ 房號衝突，請重新嘗試';
@@ -8847,18 +9898,30 @@ function joinRoom() {
         }
         peerConnection = conn;
         setupPeerConnection();
+
         conn.on('open', () => {
             document.getElementById('multiplayerStatus').textContent = '✅ 連線成功！等待房間設定...';
             document.getElementById('waitingCodeDisplay').textContent = code;
             document.getElementById('waitingOverlay').classList.remove('hidden');
             document.getElementById('topBar').classList.remove('hidden');
             updateReadyUI();
+            updateRoomCodeDisplay();
+
+            // ★ Persist room code so we can attempt reconnection later
+            try { localStorage.setItem('chessRoomCode', code); } catch (_) { }
+
             setTimeout(() => {
                 if (peerConnection?.open) {
-                    peerConnection.send({ type: 'hello', color: playerColor });
+                    peerConnection.send({
+                        type: 'hello',
+                        color: playerColor,
+                        sessionId: clientSessionId,
+                        reconnecting: false,
+                    });
                 }
             }, 100);
         });
+
         conn.on('close', () => {
             handleDisconnect();
         });
@@ -8890,9 +9953,57 @@ function joinRoom() {
 function setupPeerConnection() {
     peerConnection.on('data', (data) => {
         if (data.type === 'hello') {
-            if (isHost) sendSettingsToPeer();
+            if (isHost) {
+                const incomingSession = data.sessionId || null;
+                const isReturningClient =
+                    !!hostKnownClientSessionId &&
+                    incomingSession === hostKnownClientSessionId;
+
+                if (!hostKnownClientSessionId) {
+                    // First ever client for this room
+                    hostKnownClientSessionId = incomingSession;
+                } else if (isReturningClient) {
+                    // ★ Client is coming back — resume the existing game
+                    console.log('🔁 Client reconnected with matching session');
+                } else {
+                    // Different session — treat as a brand-new client
+                    console.warn('⚠️ New session connected to same room (replacing previous).');
+                    hostKnownClientSessionId = incomingSession;
+                }
+
+                sendSettingsToPeer();
+                if (myReady && peerConnection?.open) {
+                    peerConnection.send({ type: 'ready' });
+                }
+
+                // ★ If the client reconnected mid-game, push the full state
+                if (isReturningClient && gameStarted && gameState) {
+                    const state = serializeGameState();
+                    if (state && peerConnection?.open) {
+                        peerConnection.send({ type: 'state_sync', state });
+                    }
+
+                    // Stop showing the "waiting for opponent" overlay on host
+                    isReconnecting = false;
+                    stopReconnectGraceTimer();
+                    hideReconnectOverlay();
+                    resumeTimer();
+                    updateRoomCodeDisplay();
+                }
+            }
             return;
         }
+
+        // ★ FIX — handle the opponent's "ready" signal.
+        //   Without this, opponentReady is never set to true and
+        //   checkBothReady() can never fire.
+        if (data.type === 'ready') {
+            opponentReady = true;
+            updateReadyUI();
+            checkBothReady();
+            return;
+        }
+
         if (data.type === 'settings') {
             if (settingsTimeout) { clearTimeout(settingsTimeout); settingsTimeout = null; }
             roomSettings = data.settings;
@@ -8927,10 +10038,39 @@ function setupPeerConnection() {
             }
             return;
         }
-        if (data.type === 'ready') {
-            opponentReady = true;
-            updateReadyUI();
-            checkBothReady();
+        // ★ The host pushed us the current game state after a reconnect
+        if (data.type === 'state_sync') {
+            applySerializedState(data.state);
+
+            // Reconnection succeeded — stop the retry loop
+            isReconnecting = false;
+            stopReconnectLoop();
+            hideReconnectOverlay();
+            resumeTimer();
+            updateRoomCodeDisplay();
+
+            // Flash a small success toast
+            const toast = document.createElement('div');
+            toast.textContent = '✅ 已重新連線';
+            Object.assign(toast.style, {
+                position: 'fixed',
+                top: '20px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: '950',
+                background: 'rgba(46, 204, 113, 0.95)',
+                color: '#fff',
+                padding: '10px 24px',
+                borderRadius: '12px',
+                fontWeight: '900',
+                letterSpacing: '1px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                transition: 'opacity 0.4s',
+            });
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; }, 1800);
+            setTimeout(() => toast.remove(), 2400);
+
             return;
         }
         if (data.type === 'move') {
@@ -9011,9 +10151,16 @@ function setupPeerConnection() {
             }
             return;
         }
+
         // ★ Opponent picked their RPS choice — store it and try to resolve
         if (data.type === 'domain_choice') {
             onOpponentChoiceReceived(data.choice);
+            return;
+        }
+
+        // ★ Opponent surrendered the domain battle
+        if (data.type === 'domain_surrender') {
+            onOpponentSurrenderReceived(data.role);
             return;
         }
 
@@ -9036,6 +10183,10 @@ function setupPeerConnection() {
                     gameState.moveHistory.push({ type: 'domain_kill', r, c });
                     syncPiecesAfterMove();
                 }
+
+                // ★ 領域展開算一步棋 — 遠端也要同步翻轉回合
+                gameState.flipTurn();
+
                 kingSkillState.active = false;
                 kingSkillState.context = null;
                 battleState = null;
@@ -9108,8 +10259,17 @@ function cancelWaiting() {
     myReady = false;
     opponentReady = false;
     gameStarted = false;
+
+    isReconnecting = false;
+    stopReconnectLoop();
+    stopReconnectGraceTimer();
+    hideReconnectOverlay();
+    hostKnownClientSessionId = null;
+    try { localStorage.removeItem('chessRoomCode'); } catch (_) { }
+
     document.getElementById('waitingOverlay').classList.add('hidden');
     document.getElementById('multiplayerMenu').classList.remove('hidden');
+    updateRoomCodeDisplay();
 }
 
 function setReady() {
@@ -9209,12 +10369,16 @@ function startAIGame(difficulty) {
     // aiDifficulty is declared in ai.js (loaded after main.js)
     aiDifficulty = difficulty;
     currentMode = 'ai';
-    playerColor = 'white';
+
+    // ★ Use the player's colour choice from the menu
+    playerColor = aiPlayerColorChoice;
 
     // ★ Read mode from the toggle switch
     roomSettings.gameMode = aiGameModeEnabled ? 'totally' : 'normal';
     roomSettings.abilityPermissions = { white: true, black: true };
     roomSettings.timePerPlayer = 0;
+
+    aiPassivityTracker.opponentPassiveTurns = 0;
 
     gameState = new ChessGame();
     resetKingSkillState();
@@ -9233,6 +10397,12 @@ function startAIGame(difficulty) {
     resetCameraForPlayer();
     stopTimer();
     updateTurnIndicator();
+
+    // ★ NEW — If the human chose Black, the AI (White) must make the opening move.
+    if (currentMode === 'ai' && gameState.turn !== playerColor && !kingSkillState.active) {
+        aiThinking = true;
+        setTimeout(makeAIMove, 500);
+    }
 }
 
 function confirmBackToMenu() {
@@ -9330,6 +10500,7 @@ function initNewGame() {
     document.getElementById('topBar').classList.remove('hidden');
     document.getElementById('gameOverStatusBar')?.classList.add('hidden');
     updateTopBarToggleVisibility();
+    updateRoomCodeDisplay();
 
     gameState = new ChessGame();
     resetKingSkillState();
@@ -9930,13 +11101,78 @@ function startDomainExpansion(color, checker) {
     const kingPos = get3DPosition(king.r, king.c, 0);
     const t0 = clock.getElapsedTime();
 
-    // ── Palette ──
-    const BLACK = 0x000000;
-    const PURPLE = 0x6a2a9a;
-    const PURPLE_L = 0x9b4ddb;
-    const MAGENTA = 0xc44dff;
-    const RED = 0x8b0033;
-    const DARK_COLOR = new THREE.Color(0x000000);
+    // ── Palette — themed by the king's color ──
+    //    white king → radiant light domain
+    //    black king → abyssal dark domain (original look)
+    const isWhiteDomain = (color === 'white');
+
+    const THEME = isWhiteDomain ? {
+        // ─── SOFT LIGHT THEME (white king) — toned down to avoid blowout ───
+        //  All additive layers deliberately sit around 55–70% brightness
+        //  so they don't stack into a pure white nuke.
+        DISC: 0xc8bca0,             // warm beige — was 0xffffff
+        WAVE: 0xd4c9a8,             // soft cream  — was 0xfff8e0
+        RIM: 0x9a7a2a,              // muted gold  — was 0xe8c547
+        HAZE: 0xb09a58,             // dim gold    — was 0xfff0b0
+        WAVE2: 0x4a7a9c,            // muted blue  — was 0x7ac8ff
+        BLADE_BODY: 0xc0b8a0,       // grey-cream  — was 0xf5f5f5
+        BLADE_SEAM: 0x8a6a20,       // dark gold   — was 0xe8c547
+        BLADE_AURA: 0xa88830,       // dim gold    — was 0xffe27a
+        BLADE_CORE: 0xb0a078,       // warm grey   — was 0xffffff  ★ KEY
+        GROUND_IMPACT: 0xa88830,
+        GROUND_RING: 0x8a6a20,
+        RUNE_A: 0xa88830,
+        RUNE_B: 0x8a6a20,
+        CHARGE_A: 0xa88830,
+        CHARGE_B: 0xb0a078,         // warm grey   — was 0xffffff  ★ KEY
+        PILLAR_BODY: 0x8a8680,      // muted grey  — was 0xe0e0e8
+        PILLAR_RIM: 0x8a6a20,
+        DOME_OUTER: 0xa89e8c,       // grey-cream  — was 0xfffaf0
+        DOME_INNER: 0x9a7a2a,
+        DOME_RIM: 0x8a6a20,
+        LIGHTNING: 0xb0a078,        // warm grey   — was 0xffffff  ★ KEY
+        SHARD_A: 0xb0a078,          // warm grey   — was 0xffffff  ★ KEY
+        SHARD_B: 0x8a6a20,
+        TINT: new THREE.Color(0xb0a078),   // warmer + dimmer than 0xffffff
+        KING_GLOW: 0xc9a44a,
+        CHECKER_GLOW: 0xd94868,
+        VIGNETTE: 'radial-gradient(circle at 50% 50%,'
+            + 'rgba(230,220,190,0) 28%,'
+            + 'rgba(200,180,140,0.35) 68%,'
+            + 'rgba(180,160,120,0.75) 100%)',
+    } : {
+        // ─── DARK THEME (black king) — original ───
+        DISC: 0x000000,
+        WAVE: 0x000000,
+        RIM: 0x9b4ddb,
+        HAZE: 0x6a2a9a,
+        WAVE2: 0xc44dff,
+        BLADE_BODY: 0x000000,
+        BLADE_SEAM: 0x8b0033,
+        BLADE_AURA: 0xff1e4a,
+        BLADE_CORE: 0xff5577,
+        GROUND_IMPACT: 0xff3344,
+        GROUND_RING: 0xff8866,
+        RUNE_A: 0x9b4ddb,
+        RUNE_B: 0xc44dff,
+        CHARGE_A: 0xc44dff,
+        CHARGE_B: 0x9b4ddb,
+        PILLAR_BODY: 0x0a0a14,
+        PILLAR_RIM: 0xc44dff,
+        DOME_OUTER: 0x05000a,
+        DOME_INNER: 0x6a2a9a,
+        DOME_RIM: 0x9b4ddb,
+        LIGHTNING: 0xc44dff,
+        SHARD_A: 0x000000,
+        SHARD_B: 0xc44dff,
+        TINT: new THREE.Color(0x000000),
+        KING_GLOW: 0xffe27a,
+        CHECKER_GLOW: 0xff3366,
+        VIGNETTE: 'radial-gradient(circle at 50% 50%,'
+            + 'rgba(0,0,0,0) 28%,'
+            + 'rgba(10,0,25,0.55) 68%,'
+            + 'rgba(0,0,0,0.95) 100%)',
+    };
 
     // ── Bookkeeping ──
     const created = [];   // { obj, geo, mat }
@@ -9956,10 +11192,7 @@ function startDomainExpansion(color, checker) {
     const vignette = document.createElement('div');
     vignette.style.cssText = `
         position: fixed; inset: 0; pointer-events: none; z-index: 490;
-        background: radial-gradient(circle at 50% 50%,
-            rgba(0,0,0,0) 28%,
-            rgba(10,0,25,0.55) 68%,
-            rgba(0,0,0,0.95) 100%);
+        background: ${THEME.VIGNETTE};
         opacity: 0; transition: opacity 0.6s ease;
     `;
     document.body.appendChild(vignette);
@@ -9970,7 +11203,7 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const discGeo = new THREE.CircleGeometry(1, 128);
     const discMat = new THREE.MeshBasicMaterial({
-        color: BLACK, transparent: true, opacity: 0,
+        color: THEME.DISC, transparent: true, opacity: 0,
         depthWrite: false, side: THREE.DoubleSide,
     });
     const disc = new THREE.Mesh(discGeo, discMat);
@@ -9986,7 +11219,7 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const ringGeo = new THREE.RingGeometry(0.85, 1.0, 128);
     const ringMat = new THREE.MeshBasicMaterial({
-        color: BLACK, transparent: true, opacity: 0.95,
+        color: THEME.WAVE, transparent: true, opacity: 0.95,
         depthWrite: false, side: THREE.DoubleSide,
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -10002,7 +11235,7 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const rimGeo = new THREE.RingGeometry(1.0, 1.06, 128);
     const rimMat = new THREE.MeshBasicMaterial({
-        color: PURPLE_L, transparent: true, opacity: 0,
+        color: THEME.RIM, transparent: true, opacity: 0,
         depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
@@ -10019,7 +11252,7 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const glowGeo = new THREE.RingGeometry(0.55, 1.45, 128);
     const glowMat = new THREE.MeshBasicMaterial({
-        color: PURPLE, transparent: true, opacity: 0.4,
+        color: THEME.HAZE, transparent: true, opacity: 0.4,
         depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
@@ -10036,7 +11269,7 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const ring2Geo = new THREE.RingGeometry(0.6, 1.15, 128);
     const ring2Mat = new THREE.MeshBasicMaterial({
-        color: MAGENTA, transparent: true, opacity: 0,
+        color: THEME.WAVE2, transparent: true, opacity: 0,
         depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
@@ -10104,11 +11337,11 @@ function startDomainExpansion(color, checker) {
         swordGroup.userData.baseScale = swordScale;
 
         const swordMat = new THREE.MeshBasicMaterial({
-            color: BLACK, transparent: true, opacity: 0,
+            color: THEME.BLADE_BODY, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
         });
         const swordGlowMat = new THREE.MeshBasicMaterial({
-            color: RED, transparent: true, opacity: 0,
+            color: THEME.BLADE_SEAM, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
         });
@@ -10163,6 +11396,65 @@ function startDomainExpansion(color, checker) {
         swordGroup.add(seam);
         track(seam, seamGeo, swordGlowMat);
 
+        // ═══════════════════════════════════════════════════════
+        //  ★ NEW — Blade glow aura + ground impact glow
+        // ═══════════════════════════════════════════════════════
+
+        // ── 1. Outer blade aura (soft red halo, additive) ──
+        const auraGeo = new THREE.BoxGeometry(BLADE_W * 2.8, BLADE_H * 1.05, BLADE_D * 2.8);
+        const auraMat = new THREE.MeshBasicMaterial({
+            color: THEME.BLADE_AURA, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const aura = new THREE.Mesh(auraGeo, auraMat);
+        aura.position.y = GUARD_Y - BLADE_H / 2;
+        aura.renderOrder = 998;
+        swordGroup.add(aura);
+        track(aura, auraGeo, auraMat);
+
+        // ── 2. Bright inner core glow (narrower, hotter) ──
+        const coreGlowGeo = new THREE.BoxGeometry(BLADE_W * 1.7, BLADE_H * 0.9, BLADE_D * 1.7);
+        const coreGlowMat = new THREE.MeshBasicMaterial({
+            color: THEME.BLADE_CORE, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const coreGlow = new THREE.Mesh(coreGlowGeo, coreGlowMat);
+        coreGlow.position.y = GUARD_Y - BLADE_H / 2;
+        coreGlow.renderOrder = 999;
+        swordGroup.add(coreGlow);
+        track(coreGlow, coreGlowGeo, coreGlowMat);
+
+        // ── 3. Ground impact disc — flat on the floor, NOT rotated ──
+        //    (added to the scene directly so it stays parallel to the ground)
+        const impactGeo = new THREE.CircleGeometry(0.24, 24);
+        const groundImpactMat = new THREE.MeshBasicMaterial({
+            color: THEME.GROUND_IMPACT, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const groundImpact = new THREE.Mesh(impactGeo, groundImpactMat);
+        groundImpact.rotation.x = -Math.PI / 2;
+        groundImpact.position.set(px, 0.015, pz);
+        groundImpact.renderOrder = 21;
+        scene.add(groundImpact);
+        track(groundImpact, impactGeo, groundImpactMat);
+
+        // ── 4. Expanding ground shock ring on stab-in ──
+        const groundRingGeo = new THREE.RingGeometry(0.12, 0.20, 24);
+        const groundRingMat = new THREE.MeshBasicMaterial({
+            color: THEME.GROUND_RING, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const groundRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+        groundRing.rotation.x = -Math.PI / 2;
+        groundRing.position.set(px, 0.02, pz);
+        groundRing.renderOrder = 22;
+        scene.add(groundRing);
+        track(groundRing, groundRingGeo, groundRingMat);
+
         swordGroup.scale.setScalar(swordScale);
 
         track(swordGroup);
@@ -10172,6 +11464,14 @@ function startDomainExpansion(color, checker) {
             swordGroup,
             swordMat,
             glowMat: swordGlowMat,
+
+            auraMat,
+            coreGlowMat,
+            groundImpactMat,
+            groundImpact,
+            groundRingMat,
+            groundRing,
+
             index: i,
             // Random chaotic stab-in moment
             spawnDelay: Math.random() * (CRACK_COUNT * 0.10),
@@ -10192,7 +11492,7 @@ function startDomainExpansion(color, checker) {
             64
         );
         const rMat = new THREE.MeshBasicMaterial({
-            color: i === 0 ? PURPLE_L : MAGENTA,
+            color: i === 0 ? THEME.RUNE_A : THEME.RUNE_B,
             transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
@@ -10209,7 +11509,7 @@ function startDomainExpansion(color, checker) {
         const a = (i / TICK_COUNT) * Math.PI * 2;
         const tg = new THREE.PlaneGeometry(0.16, 0.035);
         const tm = new THREE.MeshBasicMaterial({
-            color: MAGENTA, transparent: true, opacity: 0,
+            color: THEME.RUNE_B, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
         });
@@ -10230,7 +11530,7 @@ function startDomainExpansion(color, checker) {
     for (let i = 0; i < CHARGE_COUNT; i++) {
         const pg = new THREE.SphereGeometry(0.04 + Math.random() * 0.04, 5, 5);
         const pm = new THREE.MeshBasicMaterial({
-            color: Math.random() < 0.5 ? MAGENTA : PURPLE_L,
+            color: Math.random() < 0.5 ? THEME.CHARGE_A : THEME.CHARGE_B,
             transparent: true, opacity: 0,
             depthWrite: false, blending: THREE.AdditiveBlending,
         });
@@ -10272,11 +11572,11 @@ function startDomainExpansion(color, checker) {
 
         // Shared materials (one per sword → single fade control point)
         const darkMat = new THREE.MeshBasicMaterial({
-            color: 0x0a0a14, transparent: true, opacity: 0,
+            color: THEME.PILLAR_BODY, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
         });
         const rimMat = new THREE.MeshBasicMaterial({
-            color: MAGENTA, transparent: true, opacity: 0,
+            color: THEME.PILLAR_RIM, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
         });
@@ -10348,7 +11648,7 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const domeGeo = new THREE.SphereGeometry(1, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     const domeMat = new THREE.MeshBasicMaterial({
-        color: 0x05000a, transparent: true, opacity: 0,
+        color: THEME.DOME_OUTER, transparent: true, opacity: 0,
         side: THREE.DoubleSide, depthWrite: false,
     });
     const dome = new THREE.Mesh(domeGeo, domeMat);
@@ -10360,7 +11660,7 @@ function startDomainExpansion(color, checker) {
 
     const domeInnerGeo = new THREE.SphereGeometry(1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
     const domeInnerMat = new THREE.MeshBasicMaterial({
-        color: PURPLE, transparent: true, opacity: 0,
+        color: THEME.DOME_INNER, transparent: true, opacity: 0,
         side: THREE.BackSide, depthWrite: false,
         blending: THREE.AdditiveBlending,
     });
@@ -10373,7 +11673,7 @@ function startDomainExpansion(color, checker) {
 
     const domeRimGeo = new THREE.RingGeometry(0.97, 1.04, 96);
     const domeRimMat = new THREE.MeshBasicMaterial({
-        color: PURPLE_L, transparent: true, opacity: 0,
+        color: THEME.DOME_RIM, transparent: true, opacity: 0,
         side: THREE.DoubleSide, depthWrite: false,
         blending: THREE.AdditiveBlending,
     });
@@ -10393,7 +11693,7 @@ function startDomainExpansion(color, checker) {
     for (let i = 0; i < BOLT_COUNT; i++) {
         const segGeo = new THREE.CylinderGeometry(0.028, 0.028, 1, 5, 1, true);
         const segMat = new THREE.MeshBasicMaterial({
-            color: MAGENTA, transparent: true, opacity: 0.9,
+            color: THEME.LIGHTNING, transparent: true, opacity: 0.9,
             depthWrite: false, blending: THREE.AdditiveBlending,
         });
         const seg = new THREE.Mesh(segGeo, segMat);
@@ -10412,7 +11712,11 @@ function startDomainExpansion(color, checker) {
     // ═══════════════════════════════════════════════════════════
     const flashGeo = new THREE.SphereGeometry(0.55, 20, 20);
     const flashMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.95,
+        // ★ Light branch gets a warm amber pop instead of a white flashbang.
+        //   Dark branch keeps the original white spark.
+        color: isWhiteDomain ? 0xc9a44a : 0xffffff,
+        transparent: true,
+        opacity: isWhiteDomain ? 0.55 : 0.95,
         depthWrite: false, blending: THREE.AdditiveBlending,
     });
     const flash = new THREE.Mesh(flashGeo, flashMat);
@@ -10429,7 +11733,7 @@ function startDomainExpansion(color, checker) {
     for (let i = 0; i < SHARD_COUNT; i++) {
         const sg = new THREE.TetrahedronGeometry(0.10 + Math.random() * 0.12, 0);
         const sm = new THREE.MeshBasicMaterial({
-            color: Math.random() < 0.5 ? BLACK : MAGENTA,
+            color: Math.random() < 0.5 ? THEME.SHARD_A : THEME.SHARD_B,
             transparent: true, opacity: 0,
             depthWrite: false, blending: THREE.AdditiveBlending,
         });
@@ -10493,17 +11797,17 @@ function startDomainExpansion(color, checker) {
     // ── Glow outlines on the two involved pieces ──
     const glowOutlineEntries = [];
     const kingObj = pieceObjects[`${king.r},${king.c}`];
-    if (kingObj) glowOutlineEntries.push(...buildDomainGlowOutline(kingObj, 0xffe27a, 1.12));
+    if (kingObj) glowOutlineEntries.push(...buildDomainGlowOutline(kingObj, THEME.KING_GLOW, 1.12));
     for (const ch of allCheckers) {
         const chObj = pieceObjects[`${ch.r},${ch.c}`];
         if (!chObj) continue;
-        glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
+        glowOutlineEntries.push(...buildDomainGlowOutline(chObj, THEME.CHECKER_GLOW, 1.12));
     }
     if (checker) {
         const ck = `${checker.r},${checker.c}`;
         if (!allCheckers.some(ch => `${ch.r},${ch.c}` === ck)) {
             const chObj = pieceObjects[ck];
-            if (chObj) glowOutlineEntries.push(...buildDomainGlowOutline(chObj, 0xff3366, 1.12));
+            if (chObj) glowOutlineEntries.push(...buildDomainGlowOutline(chObj, THEME.CHECKER_GLOW, 1.12));
         }
     }
 
@@ -10652,8 +11956,45 @@ function startDomainExpansion(color, checker) {
                 const pop = base * (0.35 + 0.65 * growT);
                 c.swordGroup.scale.setScalar(pop);
 
+                // Blade body / seam
                 c.swordMat.opacity = 0.95 * alpha;
                 c.glowMat.opacity = 0.90 * alpha * (0.7 + 0.3 * Math.sin(elapsed * 14 + c.index));
+
+                // ═══════════════════════════════════════════════════
+                //  ★ NEW — Pulsing glow aura around the blade
+                // ═══════════════════════════════════════════════════
+                if (c.auraMat) {
+                    // Slow deep pulse — like the blade is radiating heat
+                    const pulse = 0.7 + 0.3 * Math.sin(elapsed * 8 + c.index * 1.3);
+                    c.auraMat.opacity = 0.85 * alpha * pulse;
+                }
+                if (c.coreGlowMat) {
+                    // Faster, brighter flicker on the inner core
+                    const flicker = 0.72 + 0.28 * Math.sin(elapsed * 18 + c.index * 0.7);
+                    c.coreGlowMat.opacity = 0.95 * alpha * flicker;
+                }
+
+                // ═══════════════════════════════════════════════════
+                //  ★ NEW — Ground impact glow on stab-in
+                // ═══════════════════════════════════════════════════
+                if (c.groundImpactMat) {
+                    // Bright white-hot flash the instant the sword lands,
+                    // then settle into a soft pulsing ember
+                    const stabFlash = Math.max(0, 1 - growT * 3.2);
+                    const settle = 0.55 + 0.45 * Math.sin(elapsed * 5 + c.index);
+                    c.groundImpactMat.opacity = alpha * (0.30 * settle + 0.95 * stabFlash);
+
+                    // The disc breathes a little
+                    const s = 1 + 0.15 * Math.sin(elapsed * 4 + c.index);
+                    c.groundImpact.scale.setScalar(s);
+                }
+                if (c.groundRingMat && c.groundRing) {
+                    // Expanding shock ring — starts at scale 1, blows out
+                    // over ~0.55s right after the sword hits
+                    const stabT = Math.max(0, Math.min(1, (expElapsed - appearT) / 0.55));
+                    c.groundRing.scale.setScalar(1 + stabT * 2.6);
+                    c.groundRingMat.opacity = alpha * Math.max(0, 1 - stabT * 1.15) * 0.95;
+                }
             }
 
             // Shadow dome
@@ -10750,7 +12091,7 @@ function startDomainExpansion(color, checker) {
 
                     for (const sm of p.savedMats) {
                         const c1 = sm.color.clone();
-                        c1.lerp(DARK_COLOR, p.tintAmount);
+                        c1.lerp(THEME.TINT, p.tintAmount);
                         sm.mesh.material.color.copy(c1);
                         if (sm.mesh.material.emissive && sm.emissive) {
                             sm.mesh.material.emissive.copy(sm.emissive);
@@ -10877,6 +12218,12 @@ function openBattleMenu(color, checker) {
     hideOpponentChoiceBubble();
     hidePlayerChoiceBubble();
 
+    const battleEl = document.getElementById('battleOverlay');
+    battleEl.classList.toggle('domain-white', color === 'white');
+    battleEl.classList.toggle('domain-black', color === 'black');
+
+    document.getElementById('battleSurrenderConfirmOverlay')?.classList.add('hidden');
+
     // Reset new visual elements
     document.getElementById('battleShockwave').classList.remove('trigger');
     document.getElementById('battleFlash').classList.remove('trigger');
@@ -10958,6 +12305,9 @@ function enableBattleButtons() {
         b.disabled = false;
         b.onclick = () => onBattleChoice(b.dataset.choice);
     });
+    // ★ Re-enable the surrender button too
+    const surBtn = document.getElementById('battleSurrenderBtn');
+    if (surBtn) surBtn.disabled = false;
 }
 
 function renderBattleHearts() {
@@ -11050,6 +12400,88 @@ function onOpponentChoiceReceived(choice) {
     if (!battleState || battleState.over) return;
     battleState.opponentChoice = choice;
     tryResolveBattle();
+}
+
+// ★ Local player clicks "放棄" (Give Up)
+//   - If I'm the KING (defender)  → I lose the entire chess game.
+//   - If I'm the CHECKER (attacker) → my checker piece dies, chess resumes.
+function onBattleSurrender() {
+    if (!battleState || battleState.over || battleState.busy) return;
+
+    // ★ Show the in-game confirmation modal (instead of window.confirm)
+    const confirmOverlay = document.getElementById('battleSurrenderConfirmOverlay');
+    if (confirmOverlay) confirmOverlay.classList.remove('hidden');
+}
+
+// Player pressed "✅ 確定放棄" on the confirm modal
+function doBattleSurrenderConfirm() {
+    const confirmOverlay = document.getElementById('battleSurrenderConfirmOverlay');
+    if (confirmOverlay) confirmOverlay.classList.add('hidden');
+
+    if (!battleState || battleState.over || battleState.busy) return;
+
+    // Lock the battle immediately
+    battleState.over = true;
+    battleState.myChoice = null;
+    battleState.opponentChoice = null;
+
+    document.querySelectorAll('.battle-menu-btn').forEach(b => b.disabled = true);
+    hideOpponentChoiceBubble();
+    hidePlayerChoiceBubble();
+
+    // Tell the opponent which role I play
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        const myRole = battleState.isDefenderLocal ? 'defender' : 'attacker';
+        peerConnection.send({ type: 'domain_surrender', role: myRole });
+    }
+
+    setBattleMessage('🏳 你放棄了對決...');
+
+    setTimeout(() => {
+        if (!battleState) return;
+
+        if (battleState.isDefenderLocal) {
+            // I'm the king → king's hearts emptied → I lose everything
+            battleState.defenderHearts = 0;
+            resolveDomainDefenderLose();
+        } else {
+            // I'm the checker → checker dies, king wins this battle
+            battleState.attackerHearts = 0;
+            resolveDomainCheckerDies();
+        }
+    }, 1200);
+}
+
+// Player pressed "✕ 取消" on the confirm modal
+function cancelBattleSurrenderConfirm() {
+    const confirmOverlay = document.getElementById('battleSurrenderConfirmOverlay');
+    if (confirmOverlay) confirmOverlay.classList.add('hidden');
+}
+
+// ★ Opponent surrendered — resolve from our perspective
+function onOpponentSurrenderReceived(senderRole) {
+    if (!battleState || battleState.over) return;
+
+    battleState.over = true;
+    document.querySelectorAll('.battle-menu-btn').forEach(b => b.disabled = true);
+    hideOpponentChoiceBubble();
+    hidePlayerChoiceBubble();
+
+    setBattleMessage('🏳 對手放棄了對決！');
+
+    setTimeout(() => {
+        if (!battleState) return;
+
+        if (senderRole === 'defender') {
+            // Opponent was the king and gave up → king loses
+            battleState.defenderHearts = 0;
+            resolveDomainDefenderLose();
+        } else {
+            // Opponent was the checker and gave up → checker dies
+            battleState.attackerHearts = 0;
+            resolveDomainCheckerDies();
+        }
+    }, 1200);
 }
 
 // Resolve the round once both picks are known
@@ -11263,15 +12695,20 @@ function resolveDomainCheckerDies() {
     battleState.over = true;
     setBattleMessage('👑 國王勝！將軍者被消滅。');
 
-    // Victory animation for the player
+    // ★ Local player is the WINNER if they own the king (the defender).
+    const localIsDefender = !!battleState.isDefenderLocal;
     const playerEl = document.getElementById('battlePlayer');
-    if (playerEl) playerEl.classList.add('victory-zoom');
-
-    // Defeat animation for the opponent
     const oppEl = document.getElementById('battleOpponent');
-    if (oppEl) oppEl.classList.add('hit-shake');
 
-    playSFX('victory');
+    if (localIsDefender) {
+        if (playerEl) playerEl.classList.add('victory-zoom');
+        if (oppEl) oppEl.classList.add('hit-shake');
+    } else {
+        if (playerEl) playerEl.classList.add('hit-shake');
+        if (oppEl) oppEl.classList.add('victory-zoom');
+    }
+
+    playSFX(localIsDefender ? 'victory' : 'gameover');
 
     setTimeout(() => {
         document.getElementById('battleOverlay').classList.add('hidden');
@@ -11279,66 +12716,132 @@ function resolveDomainCheckerDies() {
         if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
         const ctx = kingSkillState.context;
         if (ctx) playKillAnimation(ctx.color, ctx.checker);
-    }, 2500); // Increased duration to let the victory animation play
+    }, 2500);
 }
 
 function resolveDomainDefenderLose() {
     battleState.over = true;
     setBattleMessage('💀 國王生命耗盡...');
 
-    // Defeat animation for the player
+    // ★ Local player is the WINNER if they own the checker (the attacker).
+    const localIsDefender = !!battleState.isDefenderLocal;
     const playerEl = document.getElementById('battlePlayer');
-    if (playerEl) playerEl.classList.add('hit-shake');
-
-    // Victory animation for the opponent
     const oppEl = document.getElementById('battleOpponent');
-    if (oppEl) oppEl.classList.add('victory-zoom');
 
-    playSFX('gameover');
+    if (localIsDefender) {
+        if (playerEl) playerEl.classList.add('hit-shake');
+        if (oppEl) oppEl.classList.add('victory-zoom');
+    } else {
+        if (playerEl) playerEl.classList.add('victory-zoom');
+        if (oppEl) oppEl.classList.add('hit-shake');
+    }
+
+    playSFX(localIsDefender ? 'gameover' : 'victory');
 
     setTimeout(() => {
         document.getElementById('battleOverlay').classList.add('hidden');
         if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
         if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
 
-        const defenderColor = battleState
-            ? battleState.defenderColor
-            : (kingSkillState.context?.color || 'white');
-        const winner = defenderColor === 'white' ? 'black' : 'white';
+        const ctx = kingSkillState.context;
+        const kingColor = (battleState && battleState.defenderColor)
+            || (ctx && ctx.color)
+            || 'white';
+        const checker = ctx && ctx.checker;
 
-        if (currentMode === 'multiplayer' && peerConnection?.open &&
-            defenderColor === playerColor) {
-            peerConnection.send({ type: 'domain_result', winner: 'attacker' });
-        }
-
-        kingSkillState.active = false;
-        kingSkillState.context = null;
-        battleState = null;
-        isAnimating = false;
-
-        gameOverFlag = true;
-        stopTimer();
-
-        document.getElementById('gameOverOverlay').classList.remove('hidden');
-        document.getElementById('gameOverReason').textContent = '國王在領域對決中敗北';
-        const text = document.getElementById('gameOverText');
-        if (currentMode === 'ai' || currentMode === 'multiplayer') {
-            if (winner === playerColor) { text.textContent = '你贏了!'; text.className = 'game-over-text win'; }
-            else { text.textContent = '你輸了...'; text.className = 'game-over-text lose'; }
+        if (checker) {
+            kingSkillState.context = { color: kingColor, checker };
+            playKillKingAnimation(kingColor, checker);
         } else {
-            text.textContent = (winner === 'white' ? '白方' : '黑方') + ' 獲勝!';
-            text.className = 'game-over-text win';
+            kingSkillState.active = false;
+            kingSkillState.context = null;
+            battleState = null;
+            isAnimating = false;
+
+            gameOverFlag = true;
+            stopTimer();
+            document.getElementById('gameOverOverlay').classList.remove('hidden');
+            document.getElementById('gameOverReason').textContent = '國王在領域對決中敗北';
+            const winner = kingColor === 'white' ? 'black' : 'white';
+            const text = document.getElementById('gameOverText');
+            if (currentMode === 'ai' || currentMode === 'multiplayer') {
+                if (winner === playerColor) { text.textContent = '你贏了!'; text.className = 'game-over-text win'; }
+                else { text.textContent = '你輸了...'; text.className = 'game-over-text lose'; }
+            } else {
+                text.textContent = (winner === 'white' ? '白方' : '黑方') + ' 獲勝!';
+                text.className = 'game-over-text win';
+            }
         }
     }, 2500);
 }
 
-// ── Kill animation (3D magic laser blast) + board cleanup ──
-function playKillAnimation(defenderColor, checker) {
+// ═══════════════════════════════════════════════════════════════
+//  KILL THEMES — shared palettes for both execution animations
+//  • "light" → the killer is a WHITE piece
+//  • "dark"  → the killer is a BLACK piece
+// ═══════════════════════════════════════════════════════════════
+const KILL_THEMES = {
+    light: {
+        // ground rune
+        runeA: 0xffe27a, runeB: 0xfff8d0,
+        // energy pillar
+        pillarBody: 0xffe9a8, pillarCore: 0xffffff,
+        // charging orb
+        orbCore: 0xffffff, orbGlow: 0xffe27a,
+        orbAura: 0xfff4c0, orbTorusA: 0xffe27a, orbTorusB: 0xfff4c0,
+        // beam (king only)
+        beamCore: 0xffffff, beamMid: 0xffe27a, beamOuter: 0xfff4d0,
+        // impact shock rings
+        shockA: 0xffffff, shockB: 0xffe27a, shockC: 0xfff4d0,
+        // charge-in particles
+        chargeA: 0xffe27a, chargeB: 0xffffff,
+        // caster body glow
+        casterGlow: 0xffe27a, casterAura: 0xfff4c0, casterLerp: 0.95,
+        // blade ring (checker only)
+        bladeCore: 0xffffff, bladeEdge: 0xffe27a, bladeHalo: 0xfff4c0,
+        // shards
+        shardHue: 0.13, shardHueRange: 0.08, shardLight: 0.78,
+        // soul motes
+        soulHue: 0.13, soulHueRange: 0.08,
+        // screen effects
+        flashColor: 0xffffff,
+        vignetteBg:
+            'radial-gradient(circle at 50% 50%,' +
+            'rgba(255,240,200,0) 30%,' +
+            'rgba(180,140,60,0.55) 70%,' +
+            'rgba(40,24,0,0.94) 100%)',
+    },
+    dark: {
+        runeA: 0x9b4ddb, runeB: 0x6a1fcf,
+        pillarBody: 0x4a10a0, pillarCore: 0xd9a6ff,
+        orbCore: 0xd9a6ff, orbGlow: 0x7a1fd9,
+        orbAura: 0x4a10a0, orbTorusA: 0xb44dff, orbTorusB: 0x8a1fd9,
+        beamCore: 0xd9a6ff, beamMid: 0x8a1fd9, beamOuter: 0x4a10a0,
+        shockA: 0xb44dff, shockB: 0x6a1fcf, shockC: 0x4a10a0,
+        chargeA: 0x9b4ddb, chargeB: 0xb44dff,
+        casterGlow: 0xb44dff, casterAura: 0x7a1fd9, casterLerp: 0.85,
+        bladeCore: 0xd9a6ff, bladeEdge: 0x8a1fd9, bladeHalo: 0x4a10a0,
+        shardHue: 0.78, shardHueRange: 0.10, shardLight: 0.60,
+        soulHue: 0.78, soulHueRange: 0.10,
+        flashColor: 0xb44dff,
+        vignetteBg:
+            'radial-gradient(circle at 50% 50%,' +
+            'rgba(80,20,140,0) 30%,' +
+            'rgba(30,5,60,0.75) 70%,' +
+            'rgba(0,0,0,0.96) 100%)',
+    },
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  playKillAnimation — the KING executes the checker (beam style)
+//  Theme follows the king's own color.
+// ═══════════════════════════════════════════════════════════════
+function playKillAnimation(kingColor, checker) {
     isAnimating = true;
 
-    const king = gameState.findKing(defenderColor);
+    const king = gameState.findKing(kingColor);
     if (!king) {
-        finalizeDomainKill(defenderColor, checker);
+        finalizeDomainKill(kingColor, checker);
         return;
     }
 
@@ -11347,6 +12850,11 @@ function playKillAnimation(defenderColor, checker) {
 
     const kingObj = pieceObjects[`${king.r},${king.c}`];
     const victimObj = pieceObjects[`${checker.r},${checker.c}`];
+
+    // ★ Theme by the KING'S own color (the killer)
+    const themeKey = kingColor === 'white' ? 'light' : 'dark';
+    const T = KILL_THEMES[themeKey];
+    const isWhiteKing = (kingColor === 'white');
 
     const ORB_HEIGHT = 1.55;
     const IMPACT_Y = 0.45;
@@ -11357,36 +12865,30 @@ function playKillAnimation(defenderColor, checker) {
     const created = [];
     const track = (obj) => { created.push(obj); return obj; };
 
-    // ═════════════════════════════════════════════════════════
-    //  DOM OVERLAYS — vignette + screen flash
-    // ═════════════════════════════════════════════════════════
+    // ── DOM overlays ──
     const vignette = document.createElement('div');
     vignette.style.cssText = `
         position: fixed; inset: 0; pointer-events: none; z-index: 490;
-        background: radial-gradient(circle at 50% 50%,
-            rgba(0,0,0,0) 30%,
-            rgba(8,0,20,0.55) 70%,
-            rgba(0,0,0,0.92) 100%);
+        background: ${T.vignetteBg};
         opacity: 0; transition: opacity 0.5s ease;
     `;
     document.body.appendChild(vignette);
     requestAnimationFrame(() => { vignette.style.opacity = '1'; });
 
+    const flashHex = '#' + T.flashColor.toString(16).padStart(6, '0');
     const screenFlash = document.createElement('div');
     screenFlash.style.cssText = `
         position: fixed; inset: 0; pointer-events: none; z-index: 495;
         background: radial-gradient(circle at 50% 50%,
-            #ffffff 0%,
-            rgba(255,240,200,0.9) 25%,
-            rgba(255,200,120,0.4) 50%,
+            ${flashHex} 0%,
+            ${flashHex}cc 25%,
+            ${flashHex}55 50%,
             rgba(0,0,0,0) 75%);
         opacity: 0;
     `;
     document.body.appendChild(screenFlash);
 
-    // ═════════════════════════════════════════════════════════
-    //  SNAPSHOT MATERIALS
-    // ═════════════════════════════════════════════════════════
+    // ── Snapshot the king's materials so we can animate its glow ──
     const kingMats = [];
     if (kingObj) {
         kingObj.traverse(n => {
@@ -11400,6 +12902,7 @@ function playKillAnimation(defenderColor, checker) {
         });
     }
 
+    // ── Victim becomes transparent so we can flash it white ──
     const victimMats = [];
     if (victimObj) {
         victimObj.traverse(n => {
@@ -11415,14 +12918,14 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     // ═════════════════════════════════════════════════════════
-    //  1. GROUND RUNE CIRCLE (under the king)
+    //  1. Ground rune under the king
     // ═════════════════════════════════════════════════════════
     const runeGroup = track(new THREE.Group());
     runeGroup.position.set(kingPos.x, 0.08, kingPos.z);
     scene.add(runeGroup);
 
     const runeMat1 = new THREE.MeshBasicMaterial({
-        color: 0xd9a6ff, transparent: true, opacity: 0,
+        color: T.runeA, transparent: true, opacity: 0,
         depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
@@ -11431,7 +12934,7 @@ function playKillAnimation(defenderColor, checker) {
     runeGroup.add(runeRing1);
 
     const runeMat2 = new THREE.MeshBasicMaterial({
-        color: 0xffe27a, transparent: true, opacity: 0,
+        color: T.runeB, transparent: true, opacity: 0,
         depthWrite: false, side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
     });
@@ -11441,11 +12944,10 @@ function playKillAnimation(defenderColor, checker) {
     runeGroup.add(runeRing2);
 
     const runeTicks = [];
-    const RUNE_TICKS = 12;
-    for (let i = 0; i < RUNE_TICKS; i++) {
-        const a = (i / RUNE_TICKS) * Math.PI * 2;
+    for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
         const tm = new THREE.MeshBasicMaterial({
-            color: 0xffe27a, transparent: true, opacity: 0,
+            color: T.runeB, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
         });
@@ -11458,10 +12960,10 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     // ═════════════════════════════════════════════════════════
-    //  2. RISING ENERGY PILLAR
+    //  2. Rising energy pillar under the king
     // ═════════════════════════════════════════════════════════
     const pillarMat = new THREE.MeshBasicMaterial({
-        color: 0xd9a6ff, transparent: true, opacity: 0,
+        color: T.pillarBody, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11474,7 +12976,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(pillar);
 
     const corePillarMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0,
+        color: T.pillarCore, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11487,10 +12989,10 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(corePillar);
 
     // ═════════════════════════════════════════════════════════
-    //  3. CHARGING ORB (nested spheres + 2 rotating torus rings)
+    //  3. Charging orb (nested spheres + 2 rotating torus rings)
     // ═════════════════════════════════════════════════════════
     const orbCoreMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0,
+        color: T.orbCore, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const orbCore = track(new THREE.Mesh(new THREE.SphereGeometry(0.16, 20, 20), orbCoreMat));
@@ -11499,7 +13001,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(orbCore);
 
     const orbGlowMat = new THREE.MeshBasicMaterial({
-        color: 0xffe27a, transparent: true, opacity: 0,
+        color: T.orbGlow, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const orbGlow = track(new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 20), orbGlowMat));
@@ -11508,7 +13010,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(orbGlow);
 
     const orbAuraMat = new THREE.MeshBasicMaterial({
-        color: 0xd9a6ff, transparent: true, opacity: 0,
+        color: T.orbAura, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11518,7 +13020,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(orbAura);
 
     const orbTorusMat1 = new THREE.MeshBasicMaterial({
-        color: 0xffe27a, transparent: true, opacity: 0,
+        color: T.orbTorusA, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11528,7 +13030,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(orbTorus1);
 
     const orbTorusMat2 = new THREE.MeshBasicMaterial({
-        color: 0xd9a6ff, transparent: true, opacity: 0,
+        color: T.orbTorusB, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11538,13 +13040,13 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(orbTorus2);
 
     // ═════════════════════════════════════════════════════════
-    //  4. CHARGE-IN PARTICLES
+    //  4. Charge-in particles
     // ═════════════════════════════════════════════════════════
     const chargeParticles = [];
     for (let i = 0; i < 48; i++) {
         const pg = new THREE.SphereGeometry(0.020 + Math.random() * 0.024, 5, 5);
         const pm = new THREE.MeshBasicMaterial({
-            color: Math.random() < 0.5 ? 0xffe27a : 0xd9a6ff,
+            color: Math.random() < 0.5 ? T.chargeA : T.chargeB,
             transparent: true, opacity: 0,
             blending: THREE.AdditiveBlending, depthWrite: false,
         });
@@ -11564,7 +13066,7 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     // ═════════════════════════════════════════════════════════
-    //  5. LASER BEAM (3 concentric cylinders + spiral helix)
+    //  5. Beam (king → checker)
     // ═════════════════════════════════════════════════════════
     const beamDir = new THREE.Vector3().subVectors(impactPos, orbPos);
     const beamLen = beamDir.length();
@@ -11575,7 +13077,7 @@ function playKillAnimation(defenderColor, checker) {
     );
 
     const beamCoreMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0,
+        color: T.beamCore, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const beamCore = track(new THREE.Mesh(
@@ -11588,7 +13090,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(beamCore);
 
     const beamMidMat = new THREE.MeshBasicMaterial({
-        color: 0xffe27a, transparent: true, opacity: 0,
+        color: T.beamMid, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11602,7 +13104,7 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(beamMidMesh);
 
     const beamOuterMat = new THREE.MeshBasicMaterial({
-        color: 0xd9a6ff, transparent: true, opacity: 0,
+        color: T.beamOuter, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
         side: THREE.DoubleSide,
     });
@@ -11615,22 +13117,19 @@ function playKillAnimation(defenderColor, checker) {
     beamOuter.renderOrder = 58;
     scene.add(beamOuter);
 
-    // Spiral helix particles around the beam
+    // Spiral helix around the beam
     const beamHelix = [];
-    const HELIX_COUNT = 36;
-    const HELIX_RADIUS = 0.28;
-
     const beamDirN = beamDir.clone().normalize();
     const beamRight = new THREE.Vector3(beamDirN.z, 0, -beamDirN.x);
     if (beamRight.lengthSq() < 0.001) beamRight.set(1, 0, 0);
     beamRight.normalize();
     const beamUp = new THREE.Vector3().crossVectors(beamDirN, beamRight).normalize();
 
-    for (let i = 0; i < HELIX_COUNT; i++) {
-        const tLocal = i / (HELIX_COUNT - 1);
+    for (let i = 0; i < 36; i++) {
+        const tLocal = i / 35;
         const pg = new THREE.SphereGeometry(0.028 + Math.random() * 0.022, 5, 5);
         const pm = new THREE.MeshBasicMaterial({
-            color: Math.random() < 0.5 ? 0xffffff : 0xffe27a,
+            color: Math.random() < 0.5 ? T.beamCore : T.beamMid,
             transparent: true, opacity: 0,
             blending: THREE.AdditiveBlending, depthWrite: false,
         });
@@ -11642,13 +13141,13 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     // ═════════════════════════════════════════════════════════
-    //  6. IMPACT — 3 staggered shock rings + flash sphere
+    //  6. Impact — shock rings + flash
     // ═════════════════════════════════════════════════════════
     const shockRings = [];
+    const shockColors = [T.shockA, T.shockB, T.shockC];
     for (let i = 0; i < 3; i++) {
         const rm = new THREE.MeshBasicMaterial({
-            color: i === 0 ? 0xffffff : (i === 1 ? 0xffe27a : 0xd9a6ff),
-            transparent: true, opacity: 0,
+            color: shockColors[i], transparent: true, opacity: 0,
             side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending, depthWrite: false,
         });
@@ -11661,7 +13160,7 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     const impactMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0,
+        color: T.flashColor, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const impactSphere = track(new THREE.Mesh(
@@ -11673,16 +13172,16 @@ function playKillAnimation(defenderColor, checker) {
     scene.add(impactSphere);
 
     // ═════════════════════════════════════════════════════════
-    //  7. SHARD BURST — victim explodes into flying tetrahedrons
+    //  7. Shard burst
     // ═════════════════════════════════════════════════════════
     const shards = [];
     for (let i = 0; i < 40; i++) {
         const sg = new THREE.TetrahedronGeometry(0.045 + Math.random() * 0.08, 0);
         const sm = new THREE.MeshBasicMaterial({
             color: new THREE.Color().setHSL(
-                0.06 + Math.random() * 0.14,
+                T.shardHue + Math.random() * T.shardHueRange,
                 1.0,
-                0.55 + Math.random() * 0.30
+                T.shardLight - 0.20 + Math.random() * 0.30
             ),
             transparent: true, opacity: 0,
             blending: THREE.AdditiveBlending, depthWrite: false,
@@ -11705,14 +13204,14 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     // ═════════════════════════════════════════════════════════
-    //  8. SOUL MOTES (rising from victim)
+    //  8. Soul motes
     // ═════════════════════════════════════════════════════════
     const souls = [];
     for (let i = 0; i < 28; i++) {
         const sg = new THREE.SphereGeometry(0.022 + Math.random() * 0.028, 5, 5);
         const sm = new THREE.MeshBasicMaterial({
             color: new THREE.Color().setHSL(
-                0.72 + Math.random() * 0.10,
+                T.soulHue + Math.random() * T.soulHueRange,
                 0.9,
                 0.65 + Math.random() * 0.25
             ),
@@ -11740,15 +13239,14 @@ function playKillAnimation(defenderColor, checker) {
     }
 
     // ═════════════════════════════════════════════════════════
-    //  9. EXPLOSION SPARK CLOUD (spawned on impact)
+    //  9. Explosion spark cloud
     // ═════════════════════════════════════════════════════════
     const explosionParticles = [];
     let explosionSpawned = false;
-
     const spawnExplosion = () => {
         for (let i = 0; i < 80; i++) {
             const pg = new THREE.SphereGeometry(0.030 + Math.random() * 0.055, 5, 5);
-            const hue = 0.06 + Math.random() * 0.18;
+            const hue = T.shardHue + Math.random() * T.shardHueRange;
             const pm = new THREE.MeshBasicMaterial({
                 color: new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.35),
                 transparent: true, opacity: 1,
@@ -11782,23 +13280,27 @@ function playKillAnimation(defenderColor, checker) {
     const VICTIM_HIDE_AT = 1.30;
     const TOTAL = 3.40;
 
-    const KING_GLOW = new THREE.Color(0xffe27a);
-    const KING_AURA = new THREE.Color(0xd9a6ff);
-    const VICTIM_WHITE = new THREE.Color(0xffffff);
+    // Themed king's glow during charge-up
+    const KING_GLOW = new THREE.Color(T.casterGlow);
+    const KING_AURA = new THREE.Color(T.casterAura);
+    const KING_COLOR_LERP = T.casterLerp;
+    const KING_AURA_POWER = isWhiteKing ? 1.00 : 1.35;
+
+    const VICTIM_FLASH = new THREE.Color(T.flashColor);
 
     const animate = () => {
         const t = clock.getElapsedTime() - t0;
 
-        // ── KING glow ramp ──
+        // ── King glow ramp ──
         if (kingMats.length > 0) {
             const k = Math.min(1, t / CHARGE_END);
             const pulse = 0.5 + 0.5 * Math.sin(t * 20);
             for (const m of kingMats) {
-                const c = m.color.clone().lerp(KING_GLOW, k * 0.95);
+                const c = m.color.clone().lerp(KING_GLOW, k * KING_COLOR_LERP);
                 m.mesh.material.color.copy(c);
                 if (m.mesh.material.emissive) {
                     m.mesh.material.emissive.copy(KING_AURA)
-                        .multiplyScalar(k * (0.35 + pulse * 0.4));
+                        .multiplyScalar(k * (0.35 + pulse * 0.4) * KING_AURA_POWER);
                     m.mesh.material.emissiveIntensity = 1;
                 }
             }
@@ -11875,7 +13377,6 @@ function playKillAnimation(defenderColor, checker) {
             const wob = 1 + 0.15 * Math.sin(ft * 40);
             beamOuter.scale.set(wob, 1, wob);
 
-            // Helix wrapped around the beam
             const helixSpin = ft * 30;
             for (const p of beamHelix) {
                 const tLocal = p.userData.tLocal;
@@ -11883,8 +13384,8 @@ function playKillAnimation(defenderColor, checker) {
                 const taper = 1 - tLocal * 0.5;
                 const worldPos = orbPos.clone()
                     .add(beamDirN.clone().multiplyScalar(tLocal * beamLen))
-                    .add(beamRight.clone().multiplyScalar(Math.cos(angle) * HELIX_RADIUS * taper))
-                    .add(beamUp.clone().multiplyScalar(Math.sin(angle) * HELIX_RADIUS * taper));
+                    .add(beamRight.clone().multiplyScalar(Math.cos(angle) * 0.28 * taper))
+                    .add(beamUp.clone().multiplyScalar(Math.sin(angle) * 0.28 * taper));
                 p.position.copy(worldPos);
                 p.material.opacity = 0.95 * fade;
                 p.scale.setScalar(0.7 + 0.5 * fade);
@@ -11898,7 +13399,7 @@ function playKillAnimation(defenderColor, checker) {
             for (const p of beamHelix) p.material.opacity = 0;
         }
 
-        // ── Orb collapse the instant the beam fires ──
+        // Orb collapse
         if (t >= FIRE_AT) {
             const killK = Math.min(1, (t - FIRE_AT) / 0.15);
             orbCoreMat.opacity = Math.max(0, 0.95 * (1 - killK));
@@ -11933,37 +13434,33 @@ function playKillAnimation(defenderColor, checker) {
         // ── Shock rings ──
         for (const sr of shockRings) {
             const st = t - IMPACT_AT - sr.delay;
-            if (st < 0 || st > 0.75) {
-                sr.mat.opacity = 0;
-                continue;
-            }
+            if (st < 0 || st > 0.75) { sr.mat.opacity = 0; continue; }
             const prog = st / 0.75;
             sr.mat.opacity = 0.9 * (1 - prog);
             const s = 1 + prog * sr.maxScale;
             sr.mesh.scale.set(s, s, 1);
         }
 
-        // ── Victim white-flash ──
+        // ── Victim flash ──
         if (t >= IMPACT_AT && victimMats.length > 0 && victimObj) {
             const vt = Math.min(1, (t - IMPACT_AT) / 0.10);
-            const whiteMix = Math.min(1, vt * 2.5);
+            const flashMix = Math.min(1, vt * 2.5);
             for (const m of victimMats) {
-                const c = m.color.clone().lerp(VICTIM_WHITE, whiteMix);
+                const c = m.color.clone().lerp(VICTIM_FLASH, flashMix);
                 m.mesh.material.color.copy(c);
                 if (m.mesh.material.emissive) {
-                    m.mesh.material.emissive.setRGB(1, 0.9, 0.65);
-                    m.mesh.material.emissiveIntensity = whiteMix * 2.0;
+                    m.mesh.material.emissive.copy(VICTIM_FLASH);
+                    m.mesh.material.emissiveIntensity = flashMix * 2.0;
                 }
                 m.mesh.material.opacity = Math.max(0.05, 1 - vt * 0.8);
             }
         }
 
-        // ── Hide victim, spawn shards + souls ──
+        // ── Hide victim + fly shards/souls ──
         if (t >= VICTIM_HIDE_AT) {
             if (victimObj && victimObj.visible) victimObj.visible = false;
             const st = t - VICTIM_HIDE_AT;
 
-            // Shards fly outward
             for (const shard of shards) {
                 if (st > 2.0) { shard.material.opacity = 0; continue; }
                 shard.position.addScaledVector(shard.userData.vel, 0.016);
@@ -11976,7 +13473,6 @@ function playKillAnimation(defenderColor, checker) {
                 shard.scale.setScalar(Math.max(0.1, 1 - lifeT * 0.7));
             }
 
-            // Souls drift upward
             for (const soul of souls) {
                 const lt = st / soul.userData.life;
                 if (lt < 0 || lt > 1) { soul.material.opacity = 0; continue; }
@@ -12002,12 +13498,11 @@ function playKillAnimation(defenderColor, checker) {
             p.scale.setScalar(1 - lt * 0.4);
         }
 
-        // ── Advance ──
         if (t < TOTAL) {
             requestAnimationFrame(animate);
         } else {
             disposeAll();
-            finalizeDomainKill(defenderColor, checker);
+            finalizeDomainKill(kingColor, checker);
         }
     };
 
@@ -12046,6 +13541,9 @@ function finalizeDomainKill(defenderColor, checker) {
 
     syncPiecesAfterMove();
 
+    // ★ 領域展開算一步棋 — 將軍者被消滅後，回合交給對手
+    gameState.flipTurn();
+
     // Broadcast result to the opponent
     if (currentMode === 'multiplayer' && peerConnection?.open && defenderColor === playerColor) {
         peerConnection.send({
@@ -12069,6 +13567,660 @@ function finalizeDomainKill(defenderColor, checker) {
     if (!gameOverFlag && currentMode === 'ai' && gameState.turn !== playerColor) {
         aiThinking = true;
         setTimeout(makeAIMove, 500);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  playKillKingAnimation — the CHECKER executes the king.
+//  Completely different style from the king's beam:
+//  the checker charges up, then 12 energy blades materialise
+//  in a ring around the king, spin briefly, and all dart inward
+//  at once. Theme follows the CHECKER's color.
+// ═══════════════════════════════════════════════════════════════
+function playKillKingAnimation(kingColor, checker) {
+    isAnimating = true;
+
+    const king = gameState.findKing(kingColor);
+    if (!king) {
+        finalizeKingKill(kingColor, checker);
+        return;
+    }
+
+    const kingPos = get3DPosition(king.r, king.c, 0);
+    const attackerPos = get3DPosition(checker.r, checker.c, 0);
+
+    const kingObj = pieceObjects[`${king.r},${king.c}`];
+    const attackerObj = pieceObjects[`${checker.r},${checker.c}`];
+
+    // ★ The attacker's color is the opposite of the king's.
+    //   White attacker → light theme.  Black attacker → dark theme.
+    const attackerColor = kingColor === 'white' ? 'black' : 'white';
+    const themeKey = attackerColor === 'white' ? 'light' : 'dark';
+    const T = KILL_THEMES[themeKey];
+
+    const created = [];
+    const track = (obj) => { created.push(obj); return obj; };
+
+    // ── DOM overlays ──
+    const vignette = document.createElement('div');
+    vignette.style.cssText = `
+        position: fixed; inset: 0; pointer-events: none; z-index: 490;
+        background: ${T.vignetteBg};
+        opacity: 0; transition: opacity 0.5s ease;
+    `;
+    document.body.appendChild(vignette);
+    requestAnimationFrame(() => { vignette.style.opacity = '1'; });
+
+    const flashHex = '#' + T.flashColor.toString(16).padStart(6, '0');
+    const screenFlash = document.createElement('div');
+    screenFlash.style.cssText = `
+        position: fixed; inset: 0; pointer-events: none; z-index: 495;
+        background: radial-gradient(circle at 50% 50%,
+            ${flashHex} 0%,
+            ${flashHex}cc 25%,
+            ${flashHex}55 50%,
+            rgba(0,0,0,0) 75%);
+        opacity: 0;
+    `;
+    document.body.appendChild(screenFlash);
+
+    // ── Snapshot the attacker's materials so it can glow during charge ──
+    const attackerMats = [];
+    if (attackerObj) {
+        attackerObj.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                attackerMats.push({
+                    mesh: n,
+                    color: n.material.color.clone(),
+                    emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                });
+            }
+        });
+    }
+
+    // ── The victim king becomes transparent so we can flash it ──
+    const kingMats = [];
+    if (kingObj) {
+        kingObj.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                n.material.transparent = true;
+                kingMats.push({
+                    mesh: n,
+                    color: n.material.color.clone(),
+                    emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                });
+            }
+        });
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  1. Ground rune under the ATTACKER
+    // ═════════════════════════════════════════════════════════
+    const runeGroup = track(new THREE.Group());
+    runeGroup.position.set(attackerPos.x, 0.08, attackerPos.z);
+    scene.add(runeGroup);
+
+    const runeMat1 = new THREE.MeshBasicMaterial({
+        color: T.runeA, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const runeRing1 = track(new THREE.Mesh(new THREE.RingGeometry(0.55, 0.62, 64), runeMat1));
+    runeRing1.rotation.x = -Math.PI / 2;
+    runeGroup.add(runeRing1);
+
+    const runeMat2 = new THREE.MeshBasicMaterial({
+        color: T.runeB, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const runeRing2 = track(new THREE.Mesh(new THREE.RingGeometry(0.80, 0.86, 64), runeMat2));
+    runeRing2.rotation.x = -Math.PI / 2;
+    runeRing2.position.y = 0.004;
+    runeGroup.add(runeRing2);
+
+    const runeTicks = [];
+    for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const tm = new THREE.MeshBasicMaterial({
+            color: T.runeB, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const tick = track(new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.032), tm));
+        tick.position.set(Math.cos(a) * 0.71, 0.002, Math.sin(a) * 0.71);
+        tick.rotation.x = -Math.PI / 2;
+        tick.rotation.z = -a;
+        runeGroup.add(tick);
+        runeTicks.push({ mesh: tick, mat: tm });
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  2. Charging motes that spiral into the attacker
+    // ═════════════════════════════════════════════════════════
+    const chargeMotes = [];
+    for (let i = 0; i < 40; i++) {
+        const pg = new THREE.SphereGeometry(0.020 + Math.random() * 0.022, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? T.chargeA : T.chargeB,
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const p = track(new THREE.Mesh(pg, pm));
+        p.position.set(attackerPos.x, 0.5, attackerPos.z);
+        p.renderOrder = 51;
+        const a = Math.random() * Math.PI * 2;
+        const r = 1.2 + Math.random() * 1.4;
+        p.userData = {
+            baseAngle: a, startR: r,
+            spinSpeed: 4 + Math.random() * 5,
+            startY: 0.4 + Math.random() * 1.6,
+            delay: Math.random() * 0.6,
+        };
+        scene.add(p);
+        chargeMotes.push(p);
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  3. THE BLADE RING — 12 energy blades around the king
+    // ═════════════════════════════════════════════════════════
+    const BLADE_COUNT = 12;
+    const OUTER_R = 1.75;
+    const INNER_R = 0.15;
+    const BLADE_Y = 0.85;
+    const blades = [];
+
+    for (let i = 0; i < BLADE_COUNT; i++) {
+        const angle = (i / BLADE_COUNT) * Math.PI * 2;
+
+        const bladeGroup = new THREE.Group();
+        bladeGroup.position.set(
+            kingPos.x + Math.cos(angle) * OUTER_R,
+            BLADE_Y,
+            kingPos.z + Math.sin(angle) * OUTER_R
+        );
+
+        // Point the blade's local +Y toward the centre (and slightly down)
+        const inwardDir = new THREE.Vector3(
+            -Math.cos(angle), -0.22, -Math.sin(angle)
+        ).normalize();
+        bladeGroup.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0), inwardDir
+        );
+
+        // ── Blade body (dark/coloured slab) ──
+        const bodyMat = new THREE.MeshBasicMaterial({
+            color: T.bladeEdge, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+        const bodyGeo = new THREE.BoxGeometry(0.08, 0.85, 0.03);
+        const body = track(new THREE.Mesh(bodyGeo, bodyMat));
+        body.position.y = 0.425;                 // extends outward from base
+        body.renderOrder = 70;
+        bladeGroup.add(body);
+
+        // ── Bright core along the blade ──
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: T.bladeCore, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+        const coreGeo = new THREE.BoxGeometry(0.035, 0.82, 0.014);
+        const coreMesh = track(new THREE.Mesh(coreGeo, coreMat));
+        coreMesh.position.y = 0.425;
+        coreMesh.renderOrder = 71;
+        bladeGroup.add(coreMesh);
+
+        // ── Outer halo (soft glow) ──
+        const haloMat = new THREE.MeshBasicMaterial({
+            color: T.bladeHalo, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+            side: THREE.BackSide,
+        });
+        const haloGeo = new THREE.BoxGeometry(0.22, 0.95, 0.16);
+        const halo = track(new THREE.Mesh(haloGeo, haloMat));
+        halo.position.y = 0.425;
+        halo.renderOrder = 69;
+        bladeGroup.add(halo);
+
+        // ── Tip (small cone at the far end) ──
+        const tipMat = new THREE.MeshBasicMaterial({
+            color: T.bladeCore, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const tipGeo = new THREE.ConeGeometry(0.06, 0.18, 4);
+        const tip = track(new THREE.Mesh(tipGeo, tipMat));
+        tip.position.y = 0.85 + 0.08;
+        tip.rotation.y = Math.PI / 4;
+        tip.renderOrder = 72;
+        bladeGroup.add(tip);
+
+        scene.add(bladeGroup);
+
+        blades.push({
+            group: bladeGroup,
+            bodyMat, coreMat, haloMat, tipMat,
+            angle,
+            // stagger the "materialise" moment
+            spawnDelay: i * 0.035,
+            // every blade spins around its own long axis
+            spin: (i % 2 === 0 ? 1 : -1) * (4 + Math.random() * 3),
+        });
+    }
+
+    // ═════════════════════════════════════════════════════════
+    //  4. Impact — shock rings + flash sphere
+    // ═════════════════════════════════════════════════════════
+    const shockRings = [];
+    const shockColors = [T.shockA, T.shockB, T.shockC];
+    for (let i = 0; i < 3; i++) {
+        const rm = new THREE.MeshBasicMaterial({
+            color: shockColors[i], transparent: true, opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const r = track(new THREE.Mesh(new THREE.RingGeometry(0.30, 0.48, 64), rm));
+        r.rotation.x = -Math.PI / 2;
+        r.position.set(kingPos.x, 0.05 + i * 0.01, kingPos.z);
+        r.renderOrder = 55 + i;
+        scene.add(r);
+        shockRings.push({ mesh: r, mat: rm, delay: i * 0.10, maxScale: 5.5 + i * 1.6 });
+    }
+
+    const impactMat = new THREE.MeshBasicMaterial({
+        color: T.flashColor, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const impactSphere = track(new THREE.Mesh(
+        new THREE.SphereGeometry(0.45, 20, 20),
+        impactMat
+    ));
+    impactSphere.position.set(kingPos.x, 0.65, kingPos.z);
+    impactSphere.renderOrder = 62;
+    scene.add(impactSphere);
+
+    // ═════════════════════════════════════════════════════════
+    //  5. Shards + soul motes + explosion cloud
+    // ═════════════════════════════════════════════════════════
+    const shards = [];
+    for (let i = 0; i < 48; i++) {
+        const sg = new THREE.TetrahedronGeometry(0.045 + Math.random() * 0.09, 0);
+        const sm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(
+                T.shardHue + Math.random() * T.shardHueRange,
+                1.0,
+                T.shardLight - 0.20 + Math.random() * 0.30
+            ),
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const shard = track(new THREE.Mesh(sg, sm));
+        shard.renderOrder = 65;
+        shard.position.set(kingPos.x, 0.65, kingPos.z);
+        shard.userData.vel = new THREE.Vector3(
+            (Math.random() - 0.5) * 7,
+            2.5 + Math.random() * 5.0,
+            (Math.random() - 0.5) * 7
+        );
+        shard.userData.spin = new THREE.Vector3(
+            (Math.random() - 0.5) * 16,
+            (Math.random() - 0.5) * 16,
+            (Math.random() - 0.5) * 16
+        );
+        scene.add(shard);
+        shards.push(shard);
+    }
+
+    const souls = [];
+    for (let i = 0; i < 32; i++) {
+        const sg = new THREE.SphereGeometry(0.022 + Math.random() * 0.028, 5, 5);
+        const sm = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(
+                T.soulHue + Math.random() * T.soulHueRange,
+                0.9,
+                0.65 + Math.random() * 0.25
+            ),
+            transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const soul = track(new THREE.Mesh(sg, sm));
+        soul.renderOrder = 66;
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.10 + Math.random() * 0.35;
+        soul.position.set(
+            kingPos.x + Math.cos(a) * r,
+            0.65 + Math.random() * 0.2,
+            kingPos.z + Math.sin(a) * r
+        );
+        soul.userData.vel = new THREE.Vector3(
+            Math.cos(a) * 0.30,
+            1.6 + Math.random() * 1.8,
+            Math.sin(a) * 0.30
+        );
+        soul.userData.life = 1.0 + Math.random() * 0.6;
+        soul.userData.phase = Math.random() * Math.PI * 2;
+        scene.add(soul);
+        souls.push(soul);
+    }
+
+    const explosionParticles = [];
+    let explosionSpawned = false;
+    const spawnExplosion = () => {
+        for (let i = 0; i < 90; i++) {
+            const pg = new THREE.SphereGeometry(0.030 + Math.random() * 0.055, 5, 5);
+            const hue = T.shardHue + Math.random() * T.shardHueRange;
+            const pm = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.35),
+                transparent: true, opacity: 1,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const p = track(new THREE.Mesh(pg, pm));
+            p.position.set(kingPos.x, 0.65, kingPos.z);
+            p.renderOrder = 63;
+            const a = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            const speed = 2.5 + Math.random() * 5.5;
+            p.userData.vel = new THREE.Vector3(
+                Math.sin(phi) * Math.cos(a) * speed,
+                Math.abs(Math.cos(phi)) * speed * 1.3 + 1.5,
+                Math.sin(phi) * Math.sin(a) * speed
+            );
+            p.userData.bornAt = clock.getElapsedTime();
+            p.userData.life = 0.9 + Math.random() * 0.7;
+            scene.add(p);
+            explosionParticles.push(p);
+        }
+    };
+
+    // ═════════════════════════════════════════════════════════
+    //  TIMELINE
+    //   0.00 – 1.05  CHARGE  (rune + spiral motes)
+    //   1.05 – 1.45  SPIN    (blades materialise + spin)
+    //   1.45 – 1.75  SPIN 2  (blades drift a tiny bit inward)
+    //   1.75 – 1.90  STRIKE  (blades dart inward together)
+    //   1.90         IMPACT  (king flash + explosion)
+    //   1.95         shards/souls launch
+    //   3.40         END
+    // ═════════════════════════════════════════════════════════
+    const t0 = clock.getElapsedTime();
+    const CHARGE_END = 1.05;
+    const BLADE_IN_END = 1.45;
+    const SPIN_END = 1.75;
+    const STRIKE_END = 1.90;      // == IMPACT_AT
+    const VICTIM_HIDE_AT = 1.96;
+    const TOTAL = 3.40;
+
+    const CASTER_GLOW = new THREE.Color(T.casterGlow);
+    const CASTER_AURA = new THREE.Color(T.casterAura);
+    const VICTIM_FLASH = new THREE.Color(T.flashColor);
+
+    const animate = () => {
+        const t = clock.getElapsedTime() - t0;
+
+        // ── Attacker glow ramp ──
+        if (attackerMats.length > 0) {
+            const k = Math.min(1, t / CHARGE_END);
+            const pulse = 0.5 + 0.5 * Math.sin(t * 20);
+            for (const m of attackerMats) {
+                const c = m.color.clone().lerp(CASTER_GLOW, k * 0.85);
+                m.mesh.material.color.copy(c);
+                if (m.mesh.material.emissive) {
+                    m.mesh.material.emissive.copy(CASTER_AURA)
+                        .multiplyScalar(k * (0.35 + pulse * 0.5));
+                    m.mesh.material.emissiveIntensity = 1;
+                }
+            }
+        }
+
+        // ── Rune circle ──
+        {
+            const appear = Math.min(1, t / 0.35);
+            const fadeOut = Math.max(0, 1 - Math.max(0, t - CHARGE_END + 0.3) / 0.4);
+            const k = appear * fadeOut;
+            runeMat1.opacity = 0.85 * k;
+            runeMat2.opacity = 0.65 * k;
+            for (const tk of runeTicks) tk.mat.opacity = 0.85 * k;
+            runeGroup.rotation.y += 0.04;
+        }
+
+        // ── Charge motes spiral into the attacker ──
+        if (t < CHARGE_END + 0.2) {
+            for (const p of chargeMotes) {
+                const pt = t - p.userData.delay;
+                if (pt < 0) { p.material.opacity = 0; continue; }
+                const lk = Math.min(1, pt / 0.9);
+                const angle = p.userData.baseAngle + pt * p.userData.spinSpeed;
+                const r = p.userData.startR * (1 - lk) * (1 - lk * 0.3);
+                const y = p.userData.startY + (0.4 - p.userData.startY) * lk;
+                p.position.set(
+                    attackerPos.x + Math.cos(angle) * r,
+                    y,
+                    attackerPos.z + Math.sin(angle) * r
+                );
+                p.material.opacity = (1 - lk) * 0.95;
+                p.scale.setScalar(1 - lk * 0.5);
+            }
+        }
+
+        // ── Blade ring ──
+        {
+            // Overall blade alpha curve: 0 → 1 during BLADE_IN, then hold,
+            // then 0 after strike.
+            const inProgress = Math.max(0, Math.min(1,
+                (t - CHARGE_END) / (BLADE_IN_END - CHARGE_END)));
+
+            // Global reveal envelope
+            const reveal =
+                t < CHARGE_END ? 0 :
+                    t < BLADE_IN_END ? inProgress :
+                        t < VICTIM_HIDE_AT ? 1 :
+                            Math.max(0, 1 - (t - VICTIM_HIDE_AT) / 0.25);
+
+            // Inward radius: OUTER_R → INNER_R during STRIKE window
+            const strikeProgress = (t >= SPIN_END && t <= STRIKE_END)
+                ? (t - SPIN_END) / (STRIKE_END - SPIN_END)
+                : (t > STRIKE_END ? 1 : 0);
+            const eased = strikeProgress * strikeProgress;   // ease-in (fast finish)
+            const radius = OUTER_R + (INNER_R - OUTER_R) * eased;
+
+            // Gentle spin applied to the whole ring during the charge
+            const ringSpin = t * 0.6;
+
+            for (const b of blades) {
+                const localReveal = Math.max(0, Math.min(1,
+                    (t - CHARGE_END - b.spawnDelay) / 0.20));
+                const alpha = localReveal * reveal;
+
+                // Compute this blade's current position on the ring
+                const angle = b.angle + ringSpin;
+                const px = kingPos.x + Math.cos(angle) * radius;
+                const pz = kingPos.z + Math.sin(angle) * radius;
+                b.group.position.set(px, BLADE_Y, pz);
+
+                // Keep the blade pointing at the king
+                const inward = new THREE.Vector3(
+                    -Math.cos(angle), -0.22, -Math.sin(angle)
+                ).normalize();
+                b.group.quaternion.setFromUnitVectors(
+                    new THREE.Vector3(0, 1, 0), inward
+                );
+
+                // Self-spin around its own long axis
+                b.group.rotateY(t * b.spin);
+
+                // Fade in / out
+                b.bodyMat.opacity = alpha * 0.95;
+                b.coreMat.opacity = alpha * (0.85 + 0.15 * Math.sin(t * 24 + b.angle));
+                b.haloMat.opacity = alpha * 0.55;
+                b.tipMat.opacity = alpha * 0.95;
+            }
+        }
+
+        // ── IMPACT trigger ──
+        if (t >= STRIKE_END && !explosionSpawned) {
+            explosionSpawned = true;
+            spawnExplosion();
+        }
+
+        // ── Screen flash ──
+        if (t >= STRIKE_END && t < STRIKE_END + 0.18) {
+            screenFlash.style.opacity = String(1 - (t - STRIKE_END) / 0.18);
+        } else if (t >= STRIKE_END + 0.18) {
+            screenFlash.style.opacity = '0';
+        }
+
+        // ── Impact flash sphere ──
+        if (t >= STRIKE_END && t < STRIKE_END + 0.55) {
+            const it = (t - STRIKE_END) / 0.55;
+            impactMat.opacity = 0.98 * (1 - it) * (1 - it);
+            impactSphere.scale.setScalar(0.5 + it * 5.8);
+        } else if (t >= STRIKE_END + 0.55) {
+            impactMat.opacity = 0;
+        }
+
+        // ── Shock rings ──
+        for (const sr of shockRings) {
+            const st = t - STRIKE_END - sr.delay;
+            if (st < 0 || st > 0.75) { sr.mat.opacity = 0; continue; }
+            const prog = st / 0.75;
+            sr.mat.opacity = 0.9 * (1 - prog);
+            const s = 1 + prog * sr.maxScale;
+            sr.mesh.scale.set(s, s, 1);
+        }
+
+        // ── King white-flash ──
+        if (t >= STRIKE_END && kingMats.length > 0 && kingObj) {
+            const vt = Math.min(1, (t - STRIKE_END) / 0.10);
+            const flashMix = Math.min(1, vt * 2.5);
+            for (const m of kingMats) {
+                const c = m.color.clone().lerp(VICTIM_FLASH, flashMix);
+                m.mesh.material.color.copy(c);
+                if (m.mesh.material.emissive) {
+                    m.mesh.material.emissive.copy(VICTIM_FLASH);
+                    m.mesh.material.emissiveIntensity = flashMix * 2.2;
+                }
+                m.mesh.material.opacity = Math.max(0.05, 1 - vt * 0.8);
+            }
+        }
+
+        // ── Hide king, fly shards + souls ──
+        if (t >= VICTIM_HIDE_AT) {
+            if (kingObj && kingObj.visible) kingObj.visible = false;
+            const st = t - VICTIM_HIDE_AT;
+
+            for (const shard of shards) {
+                if (st > 2.0) { shard.material.opacity = 0; continue; }
+                shard.position.addScaledVector(shard.userData.vel, 0.016);
+                shard.userData.vel.y -= 0.22;
+                shard.rotation.x += shard.userData.spin.x * 0.016;
+                shard.rotation.y += shard.userData.spin.y * 0.016;
+                shard.rotation.z += shard.userData.spin.z * 0.016;
+                const lifeT = Math.min(1, st / 1.8);
+                shard.material.opacity = Math.max(0, 1 - lifeT);
+                shard.scale.setScalar(Math.max(0.1, 1 - lifeT * 0.7));
+            }
+
+            for (const soul of souls) {
+                const lt = st / soul.userData.life;
+                if (lt < 0 || lt > 1) { soul.material.opacity = 0; continue; }
+                soul.position.addScaledVector(soul.userData.vel, 0.016);
+                soul.userData.vel.y -= 0.02;
+                soul.position.x += Math.sin(st * 5 + soul.userData.phase) * 0.003;
+                soul.position.z += Math.cos(st * 5 + soul.userData.phase) * 0.003;
+                soul.material.opacity = (1 - lt) * 0.95;
+                soul.scale.setScalar(1 - lt * 0.4);
+            }
+        }
+
+        // ── Explosion particles ──
+        const now = clock.getElapsedTime();
+        for (const p of explosionParticles) {
+            const age = now - p.userData.bornAt;
+            if (age >= p.userData.life) { p.visible = false; continue; }
+            p.visible = true;
+            p.position.addScaledVector(p.userData.vel, 0.016);
+            p.userData.vel.y -= 0.20;
+            const lt = age / p.userData.life;
+            p.material.opacity = Math.max(0, 1 - lt) * (1 - lt);
+            p.scale.setScalar(1 - lt * 0.4);
+        }
+
+        if (t < TOTAL) {
+            requestAnimationFrame(animate);
+        } else {
+            disposeAll();
+            finalizeKingKill(kingColor, checker);
+        }
+    };
+
+    const disposeAll = () => {
+        if (vignette.parentNode) {
+            vignette.style.opacity = '0';
+            setTimeout(() => vignette.remove(), 600);
+        }
+        if (screenFlash.parentNode) screenFlash.remove();
+        for (const obj of created) {
+            if (obj.parent) obj.parent.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        }
+    };
+
+    animate();
+}
+
+// ── Apply the king's death to the game state & show game over ──
+function finalizeKingKill(kingColor, checker) {
+    const king = gameState.findKing(kingColor);
+    if (king) {
+        const kingPiece = gameState.board[king.r][king.c];
+        if (kingPiece) {
+            gameState.board[king.r][king.c] = null;
+            gameState.moveHistory.push({
+                type: 'domain_kill_king',
+                r: king.r, c: king.c,
+                piece: { ...kingPiece },
+            });
+        }
+    }
+
+    syncPiecesAfterMove();
+
+    // Broadcast the loss to the opponent
+    if (currentMode === 'multiplayer' && peerConnection?.open &&
+        kingColor === playerColor) {
+        peerConnection.send({ type: 'domain_result', winner: 'attacker' });
+    }
+
+    kingSkillState.active = false;
+    kingSkillState.context = null;
+    battleState = null;
+    isAnimating = false;
+
+    gameOverFlag = true;
+    stopTimer();
+
+    const winner = kingColor === 'white' ? 'black' : 'white';
+
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    document.getElementById('gameOverReason').textContent = '國王在領域對決中敗北，遭到將軍者消滅';
+
+    const text = document.getElementById('gameOverText');
+    if (currentMode === 'ai' || currentMode === 'multiplayer') {
+        if (winner === playerColor) {
+            text.textContent = '你贏了!';
+            text.className = 'game-over-text win';
+        } else {
+            text.textContent = '你輸了...';
+            text.className = 'game-over-text lose';
+        }
+    } else {
+        text.textContent = (winner === 'white' ? '白方' : '黑方') + ' 獲勝!';
+        text.className = 'game-over-text win';
     }
 }
 
@@ -12509,6 +14661,13 @@ window.onload = () => {
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+            // ★ Surrender confirm sits on top of the battle overlay — check it first
+            const surrenderOverlay = document.getElementById('battleSurrenderConfirmOverlay');
+            if (surrenderOverlay && !surrenderOverlay.classList.contains('hidden')) {
+                e.preventDefault();
+                cancelBattleSurrenderConfirm();
+                return;
+            }
             const menuOverlay = document.getElementById('backToMenuConfirmOverlay');
             if (menuOverlay && !menuOverlay.classList.contains('hidden')) {
                 e.preventDefault();

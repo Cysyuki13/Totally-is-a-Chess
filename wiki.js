@@ -539,13 +539,12 @@ function setupQueenEffect() {
 
         if (_queenDemoPhase === 0) {
             playQueenHealDemo();
+            updateQueenSkillLabel('heal');
         } else {
             playQueenReviveDemo();
+            updateQueenSkillLabel('revive');
         }
         _queenDemoPhase = 1 - _queenDemoPhase;
-
-        // Update the small on-canvas label
-        updateQueenSkillLabel(_queenDemoPhase === 0 ? 'heal' : 'revive');
     });
 }
 
@@ -1109,83 +1108,490 @@ function spawnExplosion(x, z) {
     loop();
 }
 
+// ── Knight effect — ENHANCED CINEMATIC ─────────────────────────
+//   Timeline:
+//     0.00 – 0.70s  CHARGE    knight pulses + spiral particles converge
+//     0.70 – 1.30s  DASH      ghost afterimages + helix drill wind
+//     1.30 – 2.10s  IMPACT    shockwave rings + dust burst + knockback
+//     2.10 – 3.80s  AFTERMATH everything fades, victim settles
 function setupKnightEffect() {
-    const CYCLE = 3200;
+    const CYCLE = 4200;
+
     wikiLoop(CYCLE, () => {
         clearEffectScene();
         wikiEffectRoot.add(makeWikiGround());
 
+        // ══════════════════════════════════════════════════════════
+        //  TIMELINE (seconds)
+        // ══════════════════════════════════════════════════════════
+        const T_CHARGE = 0.70;   // wind-up
+        const T_DASH = 1.30;   // dash + arrival
+        const T_PUSH = 2.10;   // knockback
+        const T_TOTAL = 3.80;   // fade-out
+
+        // ══════════════════════════════════════════════════════════
+        //  POSITIONS
+        // ══════════════════════════════════════════════════════════
+        const START = new THREE.Vector3(-1.2, 0, 1.2);
+        const LAND = new THREE.Vector3(0.0, 0, 0.0);
+        const VIC_A = new THREE.Vector3(0.6, 0, -0.6);
+        const VIC_B = new THREE.Vector3(1.8, 0, -1.8);
+
+        const dashVec = new THREE.Vector3().subVectors(LAND, START);
+        const dashDir = dashVec.clone().normalize();
+        const dashQuat = new THREE.Quaternion().setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0), dashDir
+        );
+
+        // ══════════════════════════════════════════════════════════
+        //  PIECES
+        // ══════════════════════════════════════════════════════════
         const knight = createPieceModel('knight', 'white', 100, 100, PIECE_PARAMS.knight);
-        knight.position.set(-1.2, 0, 1.2);
+        knight.position.copy(START);
         wikiEffectRoot.add(knight);
 
-        // Victim
         const victim = createPieceModel('pawn', 'black', 100, 100, PIECE_PARAMS.pawn);
-        victim.position.set(0.6, 0, -0.6);
+        victim.position.copy(VIC_A);
         wikiEffectRoot.add(victim);
 
-        // Landing zone
-        const landGeo = new THREE.RingGeometry(0.35, 0.45, 32);
-        const landMat = new THREE.MeshBasicMaterial({
-            color: 0xe8c547, transparent: true, opacity: 0.8,
-            depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-        });
-        const landRing = new THREE.Mesh(landGeo, landMat);
-        landRing.rotation.x = -Math.PI / 2;
-        landRing.position.set(0, 0.03, 0);
-        wikiEffectRoot.add(landRing);
-
-        const start = new THREE.Vector3(-1.2, 0, 1.2);
-        const mid = new THREE.Vector3(0, 0, 0);
-        const startT = performance.now();
-        const DURATION = 600;
-
-        // Spiral wind particles during dash
-        const spiral = [];
-        for (let i = 0; i < 24; i++) {
-            const pg = new THREE.SphereGeometry(0.05, 5, 5);
-            const pm = new THREE.MeshBasicMaterial({
-                color: 0xb8ecff, transparent: true, opacity: 0.9,
-                depthWrite: false, blending: THREE.AdditiveBlending,
+        // ══════════════════════════════════════════════════════════
+        //  LANDING ZONE — 3 pulsing rings + soft disc
+        // ══════════════════════════════════════════════════════════
+        const landRings = [];
+        for (let i = 0; i < 3; i++) {
+            const radius = 0.30 + i * 0.10;
+            const mat = new THREE.MeshBasicMaterial({
+                color: i === 0 ? 0xffffff : 0xe8c547,
+                transparent: true, opacity: 0,
+                depthWrite: false, side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
             });
-            const p = new THREE.Mesh(pg, pm);
-            p.visible = false;
-            wikiEffectRoot.add(p);
-            spiral.push({ mesh: p, phase: Math.random() * Math.PI * 2, r: 0.35 + Math.random() * 0.2 });
+            const ring = new THREE.Mesh(
+                new THREE.RingGeometry(radius, radius + 0.055, 48), mat
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(LAND.x, 0.035 + i * 0.004, LAND.z);
+            wikiEffectRoot.add(ring);
+            landRings.push({ mesh: ring, mat, phase: i * 0.8 });
         }
 
-        const animate = () => {
-            const t = Math.min((performance.now() - startT) / DURATION, 1);
-            const ease = t * (2 - t);
-            knight.position.lerpVectors(start, mid, ease);
-            knight.position.y = Math.sin(t * Math.PI) * 0.5;
+        const landDiscMat = new THREE.MeshBasicMaterial({
+            color: 0xe8c547, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const landDisc = new THREE.Mesh(new THREE.CircleGeometry(0.42, 32), landDiscMat);
+        landDisc.rotation.x = -Math.PI / 2;
+        landDisc.position.set(LAND.x, 0.03, LAND.z);
+        wikiEffectRoot.add(landDisc);
 
-            for (const s of spiral) {
-                s.mesh.visible = t > 0.05 && t < 0.95;
-                const angle = s.phase + t * 12;
-                s.mesh.position.set(
-                    knight.position.x + Math.cos(angle) * s.r,
-                    knight.position.y + 0.3 + Math.sin(t * 10 + s.phase) * 0.1,
-                    knight.position.z + Math.sin(angle) * s.r
-                );
-                s.mesh.material.opacity = 0.9 * (1 - Math.abs(t - 0.5) * 2);
-            }
+        // ══════════════════════════════════════════════════════════
+        //  CHARGE — rune ring at the knight's feet
+        // ══════════════════════════════════════════════════════════
+        const chargeRingMat = new THREE.MeshBasicMaterial({
+            color: 0xb8ecff, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const chargeRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.28, 0.38, 40), chargeRingMat
+        );
+        chargeRing.rotation.x = -Math.PI / 2;
+        chargeRing.position.set(START.x, 0.04, START.z);
+        wikiEffectRoot.add(chargeRing);
 
-            if (t < 1) requestAnimationFrame(animate);
-            else {
-                spiral.forEach(s => { wikiEffectRoot.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); });
-                // Push victim away
-                const pushStart = performance.now();
-                const PUSH_DURATION = 400;
-                const victimStart = victim.position.clone();
-                const victimEnd = victim.position.clone().add(new THREE.Vector3(0.9, 0, -0.9));
-                const push = () => {
-                    const pt = Math.min((performance.now() - pushStart) / PUSH_DURATION, 1);
-                    victim.position.lerpVectors(victimStart, victimEnd, pt * pt);
-                    if (pt < 1) requestAnimationFrame(push);
+        // ══════════════════════════════════════════════════════════
+        //  CHARGE PARTICLES — spiral inward toward the knight
+        // ══════════════════════════════════════════════════════════
+        const chargeParticles = [];
+        for (let i = 0; i < 40; i++) {
+            const geo = new THREE.SphereGeometry(0.024 + Math.random() * 0.025, 5, 5);
+            const mat = new THREE.MeshBasicMaterial({
+                color: Math.random() < 0.5 ? 0xb8ecff : 0xffffff,
+                transparent: true, opacity: 0,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const p = new THREE.Mesh(geo, mat);
+            const a = Math.random() * Math.PI * 2;
+            const r = 0.9 + Math.random() * 0.8;
+            p.position.set(
+                START.x + Math.cos(a) * r,
+                0.2 + Math.random() * 1.1,
+                START.z + Math.sin(a) * r
+            );
+            p.userData = {
+                startAngle: a,
+                startRadius: r,
+                startY: p.position.y,
+                spinSpeed: 3 + Math.random() * 5,
+                delay: Math.random() * 0.35,
+            };
+            wikiEffectRoot.add(p);
+            chargeParticles.push(p);
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //  GHOST AFTERIMAGES — 4 spectral knights trailing the dash
+        // ══════════════════════════════════════════════════════════
+        const ghosts = [];
+        for (let i = 0; i < 4; i++) {
+            const g = createPieceModel('knight', 'white', 100, 100, PIECE_PARAMS.knight);
+            g.position.copy(START);
+            g.traverse(n => {
+                if (n.isMesh && n.material && n.material.color) {
+                    n.material.transparent = true;
+                    n.material.opacity = 0;
+                    n.material.depthWrite = false;
+                    n.material.blending = THREE.AdditiveBlending;
+                    n.material.color.lerp(new THREE.Color(0x9fe8ff), 0.7);
+                    if (n.material.emissive) {
+                        n.material.emissive = new THREE.Color(0x9fe8ff);
+                        n.material.emissiveIntensity = 0.65;
+                    }
+                }
+            });
+            wikiEffectRoot.add(g);
+            ghosts.push({
+                mesh: g,
+                delay: (i + 1) * 0.045,
+                peakOpacity: 0.55 - i * 0.10,
+            });
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //  DASH WIND — helix spiral drill around the knight
+        // ══════════════════════════════════════════════════════════
+        const dashGroup = new THREE.Group();
+        wikiEffectRoot.add(dashGroup);
+
+        const DRILL_LEN = 1.6;
+        const DRILL_RADIUS = 0.45;
+        const HELIX_TURNS = 2.5;
+        const STRANDS = 3;
+        const PER_STRAND = 20;
+
+        const helixParticles = [];
+        for (let s = 0; s < STRANDS; s++) {
+            const strandOffset = (s / STRANDS) * Math.PI * 2;
+            for (let i = 0; i < PER_STRAND; i++) {
+                const tt = i / (PER_STRAND - 1);
+                const geo = new THREE.SphereGeometry(0.026 + Math.random() * 0.02, 5, 5);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: 0xb8ecff, transparent: true, opacity: 0,
+                    depthWrite: false, blending: THREE.AdditiveBlending,
+                });
+                const p = new THREE.Mesh(geo, mat);
+                p.userData = {
+                    strandOffset,
+                    localY: -DRILL_LEN / 2 + tt * DRILL_LEN,
+                    radiusAtT: DRILL_RADIUS * (1 - tt * 0.7),
                 };
-                push();
+                dashGroup.add(p);
+                helixParticles.push(p);
             }
+        }
+
+        // Bright nose spark at the drill's tip
+        const noseMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 12), noseMat);
+        nose.position.y = DRILL_LEN / 2;
+        dashGroup.add(nose);
+
+        // ══════════════════════════════════════════════════════════
+        //  IMPACT SHOCKWAVE — 3 expanding rings + white flash
+        // ══════════════════════════════════════════════════════════
+        const shockRings = [];
+        for (let i = 0; i < 3; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: [0xffffff, 0xb8ecff, 0xe8c547][i],
+                transparent: true, opacity: 0,
+                depthWrite: false, side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
+            });
+            const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.34, 48), mat);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(LAND.x, 0.05 + i * 0.006, LAND.z);
+            wikiEffectRoot.add(ring);
+            shockRings.push({ mesh: ring, mat, delay: i * 0.06 });
+        }
+
+        const flashMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 14), flashMat);
+        flash.position.set(LAND.x, 0.35, LAND.z);
+        wikiEffectRoot.add(flash);
+
+        // ══════════════════════════════════════════════════════════
+        //  DUST BURST — warm sparks kicked up from the landing
+        // ══════════════════════════════════════════════════════════
+        const dust = [];
+        for (let i = 0; i < 26; i++) {
+            const geo = new THREE.SphereGeometry(0.028 + Math.random() * 0.03, 4, 4);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0xd4b896, transparent: true, opacity: 0,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const p = new THREE.Mesh(geo, mat);
+            p.position.set(LAND.x, 0.05, LAND.z);
+            const a = Math.random() * Math.PI * 2;
+            const speed = 1.0 + Math.random() * 1.8;
+            const maxLife = 0.7 + Math.random() * 0.4;
+            p.userData = {
+                vel: new THREE.Vector3(
+                    Math.cos(a) * speed,
+                    0.7 + Math.random() * 1.3,
+                    Math.sin(a) * speed
+                ),
+                life: maxLife,
+                maxLife,
+            };
+            wikiEffectRoot.add(p);
+            dust.push(p);
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //  KNOCKBACK TRAIL — hot sparks following the victim
+        // ══════════════════════════════════════════════════════════
+        const knockTrail = [];
+        for (let i = 0; i < 18; i++) {
+            const geo = new THREE.SphereGeometry(0.028 + Math.random() * 0.025, 5, 5);
+            const mat = new THREE.MeshBasicMaterial({
+                color: Math.random() < 0.5 ? 0xff6644 : 0xffcc44,
+                transparent: true, opacity: 0,
+                depthWrite: false, blending: THREE.AdditiveBlending,
+            });
+            const p = new THREE.Mesh(geo, mat);
+            p.position.copy(VIC_A);
+            p.position.y = 0.2;
+            p.visible = false;
+            p.userData = {
+                delay: i * 0.030,
+                life: 0.5,
+                drift: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.4,
+                    (Math.random() - 0.5) * 0.3,
+                    (Math.random() - 0.5) * 0.4
+                ),
+            };
+            wikiEffectRoot.add(p);
+            knockTrail.push(p);
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //  ANIMATION LOOP
+        // ══════════════════════════════════════════════════════════
+        const startTime = performance.now();
+
+        const animate = () => {
+            const t = (performance.now() - startTime) / 1000;
+            if (t > T_TOTAL) return;
+
+            // ──────────────────────────────────────────────
+            //  PHASE 1 — CHARGE
+            // ──────────────────────────────────────────────
+            if (t < T_CHARGE) {
+                const k = t / T_CHARGE;
+                const pulse = 0.7 + 0.3 * Math.sin(t * 24);
+
+                // Knight "breathing" — subtle scale pulse
+                knight.scale.setScalar(1 + 0.05 * (k * pulse));
+
+                // Charge ring at feet
+                chargeRingMat.opacity = k * 0.75 * (0.6 + 0.4 * Math.sin(t * 12));
+                chargeRing.scale.setScalar(1 + Math.sin(t * 8) * 0.15);
+
+                // Landing zone pulses in
+                for (const lr of landRings) {
+                    lr.mat.opacity = k * 0.75 * (0.7 + 0.3 * Math.sin(t * 9 + lr.phase));
+                    const s = 1 + Math.sin(t * 7 + lr.phase) * 0.08;
+                    lr.mesh.scale.set(s, s, 1);
+                }
+                landDiscMat.opacity = k * 0.22;
+
+                // Spiral charge particles converge
+                for (const p of chargeParticles) {
+                    const pt = t - p.userData.delay;
+                    if (pt < 0) { p.material.opacity = 0; continue; }
+                    const lk = Math.min(1, pt / 0.65);
+                    const a = p.userData.startAngle + pt * p.userData.spinSpeed;
+                    const r = p.userData.startRadius * (1 - lk) * (1 - lk * 0.3);
+                    const y = p.userData.startY * (1 - lk) + 0.16 * lk;
+                    p.position.set(
+                        START.x + Math.cos(a) * r,
+                        y,
+                        START.z + Math.sin(a) * r
+                    );
+                    p.material.opacity = (1 - lk) * 0.95;
+                    p.scale.setScalar(1 - lk * 0.5);
+                }
+            }
+            // ──────────────────────────────────────────────
+            //  PHASE 2 — DASH
+            // ──────────────────────────────────────────────
+            else if (t < T_DASH) {
+                const k = (t - T_CHARGE) / (T_DASH - T_CHARGE);
+                const ease = 1 - Math.pow(1 - k, 3);   // ease-out
+
+                knight.scale.setScalar(1);
+                knight.position.lerpVectors(START, LAND, ease);
+                knight.position.y = Math.sin(k * Math.PI) * 0.75;
+
+                // Charge particles die quickly
+                for (const p of chargeParticles) p.material.opacity *= 0.82;
+
+                // Charge ring fades
+                chargeRingMat.opacity *= 0.85;
+
+                // Landing rings pulse harder
+                for (const lr of landRings) {
+                    lr.mat.opacity = 0.85 * (0.7 + 0.3 * Math.sin(t * 18 + lr.phase));
+                }
+                landDiscMat.opacity = 0.30;
+
+                // Ghost afterimages follow with delay
+                for (const gh of ghosts) {
+                    const gt = k - gh.delay;
+                    if (gt <= 0 || gt >= 1) {
+                        gh.mesh.traverse(n => {
+                            if (n.isMesh && n.material) n.material.opacity = 0;
+                        });
+                        continue;
+                    }
+                    const ge = 1 - Math.pow(1 - gt, 3);
+                    gh.mesh.position.lerpVectors(START, LAND, ge);
+                    gh.mesh.position.y = Math.sin(gt * Math.PI) * 0.75;
+                    const fade = Math.sin(Math.PI * gt);
+                    gh.mesh.traverse(n => {
+                        if (n.isMesh && n.material) {
+                            n.material.opacity = fade * gh.peakOpacity;
+                        }
+                    });
+                }
+
+                // Helix drill wind follows the knight
+                dashGroup.position.copy(knight.position);
+                dashGroup.position.y = 0.6;
+                dashGroup.quaternion.copy(dashQuat);
+
+                const spin = t * 26;
+                const windAmp = Math.sin(k * Math.PI);   // 0 → 1 → 0
+                for (const p of helixParticles) {
+                    const angle = p.userData.strandOffset + spin;
+                    const r = p.userData.radiusAtT;
+                    p.position.set(
+                        Math.cos(angle) * r,
+                        p.userData.localY,
+                        Math.sin(angle) * r
+                    );
+                    p.material.opacity = windAmp * 0.95;
+                }
+                noseMat.opacity = windAmp * 0.95;
+                nose.scale.setScalar(0.8 + 0.5 * windAmp);
+            }
+            // ──────────────────────────────────────────────
+            //  PHASE 3 — IMPACT + KNOCKBACK
+            // ──────────────────────────────────────────────
+            else if (t < T_PUSH) {
+                knight.position.copy(LAND);
+                knight.position.y = 0;
+
+                const it = t - T_DASH;
+                const ip = Math.min(1, it / 0.45);
+
+                // Shockwave rings expand
+                for (const sr of shockRings) {
+                    const st = Math.max(0, (it - sr.delay) / 0.5);
+                    if (st >= 1) { sr.mat.opacity = 0; continue; }
+                    sr.mat.opacity = 0.9 * (1 - st);
+                    const s = 1 + st * 4.5;
+                    sr.mesh.scale.set(s, s, 1);
+                }
+
+                // White flash pop
+                flashMat.opacity = Math.max(0, 1 - ip * 2.2);
+                flash.scale.setScalar(1 + ip * 3.5);
+
+                // Dust burst
+                for (const d of dust) {
+                    if (d.userData.life <= 0) { d.material.opacity = 0; continue; }
+                    d.userData.life -= 0.016;
+                    d.position.addScaledVector(d.userData.vel, 0.016);
+                    d.userData.vel.y -= 0.10;
+                    d.userData.vel.multiplyScalar(0.94);
+                    d.material.opacity =
+                        Math.max(0, d.userData.life / d.userData.maxLife) * 0.9;
+                }
+
+                // Landing rings / disc fade out
+                for (const lr of landRings) lr.mat.opacity *= 0.88;
+                landDiscMat.opacity *= 0.85;
+
+                // Helix, ghosts, charge all fade
+                for (const p of helixParticles) p.material.opacity *= 0.82;
+                noseMat.opacity *= 0.82;
+                for (const gh of ghosts) {
+                    gh.mesh.traverse(n => {
+                        if (n.isMesh && n.material) n.material.opacity *= 0.88;
+                    });
+                }
+                for (const p of chargeParticles) p.material.opacity *= 0.85;
+
+                // Push victim along the knockback path
+                const pushK = Math.min(1, it / 0.7);
+                const pe = pushK * pushK;
+                victim.position.lerpVectors(VIC_A, VIC_B, pe);
+                victim.position.y = Math.sin(pushK * Math.PI) * 0.2;
+                victim.rotation.y = pushK * Math.PI * 1.4;
+                victim.rotation.z = Math.sin(pushK * Math.PI * 2) * 0.25;
+
+                // Knockback trail follows the victim
+                for (const kt of knockTrail) {
+                    const ktt = it - kt.userData.delay;
+                    if (ktt < 0 || ktt > kt.userData.life) {
+                        kt.visible = false;
+                        continue;
+                    }
+                    kt.visible = true;
+                    const targetPos = victim.position.clone().add(kt.userData.drift);
+                    kt.position.lerp(targetPos, 0.4);
+                    kt.material.opacity = (1 - ktt / kt.userData.life) * 0.9;
+                    kt.scale.setScalar(1 - ktt / kt.userData.life * 0.4);
+                }
+            }
+            // ──────────────────────────────────────────────
+            //  PHASE 4 — AFTERMATH (fade everything out)
+            // ──────────────────────────────────────────────
+            else {
+                // Victim settles from the tumble
+                victim.rotation.y *= 0.92;
+                victim.rotation.z *= 0.92;
+                victim.position.y *= 0.88;
+
+                // Global fade-out
+                for (const sr of shockRings) sr.mat.opacity *= 0.85;
+                flashMat.opacity *= 0.80;
+                for (const d of dust) d.material.opacity *= 0.90;
+                for (const kt of knockTrail) {
+                    if (kt.visible) kt.material.opacity *= 0.88;
+                }
+                for (const gh of ghosts) {
+                    gh.mesh.traverse(n => {
+                        if (n.isMesh && n.material) n.material.opacity *= 0.85;
+                    });
+                }
+                for (const p of helixParticles) p.material.opacity *= 0.85;
+                noseMat.opacity *= 0.85;
+                for (const lr of landRings) lr.mat.opacity *= 0.85;
+                landDiscMat.opacity *= 0.90;
+                chargeRingMat.opacity *= 0.85;
+            }
+
+            requestAnimationFrame(animate);
         };
         animate();
     });
@@ -1557,150 +1963,752 @@ function spawnBishopLeapTrail(start, end, leapDurationSec) {
     return state;
 }
 
-// ── King effect — slow black domain wave expanding from the king ──
+// ── King effect — full Domain Expansion cinematic (matches main.js) ──
+//    Cycles between the WHITE-KING (radiant) and BLACK-KING (abyssal)
+//    domain so both themes are visible in the encyclopedia.
 function setupKingEffect() {
-    const CYCLE = 4200;
+    const CYCLE = 6800;
+    let phase = 0;                       // 0 = white king, 1 = black king
+
     wikiLoop(CYCLE, () => {
         clearEffectScene();
         wikiEffectRoot.add(makeWikiGround());
 
-        // King sits in the middle
-        const king = createPieceModel('king', 'white', 100, 100, PIECE_PARAMS.king || {});
-        king.position.set(0, 0, 0);
-        wikiEffectRoot.add(king);
+        const isWhiteDomain = (phase === 0);
+        phase = 1 - phase;
 
-        // A "checker" piece on the far side (gets excluded from the tint)
-        const checker = createPieceModel('rook', 'black', 100, 100, PIECE_PARAMS.rook || {});
-        checker.position.set(0.6, 0, -0.6);
-        wikiEffectRoot.add(checker);
+        playDomainExpansionDemo(isWhiteDomain);
+        updateDomainThemeLabel(isWhiteDomain);
+    });
+}
 
-        const mist = [];
-        for (let i = 0; i < 40; i++) {
-            const mg = new THREE.SphereGeometry(0.03, 4, 4);
-            const mm = new THREE.MeshBasicMaterial({
-                color: 0xc44dff, transparent: true, opacity: 0,
-                depthWrite: false, blending: THREE.AdditiveBlending,
-            });
-            const m = new THREE.Mesh(mg, mm);
-            const a = Math.random() * Math.PI * 2;
-            const r = 0.2 + Math.random() * 2.2;
-            m.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
-            m.userData = { baseY: 0.05, speed: 0.6 + Math.random() * 1.4, delay: Math.random() * 1.2 };
-            wikiEffectRoot.add(m);
-            mist.push(m);
+// Small on-canvas label that switches between 「光輝領域」 and 「漆黑領域」
+function updateDomainThemeLabel(isWhiteDomain) {
+    const container = document.getElementById('wikiEffect');
+    if (!container) return;
+    let label = container.querySelector('.wiki-effect-label');
+    if (!label) {
+        label = document.createElement('div');
+        label.className = 'wiki-effect-label';
+        container.appendChild(label);
+    }
+    label.textContent = isWhiteDomain ? '⚪ 光輝領域 (白王)' : '⚫ 漆黑領域 (黑王)';
+    label.style.color = isWhiteDomain ? '#ffe27a' : '#c44dff';
+    label.style.borderColor = isWhiteDomain ? 'rgba(255,226,122,0.6)' : 'rgba(196,77,255,0.6)';
+    label.style.animation = 'none';
+    void label.offsetWidth;
+    label.style.animation = 'wikiEffectLabelPop 0.5s ease-out';
+}
+
+// Full domain-expansion cinematic, scaled to fit the wiki preview canvas.
+function playDomainExpansionDemo(isWhiteDomain) {
+    // ══════════════════════════════════════════════════════════
+    //  THEME — same palette pair as main.js
+    // ══════════════════════════════════════════════════════════
+    const THEME = isWhiteDomain ? {
+        DISC: 0xc8bca0, WAVE: 0xd4c9a8, RIM: 0x9a7a2a, HAZE: 0xb09a58,
+        WAVE2: 0x4a7a9c,
+        BLADE_BODY: 0xc0b8a0, BLADE_SEAM: 0x8a6a20,
+        BLADE_AURA: 0xa88830, BLADE_CORE: 0xb0a078,
+        RUNE_A: 0xa88830, RUNE_B: 0x8a6a20,
+        CHARGE_A: 0xa88830, CHARGE_B: 0xb0a078,
+        PILLAR_BODY: 0x8a8680, PILLAR_RIM: 0x8a6a20,
+        DOME_OUTER: 0xa89e8c, DOME_INNER: 0x9a7a2a, DOME_RIM: 0x8a6a20,
+        LIGHTNING: 0xb0a078,
+        SHARD_A: 0xb0a078, SHARD_B: 0x8a6a20,
+        FLASH: 0xc9a44a,
+        TINT: new THREE.Color(0xb0a078),
+    } : {
+        DISC: 0x000000, WAVE: 0x000000, RIM: 0x9b4ddb, HAZE: 0x6a2a9a,
+        WAVE2: 0xc44dff,
+        BLADE_BODY: 0x000000, BLADE_SEAM: 0x8b0033,
+        BLADE_AURA: 0xff1e4a, BLADE_CORE: 0xff5577,
+        RUNE_A: 0x9b4ddb, RUNE_B: 0xc44dff,
+        CHARGE_A: 0xc44dff, CHARGE_B: 0x9b4ddb,
+        PILLAR_BODY: 0x0a0a14, PILLAR_RIM: 0xc44dff,
+        DOME_OUTER: 0x05000a, DOME_INNER: 0x6a2a9a, DOME_RIM: 0x9b4ddb,
+        LIGHTNING: 0xc44dff,
+        SHARD_A: 0x000000, SHARD_B: 0xc44dff,
+        FLASH: 0xffffff,
+        TINT: new THREE.Color(0x000000),
+    };
+
+    // ══════════════════════════════════════════════════════════
+    //  PIECES — the king plus a spread of pieces to be tinted
+    // ══════════════════════════════════════════════════════════
+    const kingColor = isWhiteDomain ? 'white' : 'black';
+    const enemyColor = isWhiteDomain ? 'black' : 'white';
+
+    const king = createPieceModel('king', kingColor, 100, 100, PIECE_PARAMS.king || {});
+    king.position.set(0, 0, 0);
+    wikiEffectRoot.add(king);
+
+    // A ring of enemy pieces around the king → they'll get swallowed by the wave
+    const tintTargets = [];
+    const PIECE_SLOTS = [
+        [-1.2, 1.2, 'rook'], [1.2, 1.2, 'pawn'],
+        [-1.2, -1.2, 'pawn'], [1.2, -1.2, 'knight'],
+        [0.0, 1.6, 'pawn'], [1.6, 0.0, 'pawn'],
+        [-1.6, 0.0, 'pawn'], [0.0, -1.6, 'pawn'],
+    ];
+    for (const [x, z, type] of PIECE_SLOTS) {
+        const p = createPieceModel(type, enemyColor, 100, 100, PIECE_PARAMS[type] || {});
+        p.position.set(x, 0, z);
+        wikiEffectRoot.add(p);
+
+        const mats = [];
+        p.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                n.material = n.material.clone();
+                mats.push({
+                    mesh: n,
+                    color: n.material.color.clone(),
+                    emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                });
+            }
+        });
+        tintTargets.push({ obj: p, dist: Math.hypot(x, z), mats, tint: 0, opacity: 1 });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  TIMELINE
+    // ══════════════════════════════════════════════════════════
+    const startT = performance.now();
+    const CHARGE_END = 750;
+    const EXPAND_END = 4600;
+    const TOTAL = 6600;
+    const MAX_R = 2.25;
+    const SHATTER_AT = 0.82;   // fraction of expand phase
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 1 — Ground disc (fill under the wave)
+    // ══════════════════════════════════════════════════════════
+    const discMat = new THREE.MeshBasicMaterial({
+        color: THEME.DISC, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+    });
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 96), discMat);
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.y = 0.04;
+    disc.scale.set(0.001, 0.001, 1);
+    disc.renderOrder = 5;
+    wikiEffectRoot.add(disc);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 2 — Main wavefront ring
+    // ══════════════════════════════════════════════════════════
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: THEME.WAVE, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 96), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.07;
+    ring.scale.set(0.001, 0.001, 1);
+    ring.renderOrder = 10;
+    wikiEffectRoot.add(ring);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 3 — Colored rim on the wavefront edge
+    // ══════════════════════════════════════════════════════════
+    const rimMat = new THREE.MeshBasicMaterial({
+        color: THEME.RIM, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const rim = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.06, 96), rimMat);
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.075;
+    rim.scale.set(0.001, 0.001, 1);
+    rim.renderOrder = 11;
+    wikiEffectRoot.add(rim);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 4 — Outer haze
+    // ══════════════════════════════════════════════════════════
+    const hazeMat = new THREE.MeshBasicMaterial({
+        color: THEME.HAZE, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const haze = new THREE.Mesh(new THREE.RingGeometry(0.55, 1.45, 96), hazeMat);
+    haze.rotation.x = -Math.PI / 2;
+    haze.position.y = 0.055;
+    haze.scale.set(0.001, 0.001, 1);
+    haze.renderOrder = 9;
+    wikiEffectRoot.add(haze);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 5 — Secondary wavefront (lags the main ring)
+    // ══════════════════════════════════════════════════════════
+    const ring2Mat = new THREE.MeshBasicMaterial({
+        color: THEME.WAVE2, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.6, 1.15, 96), ring2Mat);
+    ring2.rotation.x = -Math.PI / 2;
+    ring2.position.y = 0.06;
+    ring2.scale.set(0.001, 0.001, 1);
+    ring2.renderOrder = 9.5;
+    wikiEffectRoot.add(ring2);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 6 — Scattered upside-down swords (radial)
+    //            tip buried in the ground, random orientation
+    // ══════════════════════════════════════════════════════════
+    const scatteredSwords = [];
+    const SCATTER_COUNT = 14;
+
+    for (let i = 0; i < SCATTER_COUNT; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const dist = 0.55 + Math.random() * 1.55;
+        const px = Math.cos(a) * dist;
+        const pz = Math.sin(a) * dist;
+
+        const g = new THREE.Group();
+        g.position.set(px, 0, pz);
+        g.rotation.y = Math.random() * Math.PI * 2;
+        g.rotation.z = (Math.random() - 0.5) * 0.55;
+        g.rotation.x = (Math.random() - 0.5) * 0.55;
+        const scl = 0.55 + Math.random() * 0.45;
+        g.userData.baseScale = scl;
+        g.scale.setScalar(0.001);
+
+        const bodyMat = new THREE.MeshBasicMaterial({
+            color: THEME.BLADE_BODY, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+        const seamMat = new THREE.MeshBasicMaterial({
+            color: THEME.BLADE_SEAM, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const auraMat = new THREE.MeshBasicMaterial({
+            color: THEME.BLADE_AURA, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: THEME.BLADE_CORE, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+
+        const BH = 0.62, BW = 0.07, BD = 0.032, GY = 0.14;
+
+        // Blade body (points down)
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BD), bodyMat);
+        blade.position.y = GY - BH / 2;
+        g.add(blade);
+
+        // Flipped tip cone
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(BW * 0.65, 0.16, 4), bodyMat);
+        tip.position.y = GY - BH - 0.08;
+        tip.rotation.y = Math.PI / 4;
+        tip.rotation.z = Math.PI;
+        g.add(tip);
+
+        // Cross-guard
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.045, 0.06), bodyMat);
+        guard.position.y = GY;
+        g.add(guard);
+
+        // Grip
+        const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.18, 8), bodyMat);
+        grip.position.y = GY + 0.09;
+        g.add(grip);
+
+        // Pommel
+        const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), bodyMat);
+        pommel.position.y = GY + 0.19;
+        g.add(pommel);
+
+        // Glow seam
+        const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.016, 0.30), seamMat);
+        seam.position.set(0, GY - 0.17, BD / 2 + 0.002);
+        g.add(seam);
+
+        // Outer aura
+        const aura = new THREE.Mesh(new THREE.BoxGeometry(BW * 2.8, BH * 1.05, BD * 2.8), auraMat);
+        aura.position.y = GY - BH / 2;
+        aura.renderOrder = 998;
+        g.add(aura);
+
+        // Inner core glow
+        const core = new THREE.Mesh(new THREE.BoxGeometry(BW * 1.7, BH * 0.9, BD * 1.7), coreMat);
+        core.position.y = GY - BH / 2;
+        core.renderOrder = 999;
+        g.add(core);
+
+        wikiEffectRoot.add(g);
+        scatteredSwords.push({
+            group: g, bodyMat, seamMat, auraMat, coreMat,
+            spawnDelay: Math.random() * 0.55,
+            index: i,
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 7 — Pillar swords stabbed in a ring
+    // ══════════════════════════════════════════════════════════
+    const pillars = [];
+    const PILLAR_COUNT = 14;
+    const SWORD_BLADE_W = 0.075;
+    const SWORD_BLADE_D = 0.024;
+    const SWORD_BLADE_H = 0.95;
+
+    for (let i = 0; i < PILLAR_COUNT; i++) {
+        const angle = (i / PILLAR_COUNT) * Math.PI * 2;
+
+        const g = new THREE.Group();
+
+        const darkMat = new THREE.MeshBasicMaterial({
+            color: THEME.PILLAR_BODY, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+        });
+        const pRimMat = new THREE.MeshBasicMaterial({
+            color: THEME.PILLAR_RIM, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+
+        // Pommel (bottom of hilt)
+        {
+            const pommelMesh = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), darkMat);
+            pommelMesh.position.set(0, 0.042, 0);
+            g.add(pommelMesh);
+        }
+        // Grip
+        {
+            const gripMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.26, 8), darkMat);
+            gripMesh.position.set(0, 0.17, 0);
+            g.add(gripMesh);
+        }
+        // Cross-guard
+        {
+            const guardMesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.045, 0.06), darkMat);
+            guardMesh.position.set(0, 0.33, 0);
+            g.add(guardMesh);
+        }
+        // Blade
+        {
+            const bladeMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(SWORD_BLADE_W, SWORD_BLADE_H, SWORD_BLADE_D),
+                darkMat
+            );
+            bladeMesh.position.set(0, 0.35 + SWORD_BLADE_H / 2, 0);
+            g.add(bladeMesh);
         }
 
-        // ── Pure black expanding disc ──
-        const discMat = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true, opacity: 0,
-            depthWrite: false, side: THREE.DoubleSide,
-        });
-        const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 96), discMat);
-        disc.rotation.x = -Math.PI / 2;
-        disc.position.y = 0.04;
-        disc.scale.set(0.001, 0.001, 1);
-        disc.renderOrder = 5;
-        wikiEffectRoot.add(disc);
+        // Tip (4-sided)
+        const tipMesh = new THREE.Mesh(new THREE.ConeGeometry(SWORD_BLADE_W * 0.7, 0.16, 4), darkMat);
+        tipMesh.position.y = 0.35 + SWORD_BLADE_H + 0.08;
+        tipMesh.rotation.y = Math.PI / 4;
+        g.add(tipMesh);
+        // Blade-edge rim
+        const rimGeo = new THREE.PlaneGeometry(0.016, SWORD_BLADE_H);
+        for (const sgn of [-1, 1]) {
+            const r = new THREE.Mesh(rimGeo, pRimMat);
+            r.position.set(sgn * (SWORD_BLADE_W * 0.5 + 0.001), 0.35 + SWORD_BLADE_H / 2, 0);
+            g.add(r);
+        }
 
-        // ── Main black wavefront ring ──
-        const ringMat = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true, opacity: 0,
-            depthWrite: false, side: THREE.DoubleSide,
-        });
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 96), ringMat);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.06;
-        ring.scale.set(0.001, 0.001, 1);
-        ring.renderOrder = 8;
-        wikiEffectRoot.add(ring);
+        // Broad face outward
+        g.position.set(1, 0, 0);
+        g.rotation.y = Math.PI / 2 - angle;
+        g.rotation.z = (Math.random() - 0.5) * 0.10;
+        g.scale.set(1, 0.001, 1);
 
-        // ── Purple rim-light on the wavefront edge ──
-        const rimMat = new THREE.MeshBasicMaterial({
-            color: 0x4a1a6a,
+        wikiEffectRoot.add(g);
+        pillars.push({ group: g, darkMat, rimMat: pRimMat, angle });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 8 — Shadow dome (outer shell + inner glow + rim)
+    // ══════════════════════════════════════════════════════════
+    const domeGeo = new THREE.SphereGeometry(1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeMat = new THREE.MeshBasicMaterial({
+        color: THEME.DOME_OUTER, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthWrite: false,
+    });
+    const dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.position.y = 0.02;
+    dome.scale.setScalar(0.001);
+    dome.renderOrder = 6;
+    wikiEffectRoot.add(dome);
+
+    const domeInnerMat = new THREE.MeshBasicMaterial({
+        color: THEME.DOME_INNER, transparent: true, opacity: 0,
+        side: THREE.BackSide, depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const domeInner = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2),
+        domeInnerMat
+    );
+    domeInner.position.y = 0.02;
+    domeInner.scale.setScalar(0.001);
+    domeInner.renderOrder = 7;
+    wikiEffectRoot.add(domeInner);
+
+    const domeRimMat = new THREE.MeshBasicMaterial({
+        color: THEME.DOME_RIM, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const domeRim = new THREE.Mesh(new THREE.RingGeometry(0.97, 1.04, 72), domeRimMat);
+    domeRim.rotation.x = -Math.PI / 2;
+    domeRim.position.y = 0.065;
+    domeRim.scale.set(0.001, 0.001, 1);
+    domeRim.renderOrder = 10;
+    wikiEffectRoot.add(domeRim);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 9 — Lightning arcs crawling on the dome
+    // ══════════════════════════════════════════════════════════
+    const lightningBolts = [];
+    for (let i = 0; i < 4; i++) {
+        const segMat = new THREE.MeshBasicMaterial({
+            color: THEME.LIGHTNING, transparent: true, opacity: 0.9,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const seg = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.022, 0.022, 1, 5, 1, true),
+            segMat
+        );
+        seg.visible = false;
+        wikiEffectRoot.add(seg);
+        lightningBolts.push({
+            seg, mat: segMat,
+            nextJumpAt: 0,
+            currentAngle: Math.random() * Math.PI * 2,
+            baseR: 1, height: 1,
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 10 — Flash at the king (brief pop at expand start)
+    // ══════════════════════════════════════════════════════════
+    const flashMat = new THREE.MeshBasicMaterial({
+        color: THEME.FLASH, transparent: true, opacity: 0,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 16), flashMat);
+    flash.position.set(0, 0.42, 0);
+    flash.visible = false;
+    wikiEffectRoot.add(flash);
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 11 — Charge particles spiraling inward
+    // ══════════════════════════════════════════════════════════
+    const chargeParticles = [];
+    for (let i = 0; i < 30; i++) {
+        const pg = new THREE.SphereGeometry(0.024 + Math.random() * 0.024, 5, 5);
+        const pm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? THEME.CHARGE_A : THEME.CHARGE_B,
             transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const p = new THREE.Mesh(pg, pm);
+        const a = Math.random() * Math.PI * 2;
+        const r = 2.4 + Math.random() * 1.6;
+        const y0 = 0.10 + Math.random() * 1.2;
+        p.position.set(Math.cos(a) * r, y0, Math.sin(a) * r);
+        p.userData = {
+            startR: r, startAngle: a, startY: y0,
+            duration: 0.5 + Math.random() * 0.25,
+            delay: Math.random() * 0.22,
+            orbit: (Math.random() - 0.5) * 0.8,
+        };
+        wikiEffectRoot.add(p);
+        chargeParticles.push(p);
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 12 — Rune circle under the king
+    // ══════════════════════════════════════════════════════════
+    const runeGroup = new THREE.Group();
+    runeGroup.position.y = 0.055;
+    wikiEffectRoot.add(runeGroup);
+
+    const runeMat1 = new THREE.MeshBasicMaterial({
+        color: THEME.RUNE_A, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const runeRing1 = new THREE.Mesh(new THREE.RingGeometry(0.38, 0.43, 48), runeMat1);
+    runeRing1.rotation.x = -Math.PI / 2;
+    runeGroup.add(runeRing1);
+
+    const runeMat2 = new THREE.MeshBasicMaterial({
+        color: THEME.RUNE_B, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+    });
+    const runeRing2 = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.68, 48), runeMat2);
+    runeRing2.rotation.x = -Math.PI / 2;
+    runeRing2.position.y = 0.001;
+    runeGroup.add(runeRing2);
+
+    const runeTicks = [];
+    for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const tm = new THREE.MeshBasicMaterial({
+            color: THEME.RUNE_B, transparent: true, opacity: 0,
             depthWrite: false, side: THREE.DoubleSide,
             blending: THREE.AdditiveBlending,
         });
-        const rim = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.08, 96), rimMat);
-        rim.rotation.x = -Math.PI / 2;
-        rim.position.y = 0.07;
-        rim.scale.set(0.001, 0.001, 1);
-        rim.renderOrder = 9;
-        wikiEffectRoot.add(rim);
+        const tick = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.024), tm);
+        tick.position.set(Math.cos(a) * 0.53, 0.001, Math.sin(a) * 0.53);
+        tick.rotation.x = -Math.PI / 2;
+        tick.rotation.z = -a;
+        runeGroup.add(tick);
+        runeTicks.push({ mesh: tick, mat: tm });
+    }
 
-        // ── Transparent shadow dome (half-sphere) ──
-        const domeGeo = new THREE.SphereGeometry(
-            1, 64, 32,
-            0, Math.PI * 2,
-            0, Math.PI / 2
-        );
-        const domeMat = new THREE.MeshBasicMaterial({
-            color: 0x05000a,
-            transparent: true,
-            opacity: 0,
-            side: THREE.DoubleSide,
-            depthWrite: false,
+    // ══════════════════════════════════════════════════════════
+    //  LAYER 13 — Shatter shards (peak burst)
+    // ══════════════════════════════════════════════════════════
+    const shards = [];
+    for (let i = 0; i < 22; i++) {
+        const sg = new THREE.TetrahedronGeometry(0.07 + Math.random() * 0.08, 0);
+        const sm = new THREE.MeshBasicMaterial({
+            color: Math.random() < 0.5 ? THEME.SHARD_A : THEME.SHARD_B,
+            transparent: true, opacity: 0,
+            depthWrite: false, blending: THREE.AdditiveBlending,
         });
-        const dome = new THREE.Mesh(domeGeo, domeMat);
-        dome.position.y = 0.02;
-        dome.scale.setScalar(0.001);
-        dome.renderOrder = 6;
-        wikiEffectRoot.add(dome);
-
-        const domeInnerGeo = new THREE.SphereGeometry(
-            1, 48, 24,
-            0, Math.PI * 2,
-            0, Math.PI / 2
-        );
-        const domeInnerMat = new THREE.MeshBasicMaterial({
-            color: 0x2a0a4a,
-            transparent: true,
-            opacity: 0,
-            side: THREE.BackSide,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
+        const shard = new THREE.Mesh(sg, sm);
+        shard.visible = false;
+        shard.renderOrder = 25;
+        wikiEffectRoot.add(shard);
+        const a = Math.random() * Math.PI * 2;
+        shards.push({
+            mesh: shard,
+            dirX: Math.cos(a), dirZ: Math.sin(a),
+            upSpeed: 1.3 + Math.random() * 1.6,
+            spin: (Math.random() - 0.5) * 8,
+            bornAt: 0,
         });
-        const domeInner = new THREE.Mesh(domeInnerGeo, domeInnerMat);
-        domeInner.position.y = 0.02;
-        domeInner.scale.setScalar(0.001);
-        domeInner.renderOrder = 7;
-        wikiEffectRoot.add(domeInner);
+    }
 
-        const startT = performance.now();
-        const DURATION = 3400;
-        const MAX_R = 3.6;
+    let shatterFired = false;
 
-        const animate = () => {
-            const t = performance.now() - startT;
-            if (t >= DURATION) return;
-            const p = Math.min(t / (DURATION - 400), 1);
-            // Slow quartic ease
-            const ease = 1 - Math.pow(1 - p, 4);
-            const r = MAX_R * ease;
+    // ══════════════════════════════════════════════════════════
+    //  ANIMATION LOOP
+    // ══════════════════════════════════════════════════════════
+    const animate = () => {
+        const t = performance.now() - startT;
+        if (t >= TOTAL) return;
 
-            // Transparent shadow dome
-            const domeR = Math.max(0.001, r * 1.15);
+        // ─── CHARGE PHASE ──────────────────────────────────
+        if (t < CHARGE_END) {
+            const k = t / CHARGE_END;
+            const ease = 1 - Math.pow(1 - k, 3);
+
+            runeMat1.opacity = 0.75 * ease;
+            runeMat2.opacity = 0.55 * ease;
+            for (const tk of runeTicks) tk.mat.opacity = 0.85 * ease;
+            runeGroup.rotation.y += 0.05;
+
+            for (const p of chargeParticles) {
+                const pt = t - p.userData.delay * 1000;
+                if (pt < 0) { p.material.opacity = 0; continue; }
+                const lk = Math.min(1, pt / (p.userData.duration * 1000));
+                const a = p.userData.startAngle + lk * 3.0 * p.userData.orbit * Math.PI;
+                const r = p.userData.startR * (1 - lk) * (1 - lk * 0.4);
+                const y = p.userData.startY * (1 - lk) + 0.4 * lk;
+                p.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+                p.material.opacity = 0.95 * (1 - Math.pow(lk, 3));
+                p.scale.setScalar(1 - lk * 0.5);
+            }
+
+            disc.scale.set(0.4, 0.4, 1);
+            discMat.opacity = 0.15 * ease;
+        }
+        // ─── EXPAND PHASE ──────────────────────────────────
+        else {
+            const expT = t - CHARGE_END;
+            const expDur = EXPAND_END - CHARGE_END;
+            const tRaw = Math.min(expT / expDur, 1);
+            const ease = 1 - Math.pow(1 - tRaw, 2);
+            const radius = MAX_R * ease;
+
+            // Rune fades as the wave grows
+            const runeFade = Math.max(0, 1 - tRaw * 2.0);
+            runeMat1.opacity = 0.75 * runeFade;
+            runeMat2.opacity = 0.55 * runeFade;
+            for (const tk of runeTicks) tk.mat.opacity = 0.85 * runeFade;
+            runeGroup.rotation.y += 0.05;
+
+            // Charge particles burn off
+            for (const p of chargeParticles) {
+                if (p.material.opacity > 0) {
+                    p.material.opacity = Math.max(0, p.material.opacity - 0.05);
+                }
+            }
+
+            // Disc
+            disc.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            discMat.opacity = 0.78 * Math.min(1, tRaw * 1.6);
+
+            // Main ring
+            ring.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            const ringPulse = 0.85 + 0.15 * Math.sin(t / 80);
+            ringMat.opacity = 0.98 * (1 - tRaw * 0.2) * ringPulse;
+
+            // Rim
+            rim.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            rimMat.opacity = 0.85 * Math.sin(Math.PI * Math.min(tRaw * 1.1, 1));
+
+            // Haze
+            haze.scale.set(Math.max(0.001, radius), Math.max(0.001, radius), 1);
+            hazeMat.opacity = 0.40 * (1 - tRaw * 0.35);
+
+            // Secondary wavefront
+            const tRaw2 = Math.max(0, (expT - 420) / (expDur - 420));
+            const r2 = MAX_R * (1 - Math.pow(1 - Math.min(tRaw2, 1), 3.5));
+            ring2.scale.set(Math.max(0.001, r2), Math.max(0.001, r2), 1);
+            ring2Mat.opacity = 0.55 * (1 - tRaw * 0.8);
+
+            // Pillar swords ride the ring
+            for (const p of pillars) {
+                const px = Math.cos(p.angle) * radius;
+                const pz = Math.sin(p.angle) * radius;
+                p.group.position.set(px, 0, pz);
+
+                const pillarFade = Math.max(0, 1 - tRaw * 1.1);
+                p.darkMat.opacity = 0.95 * pillarFade;
+                p.rimMat.opacity = 0.90 * pillarFade;
+                p.group.scale.set(1, 0.5 + tRaw * 0.9, 1);
+            }
+
+            // Scattered swords stab in
+            for (const c of scatteredSwords) {
+                const growT = Math.max(0, Math.min(1,
+                    (expT / 1000 - c.spawnDelay) / 0.25));
+                const holdFade = Math.max(0, 1 - tRaw * 0.9);
+                const alpha = growT * holdFade;
+
+                const base = c.group.userData.baseScale || 1;
+                c.group.scale.setScalar(base * (0.3 + 0.7 * growT));
+
+                c.bodyMat.opacity = 0.95 * alpha;
+                c.seamMat.opacity = 0.90 * alpha * (0.7 + 0.3 * Math.sin(t / 70 + c.index));
+                c.auraMat.opacity = 0.85 * alpha * (0.7 + 0.3 * Math.sin(t / 120 + c.index * 1.3));
+                c.coreMat.opacity = 0.95 * alpha * (0.72 + 0.28 * Math.sin(t / 55 + c.index * 0.7));
+            }
+
+            // Shadow dome
+            const domeR = Math.max(0.001, radius);
             dome.scale.setScalar(domeR);
-            domeMat.opacity = 0.42 * Math.min(1, p * 1.5) * (1 - p * 0.15);
+            domeMat.opacity = 0.45 * Math.min(1, tRaw * 1.5) * (1 - tRaw * 0.12);
 
             domeInner.scale.setScalar(domeR * 1.01);
-            domeInnerMat.opacity = 0.22 * Math.min(1, p * 1.8);
+            domeInnerMat.opacity = 0.24 * Math.min(1, tRaw * 1.8);
 
-            disc.scale.set(Math.max(0.001, r), Math.max(0.001, r), 1);
-            discMat.opacity = 0.72 * Math.min(1, p * 1.6);
+            domeRim.scale.set(domeR, domeR, 1);
+            domeRimMat.opacity = 0.75 * Math.min(1, tRaw * 1.4) * (1 - tRaw * 0.25);
 
-            ring.scale.set(Math.max(0.001, r), Math.max(0.001, r), 1);
-            ringMat.opacity = 0.95 * (1 - p * 0.2);
+            // Lightning arcs
+            for (const b of lightningBolts) {
+                if (t >= b.nextJumpAt) {
+                    b.nextJumpAt = t + 80 + Math.random() * 180;
+                    b.currentAngle = Math.random() * Math.PI * 2;
+                    b.baseR = domeR * (0.85 + Math.random() * 0.15);
+                    b.height = domeR * (0.6 + Math.random() * 0.35);
+                }
+                if (tRaw < 0.15 || tRaw > 0.95) {
+                    b.seg.visible = false;
+                    continue;
+                }
+                b.seg.visible = true;
+                const bx = Math.cos(b.currentAngle) * b.baseR;
+                const bz = Math.sin(b.currentAngle) * b.baseR;
+                const by = 0.10;
+                const tx = Math.cos(b.currentAngle + 0.2) * b.baseR * 0.6;
+                const tz = Math.sin(b.currentAngle + 0.2) * b.baseR * 0.6;
+                const ty = by + b.height;
 
-            rim.scale.set(Math.max(0.001, r), Math.max(0.001, r), 1);
-            rimMat.opacity = 0.75 * Math.sin(Math.PI * Math.min(p * 1.1, 1));
+                const dirV = new THREE.Vector3(tx - bx, ty - by, tz - bz);
+                const len = dirV.length();
+                b.seg.position.set((bx + tx) / 2, (by + ty) / 2, (bz + tz) / 2);
+                b.seg.quaternion.setFromUnitVectors(
+                    new THREE.Vector3(0, 1, 0),
+                    dirV.clone().normalize()
+                );
+                b.seg.scale.set(1, len, 1);
+                b.mat.opacity = 0.9 * Math.min(1, tRaw * 2) * Math.max(0, 1 - tRaw * 0.6);
+            }
 
-            requestAnimationFrame(animate);
-        };
-        animate();
-    });
+            // Flash
+            if (expT < 400) {
+                flash.visible = true;
+                const ft = expT / 400;
+                flashMat.opacity = 0.95 * (1 - ft);
+                flash.scale.setScalar(1 + ft * 3.0);
+            } else {
+                flash.visible = false;
+            }
+
+            // Piece tinting / dissolve as the wave passes over them
+            const EDGE = 0.32;
+            const MIN_OP = 0.15;
+            for (const p of tintTargets) {
+                const behind = radius - p.dist;
+                let targetTint, targetOpacity;
+                if (behind <= 0) { targetTint = 0; targetOpacity = 1; }
+                else if (behind < EDGE) {
+                    const kk = behind / EDGE;
+                    targetTint = kk;
+                    targetOpacity = 1 - (1 - MIN_OP) * kk;
+                } else { targetTint = 1; targetOpacity = MIN_OP; }
+
+                if (Math.abs(p.tint - targetTint) > 0.005) {
+                    p.tint = targetTint;
+                    p.opacity = targetOpacity;
+                    for (const m of p.mats) {
+                        const c1 = m.color.clone();
+                        c1.lerp(THEME.TINT, targetTint);
+                        m.mesh.material.color.copy(c1);
+                        m.mesh.material.opacity = targetOpacity;
+                        m.mesh.material.transparent = targetOpacity < 0.99;
+                        m.mesh.material.depthWrite = targetOpacity > 0.92;
+                        m.mesh.material.needsUpdate = true;
+                    }
+                }
+            }
+
+            // Shatter burst (one-shot)
+            if (tRaw >= SHATTER_AT && !shatterFired) {
+                shatterFired = true;
+                for (const s of shards) {
+                    s.mesh.visible = true;
+                    s.mesh.material.opacity = 0.9;
+                    s.mesh.position.set(0, 0.4, 0);
+                    s.bornAt = t;
+                }
+            }
+        }
+
+        // ─── SHARD PHYSICS ─────────────────────────────────
+        for (const s of shards) {
+            if (!s.mesh.visible) continue;
+            const st = (t - s.bornAt) / 1000;
+            if (st < 0 || st > 1) { s.mesh.visible = false; continue; }
+            const dist = 2.4 * Math.sqrt(st);
+            s.mesh.position.x = s.dirX * dist;
+            s.mesh.position.z = s.dirZ * dist;
+            s.mesh.position.y = 0.4 + s.upSpeed * st - 2.5 * st * st;
+            s.mesh.rotation.x += s.spin * 0.02;
+            s.mesh.rotation.y += s.spin * 0.03;
+            s.mesh.material.opacity = 0.95 * (1 - st);
+            s.mesh.scale.setScalar(1 - st * 0.3);
+        }
+
+        requestAnimationFrame(animate);
+    };
+    animate();
 }
 
 // ============================================================

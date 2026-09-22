@@ -68,13 +68,78 @@ const AI_CONFIGS = {
         randomness: 0,
         captureWeight: 1.6,
         damageWeight: 1.3,
-        selfDamageWeight: 8.0,       // essentially forbidden
-        kingCaptureBonus: 100000,    // extremely aggressive king hunting
-        threatWeight: 2.0,           // punish any threat against us
+        selfDamageWeight: 8.0,       // caster's own HP cost
+        kingCaptureBonus: 100000,
+        threatWeight: 2.0,
         ownKingSafetyWeight: 6.0,
         checkWeight: 2.5,
+        aggressionBonus: 0,
+        friendlyFireStrict: true,    // ★ document the enforced policy
     },
 };
+
+// ============================================================
+//  FRIENDLY-FIRE DETECTION
+//  Returns the total HP damage an ability would deal to `side`'s
+//  own pieces (the caster's team). Used to (a) hard-filter
+//  friendly-fire actions and (b) apply a massive scoring penalty.
+// ============================================================
+function getAbilityFriendlyDamage(game, action, side) {
+    if (action.type !== 'ability') return 0;
+    const ability = action.ability;
+    if (!ability) return 0;
+
+    // Heal / Revive help the team → never penalized.
+    const abId = ability.id;
+    if (abId === 'heal' || abId === 'revive') return 0;
+
+    const piece = game.getPiece(action.fromR, action.fromC);
+    if (!piece) return 0;
+
+    const b = game.board;
+    let dmg = 0;
+
+    // ── Bishop "Cannon Leap" — damages every piece on the path ──
+    if (piece.type === 'bishop' && ability.name === '炮躍 (Cannon Leap)') {
+        const dr = Math.sign(action.r - action.fromR);
+        const dc = Math.sign(action.c - action.fromC);
+        const steps = Math.abs(action.r - action.fromR);
+        for (let i = 1; i < steps; i++) {
+            const r = action.fromR + dr * i;
+            const c = action.fromC + dc * i;
+            if (!game.isInBounds(r, c)) continue;
+            const t = b[r][c];
+            if (t && t.color === side && t !== piece) {
+                dmg += Math.min(ability.damage || 0, t.hp);
+            }
+        }
+        return dmg;
+    }
+
+    // ── Pawn "charge explosion" — cross of 4 around landing ──
+    //    (Currently the ruleset only hits enemies, but check anyway so
+    //     the penalty survives any future rule change.)
+    if (piece.type === 'pawn' && ability.name === '衝鋒爆炸') {
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        for (const [dr, dc] of dirs) {
+            const tr = action.r + dr, tc = action.c + dc;
+            if (!game.isInBounds(tr, tc)) continue;
+            const t = b[tr][tc];
+            if (t && t.color === side && t !== piece) {
+                dmg += Math.min(ability.damage || 0, t.hp);
+            }
+        }
+        return dmg;
+    }
+
+    // ── Single-target abilities (rook cannon, etc.) ──
+    const target = b[action.r] && b[action.r][action.c];
+    if (target && target.color === side && target !== piece) {
+        dmg += Math.min(ability.damage || 0, target.hp);
+    }
+
+    return dmg;
+}
 
 // ============================================================
 //  ACTION GENERATION
@@ -87,18 +152,21 @@ function generateActions(game, color) {
             for (let c = 0; c < 8; c++) {
                 const p = game.getPiece(r, c);
                 if (!p || p.color !== color) continue;
-                // Knights use normal moves (executor handles push automatically).
-                // Kings use Domain Expansion, which is auto-triggered when in
-                // check — it can't be simulated in the minimax tree.
                 if (p.type === 'knight' || p.type === 'king') continue;
 
                 for (const ab of game.getLegalAbilities(r, c)) {
                     const target = game.getPiece(ab.r, ab.c);
                     const abId = ab.ability && ab.ability.id;
                     const isHeal = abId === 'heal';
+                    const isRevive = abId === 'revive';
 
-                    // ★ Reject friendly fire — but healing allies is the exception.
-                    if (target && target.color === color && target !== p && !isHeal) continue;
+                    // Reject friendly fire — heal/revive are the exceptions.
+                    if (target && target.color === color &&
+                        target !== p && !isHeal && !isRevive) continue;
+
+                    // ★ NEW — Reject any ability that would damage a friendly
+                    //   piece anywhere along its path or area.
+                    if (getAbilityFriendlyDamage(game, ab, color) > 0) continue;
 
                     abilities.push(ab);
                 }
@@ -383,10 +451,155 @@ function computeThreats(game, side) {
 }
 
 // ============================================================
+//  ATTACK / DEFENSE MAP
+//  For every occupied square, gather who attacks it and who defends it.
+//  This is the foundation for "which of my two pieces do I save?".
+// ============================================================
+function computeAttackDefenseMap(game) {
+    const b = game.board;
+    const attackMap = {};   // "r,c" → [ { r, c, piece } ]
+    const defendMap = {};   // "r,c" → [ { r, c, piece } ]
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = b[r][c];
+            if (!p) continue;
+            // skipCastling = true so castling targets don't pollute the map
+            const moves = game.getPseudoLegalMoves(r, c, b, true);
+            for (const m of moves) {
+                const target = b[m.r][m.c];
+                if (!target) continue;               // empty square = no defender/attacker entry
+                const key = m.r + ',' + m.c;
+                if (target.color === p.color) {
+                    (defendMap[key] || (defendMap[key] = [])).push({ r, c, piece: p });
+                } else {
+                    (attackMap[key] || (attackMap[key] = [])).push({ r, c, piece: p });
+                }
+            }
+        }
+    }
+    return { attackMap, defendMap };
+}
+
+// ============================================================
+//  MATERIAL RISK
+//  Static-exchange-style estimate: how much material would `side`
+//  actually lose if it had to sit here and let the opponent take
+//  whatever they want? Correctly handles:
+//    • undefended piece          → full value lost
+//    • outnumbered piece         → 90% of value lost
+//    • attacked by stronger piece→ tiny tempo threat
+//    • recapture with weaker piece → we win the trade, no penalty
+//    • recapture with stronger piece → lose the difference
+// ============================================================
+function computeMaterialRisk(b, side, maps) {
+    const { attackMap, defendMap } = maps;
+    let risk = 0;
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = b[r][c];
+            if (!p || p.color !== side) continue;
+            if (p.type === 'king') continue;         // handled by king-safety term
+
+            const key = r + ',' + c;
+            const attackers = attackMap[key];
+            if (!attackers || attackers.length === 0) continue;
+
+            const defenders = defendMap[key] || [];
+            const pVal = PIECE_VALUES[p.type] * (p.hp / p.maxHp);
+
+            let minAtk = Infinity;
+            for (const a of attackers) {
+                const av = PIECE_VALUES[a.piece.type];
+                if (av < minAtk) minAtk = av;
+            }
+            let minDef = Infinity;
+            for (const d of defenders) {
+                const dv = PIECE_VALUES[d.piece.type];
+                if (dv < minDef) minDef = dv;
+            }
+
+            const numAtk = attackers.length;
+            const numDef = defenders.length;
+
+            if (numDef === 0) risk += pVal;                       // free capture
+            else if (numAtk > numDef) risk += pVal * 0.9;                 // overwhelmed
+            else if (minAtk >= pVal) risk += pVal * 0.15;                // low-priority threat
+            else if (minDef > minAtk) risk += Math.max(0, pVal - minAtk) * 0.6;
+            // else: we can recapture with a cheaper/equal piece → safe
+        }
+    }
+    return risk;
+}
+
+// ============================================================
+//  OPPONENT PASSIVITY TRACKER
+//  If the human keeps playing harmless moves, ramping aggression
+//  makes the AI attack instead of mirroring the shuffle.
+// ============================================================
+const aiPassivityTracker = { opponentPassiveTurns: 0 };
+
+function updatePassivityTracker(game, aiSide) {
+    const enemy = aiSide === 'white' ? 'black' : 'white';
+    const hist = game.moveHistory;
+    if (!hist || hist.length === 0) { aiPassivityTracker.opponentPassiveTurns = 0; return; }
+
+    const last = hist[hist.length - 1];
+    if (!last) { aiPassivityTracker.opponentPassiveTurns = 0; return; }
+
+    // Aggressive actions → reset
+    if (last.captured ||
+        last.type === 'ability' || last.type === 'areaAbility' ||
+        last.type === 'knockback' || last.type === 'bishop_leap' ||
+        last.castling) {
+        aiPassivityTracker.opponentPassiveTurns = 0;
+        return;
+    }
+
+    // Classify a normal move
+    const mp = last.piece;
+    if (mp && mp.color === enemy) {
+        const backRank = mp.color === 'white' ? 0 : 7;
+        // Developing a knight / bishop off the back rank
+        if ((mp.type === 'knight' || mp.type === 'bishop') && last.fromR === backRank) {
+            aiPassivityTracker.opponentPassiveTurns =
+                Math.max(0, aiPassivityTracker.opponentPassiveTurns - 1);
+            return;
+        }
+        // Central pawn push
+        if (mp.type === 'pawn' && (last.toC === 3 || last.toC === 4)) {
+            aiPassivityTracker.opponentPassiveTurns =
+                Math.max(0, aiPassivityTracker.opponentPassiveTurns - 1);
+            return;
+        }
+        // Any pawn advancing
+        if (mp.type === 'pawn') {
+            const forward = mp.color === 'white'
+                ? (last.toR - last.fromR) > 0
+                : (last.toR - last.fromR) < 0;
+            if (forward) return;      // neutral, don't count either way
+        }
+    }
+
+    // Anything else = passive (piece shuffle / retreat)
+    aiPassivityTracker.opponentPassiveTurns =
+        Math.min(6, aiPassivityTracker.opponentPassiveTurns + 1);
+}
+
+function getAggressionMultiplier() {
+    const n = aiPassivityTracker.opponentPassiveTurns;
+    if (n === 0) return 0;
+    // 1→0.15, 2→0.30, 3→0.45, 4→0.60, 5→0.70, 6→0.80
+    return Math.min(0.8, n * 0.15);
+}
+
+// ============================================================
 //  BOARD EVALUATION
 // ============================================================
 function evaluateBoard(game, side, cfg) {
     const enemy = side === 'white' ? 'black' : 'white';
+    const b = game.board;
 
     // Terminal: either king gone
     const wK = game.findKing('white');
@@ -396,34 +609,45 @@ function evaluateBoard(game, side, cfg) {
 
     let score = 0;
 
-    // 1. Material × HP ratio
+    // ── 1. Material × HP ratio, pawn advancement, opening development ──
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
-            const p = game.board[r][c];
+            const p = b[r][c];
             if (!p) continue;
             const val = PIECE_VALUES[p.type] * (p.hp / p.maxHp);
             const sign = (p.color === side) ? 1 : -1;
             score += sign * val;
 
-            // Pawn advancement
             if (p.type === 'pawn') {
                 const advance = p.color === 'white' ? r : (7 - r);
                 score += sign * advance * 6;
+                // Fight for the centre
+                if (c === 3 || c === 4) score += sign * 5;
+            }
+
+            // Development bonus — encourages knights/bishops off the back rank
+            const backRank = p.color === 'white' ? 0 : 7;
+            if ((p.type === 'knight' || p.type === 'bishop') && r !== backRank) {
+                score += sign * 14;
+            }
+            // Discourage early queen sorties
+            if (p.type === 'queen') {
+                const startRow = p.color === 'white' ? 0 : 7;
+                if (r !== startRow && game.fullMoveNumber < 8) {
+                    score -= sign * 8;
+                }
             }
         }
     }
 
-    // 2. King hunting — reward low enemy king HP
+    // ── 2. King hunting — reward low enemy king HP ──
     const ekp = game.findKing(enemy);
     if (ekp) {
         const ek = game.getPiece(ekp.r, ekp.c);
-        if (ek) {
-            const hpLost = 1 - ek.hp / ek.maxHp;
-            score += hpLost * cfg.kingCaptureBonus;
-        }
+        if (ek) score += (1 - ek.hp / ek.maxHp) * cfg.kingCaptureBonus;
     }
 
-    // 3. Own king safety — penalise damage taken
+    // ── 3. Own king safety ──
     const okp = game.findKing(side);
     if (okp) {
         const ok = game.getPiece(okp.r, okp.c);
@@ -433,23 +657,21 @@ function evaluateBoard(game, side, cfg) {
         }
     }
 
-    // 4. Check bonus
-    if (game.isInCheck(enemy, game.board)) score += cfg.checkWeight * 100;
-    if (game.isInCheck(side, game.board)) score -= cfg.checkWeight * 100;
+    // ── 4. Check bonus ──
+    if (game.isInCheck(enemy, b)) score += cfg.checkWeight * 100;
+    if (game.isInCheck(side, b)) score -= cfg.checkWeight * 100;
 
-    // 5. Threats on our pieces — this is what makes the AI "stop opponent's plans"
-    const threats = computeThreats(game, side);
-    for (const t of threats) {
-        const val = PIECE_VALUES[t.piece.type] * (t.piece.hp / t.piece.maxHp);
-        if (t.piece.type === 'king') {
-            // ★ King under attack = captured next move (capturing the king ends
-            //   the game here). Penalty must dwarf any material gain so the AI
-            //   resolves the threat instead of greedily chipping a piece.
-            score -= PIECE_VALUES.king * 20 * (cfg.ownKingSafetyWeight / 6);
-        } else {
-            score -= val * cfg.threatWeight;
-        }
-    }
+    // ── 5. Material at risk (the fork / double-attack term) ──
+    //    This is what makes the AI *choose* which of two attacked pieces
+    //    is more important to save — a rook risk costs more than a knight risk.
+    const maps = computeAttackDefenseMap(game);
+    const ourRisk = computeMaterialRisk(b, side, maps);
+    const enemyRisk = computeMaterialRisk(b, enemy, maps);
+
+    const aggr = cfg.aggressionBonus || 0;
+    // As aggression rises: relax own defence a touch, reward enemy exposure
+    score -= ourRisk * cfg.threatWeight * (0.55 - aggr * 0.10);
+    score += enemyRisk * cfg.threatWeight * (0.55 + aggr * 0.35);
 
     return score;
 }
@@ -459,21 +681,68 @@ function evaluateBoard(game, side, cfg) {
 // ============================================================
 function scoreActionImmediate(game, action, side, cfg) {
     const enemy = side === 'white' ? 'black' : 'white';
+    const b = game.board;
     let score = 0;
 
+    // Precompute attacked squares once — cheap way to detect escaping
+    const attackedByEnemy = game.getAttackedSquares(enemy, b);
+
     if (action.type === 'move') {
+        const piece = game.getPiece(action.fromR, action.fromC);
         const cap = game.getPiece(action.toR, action.toC);
+
+        // ── Capture value (MVV) ──
         if (cap && cap.color === enemy) {
             score += PIECE_VALUES[cap.type] * (cap.hp / cap.maxHp) * cfg.captureWeight;
             if (cap.type === 'king') score += cfg.kingCaptureBonus;
         }
-        // Knight push value (best case)
-        // Knight push value (best case)
-        const piece = game.getPiece(action.fromR, action.fromC);
-        if (piece && piece.type === 'knight' &&
-            isAbilityEnabledForColor(piece.color)) {
-            const canPush = (piece.skillCooldown || 0) === 0;
-            const victims = getPushableVictims(game, action.toR, action.toC, action.fromR, action.fromC, piece.color);
+
+        // ── Escape bonus: moving a threatened piece to safety ──
+        if (piece) {
+            const srcKey = action.fromR + ',' + action.fromC;
+            const dstKey = action.toR + ',' + action.toC;
+            const srcUnderAttack = attackedByEnemy.has(srcKey);
+            const dstUnderAttack = attackedByEnemy.has(dstKey);
+            if (srcUnderAttack) {
+                const pVal = PIECE_VALUES[piece.type] * (piece.hp / piece.maxHp);
+                score += dstUnderAttack ? pVal * 0.10 : pVal * 0.45;
+            }
+        }
+
+        // ── Fork / new-threat bonus ──
+        // Count how many enemy pieces this piece would attack from its new square
+        // (cheap approximation: pretend the piece is already there).
+        if (piece && (action.toR !== action.fromR || action.toC !== action.fromC)) {
+            const savedFrom = b[action.fromR][action.fromC];
+            const savedTo = b[action.toR][action.toC];
+            // Simulate the move on a shallow copy for threat check
+            b[action.fromR][action.fromC] = null;
+            b[action.toR][action.toC] = piece;
+            try {
+                const newMoves = game.getPseudoLegalMoves(action.toR, action.toC, b, true);
+                let hits = 0, totalVal = 0;
+                for (const m of newMoves) {
+                    const t = b[m.r][m.c];
+                    if (!t || t.color !== enemy) continue;
+                    if (t.type === 'king') continue;
+                    const tv = PIECE_VALUES[t.type] * (t.hp / t.maxHp);
+                    if (tv > PIECE_VALUES[piece.type] * 0.5) {
+                        hits++;
+                        totalVal += tv;
+                    }
+                }
+                if (hits >= 2) score += totalVal * 0.30;   // fork!
+                else if (hits === 1) score += totalVal * 0.08;
+            } finally {
+                b[action.fromR][action.fromC] = savedFrom;
+                b[action.toR][action.toC] = savedTo;
+            }
+        }
+
+        // ── Knight push value ──
+        if (piece && piece.type === 'knight' && isAbilityEnabledForColor(piece.color)) {
+            const victims = getPushableVictims(game, action.toR, action.toC,
+                action.fromR, action.fromC, piece.color);
             for (const v of victims) {
                 const vp = game.getPiece(v.r, v.c);
                 if (vp) score += PIECE_VALUES[vp.type] * (vp.hp / vp.maxHp) * 0.4;
@@ -481,33 +750,43 @@ function scoreActionImmediate(game, action, side, cfg) {
         }
     }
 
+    // ══════════════════════════════════════════════════════════
+    //  ABILITY SCORING
+    // ══════════════════════════════════════════════════════════
     if (action.type === 'ability') {
         const target = game.getPiece(action.r, action.c);
         const movingPiece = game.getPiece(action.fromR, action.fromC);
         const ab = action.ability;
+        if (!ab) return score;
 
-        // ★ Queen Heal
+        // ── Queen Heal — reward restoring HP to a valuable ally ──
         if (ab.id === 'heal') {
-            const t = game.getPiece(action.r, action.c);
-            if (t) {
-                const healed = Math.min(ab.healAmount || 100, t.maxHp - t.hp);
-                score += (healed / 100) * (PIECE_VALUES[t.type] || 100) * 0.6 * cfg.damageWeight;
+            if (target) {
+                const healed = Math.min(ab.healAmount || 100, target.maxHp - target.hp);
+                score += (healed / 100)
+                    * (PIECE_VALUES[target.type] || 100)
+                    * 0.6
+                    * cfg.damageWeight;
             }
-            return score;
+            return score;   // heal never hurts the team → skip ff check
         }
 
-        // ★ Queen Revive
+        // ── Queen Revive — reward bringing back the most valuable corpse ──
         if (ab.id === 'revive') {
             const dead = game.getDeadPieces(side);
             let bestVal = 0;
-            for (const d of dead) bestVal = Math.max(bestVal, PIECE_VALUES[d.type] || 0);
+            for (const d of dead) {
+                const v = PIECE_VALUES[d.type] || 0;
+                if (v > bestVal) bestVal = v;
+            }
             score += bestVal * 0.9 * cfg.captureWeight;
-            return score;
+            return score;   // revive never hurts the team → skip ff check
         }
 
-        // ★ Bishop leap: sum path damage; penalise friendly fire
-        if (movingPiece && movingPiece.type === 'bishop' &&
-            ab.name === '炮躍 (Cannon Leap)') {
+        // ── Bishop Cannon Leap — sum ONLY enemy path damage here.
+        //    Team damage is applied by the unified penalty below. ──
+        if (movingPiece && movingPiece.type === 'bishop'
+            && ab.name === '炮躍 (Cannon Leap)') {
             const dr = Math.sign(action.r - action.fromR);
             const dc = Math.sign(action.c - action.fromC);
             const steps = Math.abs(action.r - action.fromR);
@@ -517,30 +796,39 @@ function scoreActionImmediate(game, action, side, cfg) {
                 if (!game.isInBounds(pr, pc)) continue;
                 const p = game.getPiece(pr, pc);
                 if (!p) continue;
+                if (p.color !== enemy) continue;              // friend → handled below
                 const ratio = Math.min(1, ab.damage / p.hp);
-                if (p.color === enemy) {
-                    score += PIECE_VALUES[p.type] * ratio * cfg.damageWeight;
-                    if (p.type === 'king') score += cfg.kingCaptureBonus * ratio;
-                } else if (p !== movingPiece) {
-                    // Friendly fire — heavy penalty (same as existing)
-                    score -= PIECE_VALUES[p.type] * ratio * 10.0;
-                }
+                score += PIECE_VALUES[p.type] * ratio * cfg.damageWeight;
+                if (p.type === 'king') score += cfg.kingCaptureBonus * ratio;
             }
-            return score;
         }
-
-        if (target && target.color === enemy) {
-            // Enemy hit — reward
+        // ── Single-target damage (rook cannon / default strike) ──
+        else if (target && target.color === enemy) {
             const ratio = Math.min(1, ab.damage / target.hp);
             score += PIECE_VALUES[target.type] * ratio * cfg.damageWeight;
             if (target.type === 'king') score += cfg.kingCaptureBonus * ratio;
-        } else if (target && target.color === side && target !== movingPiece) {
-            // ★ Friendly fire — massive penalty. Never worth it.
-            const ratio = Math.min(1, ab.damage / target.hp);
-            score -= PIECE_VALUES[target.type] * ratio * 10.0;
         }
 
-        if (ab.selfDamage) score -= ab.selfDamage * cfg.selfDamageWeight;
+        // ── Caster's own HP cost (pawn charge, etc.) ──
+        if (ab.selfDamage) {
+            score -= ab.selfDamage * cfg.selfDamageWeight;
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  ★ UNIFIED FRIENDLY-FIRE PENALTY
+        //  Runs for EVERY offensive ability, so no early-return
+        //  branch can skip it. Covers:
+        //    • Bishop Cannon Leap  → every piece on the diagonal
+        //    • Pawn charge         → cross AoE around the landing
+        //    • Rook cannon / strike→ landing square only
+        //  The magnitude (200×) dwarfs any possible reward, so the
+        //  ability is effectively impossible to pick if it hurts
+        //  our own team.
+        // ══════════════════════════════════════════════════════
+        const ffDamage = getAbilityFriendlyDamage(game, action, side);
+        if (ffDamage > 0) {
+            score -= ffDamage * 200;
+        }
     }
 
     return score;
@@ -706,8 +994,24 @@ function makeAIMove() {
         requestAnimationFrame(() => {
             setTimeout(() => {
                 try {
-                    const cfg = AI_CONFIGS[aiDifficulty] || AI_CONFIGS.easy;
+                    const baseCfg = AI_CONFIGS[aiDifficulty] || AI_CONFIGS.easy;
                     const aiSide = gameState.turn;
+
+                    // ★ Track how passive the opponent has been, then build
+                    //   an effective config for this one move.
+                    updatePassivityTracker(gameState, aiSide);
+                    const aggression = getAggressionMultiplier();
+
+                    const cfg = Object.assign({}, baseCfg, {
+                        aggressionBonus: aggression,
+                        kingCaptureBonus: baseCfg.kingCaptureBonus * (1 + aggression * 0.30),
+                        captureWeight: baseCfg.captureWeight * (1 + aggression * 0.20),
+                    });
+
+                    if (aggression > 0 && aiDifficulty === 'hard') {
+                        console.log(`🔥 AI aggression boost: ${(aggression * 100).toFixed(0)}% (opponent passive for ${aiPassivityTracker.opponentPassiveTurns} turns)`);
+                    }
+
                     const action = selectBestAction(gameState, aiSide, cfg);
 
                     if (!action) {

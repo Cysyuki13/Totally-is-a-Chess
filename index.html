@@ -15,6 +15,13 @@
     <title>TotallyIsAChess</title>
     <link rel="icon" type="image/png" href="assets/icons/Chess_icon.png" />
     <link rel="preload" href="assets/sounds/Midnight_On_The_Board.mp3" as="audio" type="audio/mpeg" crossorigin>
+    <!-- ★ Fonts — Suez One (English) + Chiron Hei HK (繁體中文) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Suez+One&family=Chiron+Hei+HK:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="wiki.css" />
 </head>
@@ -55,6 +62,11 @@
             </div>
             <span id="checkWarning" class="check-warning hidden">🎯 輪到你了!</span>
             <span id="aiThinkingIndicator" class="ai-thinking hidden">🤖 AI 思考中...</span>
+            <!-- ★ NEW — Room code display (multiplayer only) -->
+            <div class="room-code-display hidden" id="roomCodeDisplay" title="房間編號 / Room ID">
+                <span class="room-code-label">🏠 房號</span>
+                <span class="room-code-value" id="roomCodeValue">----</span>
+            </div>
         </div>
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
             <button class="btn btn-danger" id="freeCamBtn" onclick="toggleFreeCamera()">📷 自由</button>
@@ -119,7 +131,7 @@
             <h1>♞ 西洋棋</h1>
             <p style="opacity:0.7;margin-bottom:20px;">與眾同樂</p>
             <div class="btn-row main-menu-buttons">
-                <button class="btn" onclick="showAIDifficulty()">🤖 單人遊戲</button>
+                <button class="btn" onclick="showAIDifficulty()">👤 單人遊戲</button>
                 <button class="btn" onclick="showMultiplayerSetup()">👥 雙人遊戲</button>
                 <button class="btn btn-secondary" onclick="openWiki()">📖 技能圖鑑</button>
                 <button class="btn btn-secondary" onclick="openSettings()">⚙️ 設定</button>
@@ -151,6 +163,18 @@
                 <button class="btn difficulty-btn" onclick="startAIGame('noob')">🐣 簡單</button>
                 <button class="btn difficulty-btn" onclick="startAIGame('easy')">🙂 悠閒</button>
                 <button class="btn difficulty-btn" onclick="startAIGame('hard')">🔥 困難</button>
+            </div>
+
+            <!-- ★ NEW: 玩家顏色選擇 -->
+            <div class="settings-group" style="margin-top: 14px;">
+                <label>♔ 你的顏色</label>
+                <div class="btn-row" style="justify-content:center;gap:8px;margin-top:4px;">
+                    <button class="mode-btn ai-color-btn active" data-color="white"
+                        onclick="setAIPlayerColor('white')">♔ 白方 (先手)</button>
+                    <button class="mode-btn ai-color-btn" data-color="black" onclick="setAIPlayerColor('black')">♚ 黑方
+                        (後手)</button>
+                </div>
+                <div class="desc">白方先手、黑方後手。AI 將操控另一種顏色。</div>
             </div>
 
             <!-- ★ 遊戲模式切換開關 -->
@@ -510,6 +534,28 @@
     </div>
 
     <!-- ============================================================ -->
+    <!--  BATTLE SURRENDER CONFIRM                                     -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="battleSurrenderConfirmOverlay" style="z-index: 850;">
+        <div class="panel" style="max-width: 440px; border-color: #ff6666;
+            box-shadow: 0 0 60px rgba(255, 102, 102, 0.35), 0 20px 60px rgba(0, 0, 0, 0.7);">
+            <h2 style="color: #ff6666; text-shadow: 0 0 20px rgba(255, 102, 102, 0.55);">
+                🏳 放棄對決？
+            </h2>
+            <p style="opacity:0.85;margin-bottom:8px;">
+                你將立即輸掉這場領域對決。
+            </p>
+            <p style="opacity:0.65;font-size:0.9rem;">
+                ⚠️ 若你是<strong style="color:#ff8a70;">國王</strong>，將直接輸掉整場對局。
+            </p>
+            <div class="btn-row" style="margin-top:16px;">
+                <button class="btn btn-danger" onclick="doBattleSurrenderConfirm()">✅ 確定放棄</button>
+                <button class="btn btn-secondary" onclick="cancelBattleSurrenderConfirm()">✕ 取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
     <!--  GAME OVER                                                    -->
     <!-- ============================================================ -->
     <div class="overlay hidden" id="gameOverOverlay">
@@ -530,9 +576,10 @@
             <h2>遊戲結束</h2>
             <div class="game-over-text" id="gameOverText">獲勝!</div>
             <p id="gameOverReason" style="opacity:0.8;"></p>
-            <div class="btn-row" style="margin-top:16px;">
+            <div class="btn-row game-over-actions">
                 <button class="btn" onclick="restartGame()">🔄 再玩一局</button>
                 <button class="btn btn-secondary" onclick="viewFinalBoard()">👁 查看棋盤</button>
+                <button class="btn btn-secondary" id="gameStatsBtn" onclick="showGameStats()">📊 對局統計</button>
                 <button class="btn btn-secondary" onclick="backToMenu()">🏠 主選單</button>
             </div>
         </div>
@@ -547,6 +594,104 @@
         <div class="game-over-status-actions">
             <button class="btn btn-secondary btn-sm" onclick="restartGame()">🔄 再玩一局</button>
             <button class="btn btn-secondary btn-sm" onclick="showGameOverMenu()">📋 結算</button>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  ★ EXPORT / GAME STATS MENU                                   -->
+    <!-- ============================================================ -->
+    <div class="overlay hidden" id="exportOverlay">
+        <div class="chess-bg" aria-hidden="true">
+            <div class="bg-grid"></div>
+            <div class="bg-glow"></div>
+            <span class="piece p1">♞</span>
+            <span class="piece p2">♛</span>
+            <span class="piece p3">♜</span>
+            <span class="piece p4">♝</span>
+            <span class="piece p5">♟</span>
+            <span class="piece p6">♚</span>
+            <span class="piece p7">♘</span>
+            <span class="piece p8">♕</span>
+        </div>
+
+        <div class="panel export-panel">
+            <div class="export-name-row">
+                <label for="exportPlayerName">👤 玩家名稱：</label>
+                <input type="text" id="exportPlayerName" class="export-name-input" maxlength="24"
+                    placeholder="輸入你的名稱..." />
+            </div>
+
+            <div class="export-toggle-row">
+                <span class="export-toggle-label">📋 匯出時包含走棋記錄</span>
+                <label class="toggle-switch small-switch">
+                    <input type="checkbox" id="exportIncludeMoves" checked
+                        onchange="setExportIncludeMoves(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="export-card" id="exportCard">
+                <div class="export-card-header">
+                    <span class="export-card-glyph g1">♞</span>
+                    <span class="export-card-glyph g2">♛</span>
+                    <span class="export-card-glyph g3">♜</span>
+                    <span class="export-card-glyph g4">♝</span>
+                    <div class="export-card-title">西洋棋對局記錄</div>
+                    <div class="export-card-subtitle">CHESS MATCH RECORD</div>
+                </div>
+
+                <div class="export-player-plate">
+                    <div class="export-player-label">玩家</div>
+                    <div class="export-card-name" id="exportCardName">無名棋士</div>
+
+                    <!-- ★ NEW — AI difficulty line -->
+                    <div class="export-difficulty-line">
+                        <span class="export-difficulty-label">AI 難度</span>
+                        <span class="export-difficulty-sep">·</span>
+                        <span class="export-difficulty-value" id="exportStatDifficulty">—</span>
+                    </div>
+                </div>
+
+                <div class="export-stats">
+                    <div class="export-stat">
+                        <div class="export-stat-value" id="exportStatResult">—</div>
+                        <div class="export-stat-label">對局結果</div>
+                    </div>
+                    <div class="export-stat">
+                        <div class="export-stat-value" id="exportStatTime">—</div>
+                        <div class="export-stat-label">對局時間</div>
+                    </div>
+                    <div class="export-stat">
+                        <div class="export-stat-value" id="exportStatPlayerMoves">—</div>
+                        <div class="export-stat-label">我方步數</div>
+                    </div>
+                    <div class="export-stat">
+                        <div class="export-stat-value" id="exportStatAiMoves">—</div>
+                        <div class="export-stat-label">AI 步數</div>
+                    </div>
+                    <div class="export-stat">
+                        <div class="export-stat-value" id="exportStatPlayerSkills">—</div>
+                        <div class="export-stat-label">我方技能</div>
+                    </div>
+                    <div class="export-stat">
+                        <div class="export-stat-value" id="exportStatAiSkills">—</div>
+                        <div class="export-stat-label">AI 技能</div>
+                    </div>
+                </div>
+
+                <div class="export-moves-title">走棋記錄</div>
+                <div class="export-moves" id="exportMoves"></div>
+
+                <div class="export-card-footer">
+                    <span id="exportFooterDate"></span>
+                    <span class="export-brand">♞ TotallyIsAChess</span>
+                </div>
+            </div>
+
+            <div class="btn-row" style="margin-top:16px;">
+                <button class="btn" onclick="exportAsImage()">💾 儲存為圖片</button>
+                <button class="btn btn-secondary" onclick="closeExport()">← 返回</button>
+            </div>
         </div>
     </div>
 
@@ -687,6 +832,11 @@
                     <span class="battle-menu-icon">✂️</span>
                     <span class="battle-menu-label">剪刀</span>
                 </button>
+                <button class="battle-menu-btn battle-menu-btn-surrender" id="battleSurrenderBtn"
+                    onclick="onBattleSurrender()">
+                    <span class="battle-menu-icon">🏳️</span>
+                    <span class="battle-menu-label">放棄</span>
+                </button>
             </div>
         </div>
     </div>
@@ -697,6 +847,7 @@
     <script src="main.js"></script>
     <script src="ai.js"></script>
     <script src="wiki.js"></script>
+    <script src="recorder.js"></script>
 </body>
 
 </html>
