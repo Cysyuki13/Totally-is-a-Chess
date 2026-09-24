@@ -4677,3 +4677,7 @@ body.force-landscape #rotateDeviceOverlay {
         transform: rotate(360deg);
     }
 }
+
+.battle-health-fill {
+    transition: width 0.5s ease-out, background 0.3s, box-shadow 0.3s;
+}

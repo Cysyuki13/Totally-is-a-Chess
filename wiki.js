@@ -55,18 +55,26 @@ const WIKI_PIECES = {
     },
     rook: {
         name: '城堡 (Rook)', glyph: '♜',
-        skillName: '加農炮 (Cannon)',
-        description: '城堡發射加農炮，可自由瞄準 4 格範圍內的任意位置。命中範圍內所有敵方棋子（含友方）各受到 35 點傷害。冷卻 1 回合。',
+        skillName: '雷霆加農炮 (Thunder Cannon)',
+        description:
+            '城堡發射雷霆加農炮，可自由瞄準 4 格範圍內的任意位置。\n' +
+            '命中範圍內所有敵方棋子各受到 <b>35</b> 點傷害，' +
+            '並且存活的目標會被<b>麻痺 1 回合</b>（無法移動、無法使用技能）。\n' +
+            '冷卻 1 回合。',
         damage: 35, selfDamage: 0, cooldown: 1,
         board: () => {
             const caster = { r: 4, c: 4 };
-            const damage = [], path = [];
+            const damage = [];
             for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
                 const d = Math.hypot(r - caster.r, c - caster.c);
                 if (d === 0) continue;
                 if (d <= 4) damage.push({ r, c });
             }
-            return { caster: { ...caster, type: 'rook', color: 'white', icon: '♜' }, damage, landing: { r: 2, c: 6 } };
+            return {
+                caster: { ...caster, type: 'rook', color: 'white', icon: '♜' },
+                damage,
+                landing: { r: 2, c: 6 }
+            };
         },
     },
     knight: {
@@ -1005,54 +1013,496 @@ function spawnCrossBurst(x, z) {
     loop();
 }
 
+// ── Rook effect — THUNDER CANNON cinematic ─────────────────────
+//   Timeline (ms):
+//     0     → 550   CHARGE   rook glows electric-blue, rune ring pulses
+//     550   → 1150  FIRE     crackling blue orb arcs across the board
+//     1150  → 2050  IMPACT   white/blue explosion, ground shocks,
+//                            lightning arcs, shards, plasma sparks,
+//                            stun beacon + floating bolt on target
+//     2050  → 3100  FADE     everything dims out
 function setupRookEffect() {
-    const CYCLE = 3000;
+    const CYCLE = 3200;
+
     wikiLoop(CYCLE, () => {
         clearEffectScene();
         wikiEffectRoot.add(makeWikiGround());
 
+        // ══════════════════════════════════════════════════════
+        //  POSITIONS
+        // ══════════════════════════════════════════════════════
+        const START = new THREE.Vector3(-1.5, 0.6, 1.5);
+        const TARGET_POS = new THREE.Vector3(1.5, 0, -1.5);
+        const END = TARGET_POS.clone();
+        END.y = 0.05;
+
+        // ══════════════════════════════════════════════════════
+        //  PIECES — caster (white rook) + target (black pawn)
+        // ══════════════════════════════════════════════════════
         const rook = createPieceModel('rook', 'white', 100, 100, PIECE_PARAMS.rook);
-        rook.position.set(-1.4, 0, 1.4);
+        rook.position.set(-1.5, 0, 1.5);
         wikiEffectRoot.add(rook);
 
-        const start = new THREE.Vector3(-1.4, 0.6, 1.4);
-        const end = new THREE.Vector3(1.6, 0.05, -1.6);
-        const projGeo = new THREE.SphereGeometry(0.16, 14, 14);
-        const projMat = new THREE.MeshStandardMaterial({
-            color: 0xff5500, emissive: 0xff3300, emissiveIntensity: 0.9, roughness: 0.2,
-        });
-        const proj = new THREE.Mesh(projGeo, projMat);
-        proj.position.copy(start);
-        wikiEffectRoot.add(proj);
+        const target = createPieceModel('pawn', 'black', 100, 100, PIECE_PARAMS.pawn);
+        target.position.copy(TARGET_POS);
+        wikiEffectRoot.add(target);
 
-        const glowGeo = new THREE.SphereGeometry(0.28, 10, 10);
-        const glowMat = new THREE.MeshBasicMaterial({
-            color: 0xff8800, transparent: true, opacity: 0.35,
-            depthWrite: false, blending: THREE.AdditiveBlending,
-        });
-        const glow = new THREE.Mesh(glowGeo, glowMat);
-        glow.position.copy(start);
-        wikiEffectRoot.add(glow);
-
-        const startT = performance.now();
-        const DURATION = 600;
-        const fly = () => {
-            const t = Math.min((performance.now() - startT) / DURATION, 1);
-            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            const arc = Math.sin(t * Math.PI) * 1.6;
-            proj.position.lerpVectors(start, end, ease);
-            proj.position.y += arc;
-            glow.position.copy(proj.position);
-            proj.rotation.x += 0.25;
-            if (t < 1) requestAnimationFrame(fly);
-            else {
-                wikiEffectRoot.remove(proj); wikiEffectRoot.remove(glow);
-                proj.geometry.dispose(); proj.material.dispose();
-                glow.geometry.dispose(); glow.material.dispose();
-                spawnExplosion(end.x, end.z);
+        // ── Snapshot materials so we can animate their glow ──
+        const rookMats = [];
+        rook.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                n.material = n.material.clone();
+                rookMats.push({
+                    mesh: n,
+                    color: n.material.color.clone(),
+                    emissive: n.material.emissive ? n.material.emissive.clone() : null,
+                });
             }
+        });
+        const targetMats = [];
+        target.traverse(n => {
+            if (n.isMesh && n.material && n.material.color) {
+                n.material = n.material.clone();
+                targetMats.push({ mesh: n, color: n.material.color.clone() });
+            }
+        });
+
+        // ══════════════════════════════════════════════════════
+        //  CHARGE RING under the rook
+        // ══════════════════════════════════════════════════════
+        const chargeRingMat = new THREE.MeshBasicMaterial({
+            color: 0x7ac8ff, transparent: true, opacity: 0,
+            depthWrite: false, side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+        });
+        const chargeRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.34, 0.44, 40), chargeRingMat
+        );
+        chargeRing.rotation.x = -Math.PI / 2;
+        chargeRing.position.set(START.x, 0.04, START.z);
+        wikiEffectRoot.add(chargeRing);
+
+        // ══════════════════════════════════════════════════════
+        //  THUNDER CANNONBALL (hidden until FIRE phase)
+        // ══════════════════════════════════════════════════════
+        const projGroup = new THREE.Group();
+        projGroup.position.copy(START);
+        projGroup.visible = false;
+        wikiEffectRoot.add(projGroup);
+
+        const projMat = new THREE.MeshStandardMaterial({
+            color: 0xaef1ff, emissive: 0x4fd4ff, emissiveIntensity: 2.2,
+            roughness: 0.15, metalness: 0.4,
+        });
+        const proj = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 20), projMat);
+        proj.castShadow = true;
+        projGroup.add(proj);
+
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0.95,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), coreMat);
+        projGroup.add(core);
+
+        const glowMat = new THREE.MeshBasicMaterial({
+            color: 0x7ac8ff, transparent: true, opacity: 0.35,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), glowMat);
+        projGroup.add(glow);
+
+        // Orbiting lightning arcs around the ball
+        const arcs = [];
+        for (let i = 0; i < 6; i++) {
+            const arcMat = new THREE.MeshBasicMaterial({
+                color: 0xd8f4ff, transparent: true, opacity: 0.9,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const arc = new THREE.Mesh(
+                new THREE.TorusGeometry(0.32 + Math.random() * 0.08, 0.012, 6, 18),
+                arcMat
+            );
+            arc.userData = {
+                axis: new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ).normalize(),
+                spinSpeed: 4 + Math.random() * 4,
+            };
+            projGroup.add(arc);
+            arcs.push(arc);
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  IMPACT BUNDLE (created upfront, revealed on impact)
+        // ══════════════════════════════════════════════════════
+        const boomGroup = new THREE.Group();
+        boomGroup.position.set(END.x, 0.35, END.z);
+        boomGroup.visible = false;
+        wikiEffectRoot.add(boomGroup);
+
+        // White-hot core
+        const boomCoreMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const boomCore = new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 24), boomCoreMat);
+        boomGroup.add(boomCore);
+
+        // Electric-blue main flash
+        const boomMainMat = new THREE.MeshBasicMaterial({
+            color: 0x7ac8ff, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const boomMain = new THREE.Mesh(new THREE.SphereGeometry(1.4, 24, 24), boomMainMat);
+        boomGroup.add(boomMain);
+
+        // Outer cyan halo
+        const boomOuterMat = new THREE.MeshBasicMaterial({
+            color: 0x4fd4ff, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const boomOuter = new THREE.Mesh(new THREE.SphereGeometry(2.2, 20, 20), boomOuterMat);
+        boomGroup.add(boomOuter);
+
+        // Ground shockwave rings
+        const groundRings = [];
+        for (let i = 0; i < 4; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: i % 2 === 0 ? 0xffffff : 0x7ac8ff,
+                transparent: true, opacity: 0,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const r = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.5, 48), mat);
+            r.rotation.x = -Math.PI / 2;
+            r.position.set(END.x, 0.06 + i * 0.004, END.z);
+            r.visible = false;
+            wikiEffectRoot.add(r);
+            groundRings.push({ mesh: r, mat, delay: i * 0.06 });
+        }
+
+        // Radiating lightning arcs
+        const lightningArcs = [];
+        for (let i = 0; i < 10; i++) {
+            const angle = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+            const arcLength = 1.0 + Math.random() * 0.9;
+            const points = [new THREE.Vector3(0, 0.1, 0)];
+            const segs = 7;
+            for (let s = 1; s <= segs; s++) {
+                const t = s / segs;
+                const jitter = 0.24 * (1 - t);
+                points.push(new THREE.Vector3(
+                    Math.cos(angle) * arcLength * t + (Math.random() - 0.5) * jitter,
+                    0.1 + Math.random() * 0.25 + t * 0.4,
+                    Math.sin(angle) * arcLength * t + (Math.random() - 0.5) * jitter
+                ));
+            }
+            const curve = new THREE.CatmullRomCurve3(points);
+            const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.035, 5, false);
+            const tubeMat = new THREE.MeshBasicMaterial({
+                color: 0xd8f4ff, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const tube = new THREE.Mesh(tubeGeo, tubeMat);
+            tube.visible = false;
+            boomGroup.add(tube);
+            lightningArcs.push({ mesh: tube, mat: tubeMat, delay: i * 0.025 });
+        }
+
+        // Electric shards (flying debris)
+        const shards = [];
+        for (let i = 0; i < 50; i++) {
+            const sm = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(
+                    0.55 + Math.random() * 0.08, 0.9, 0.55 + Math.random() * 0.35
+                ),
+                transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const shard = new THREE.Mesh(
+                new THREE.TetrahedronGeometry(0.06 + Math.random() * 0.10, 0),
+                sm
+            );
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            const r = 0.5 + Math.random() * 0.5;
+            shard.position.set(
+                Math.sin(phi) * Math.cos(theta) * r,
+                Math.cos(phi) * r * 0.5 + 0.4,
+                Math.sin(phi) * Math.sin(theta) * r
+            );
+            shard.userData.vel = new THREE.Vector3(
+                (Math.random() - 0.5) * 9,
+                Math.random() * 7 + 3,
+                (Math.random() - 0.5) * 9
+            );
+            shard.userData.spin = new THREE.Vector3(
+                (Math.random() - 0.5) * 20,
+                (Math.random() - 0.5) * 20,
+                (Math.random() - 0.5) * 20
+            );
+            shard.visible = false;
+            boomGroup.add(shard);
+            shards.push(shard);
+        }
+
+        // Plasma sparks
+        const sparks = [];
+        for (let i = 0; i < 70; i++) {
+            const pm = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(0.55 + Math.random() * 0.1, 1, 0.7 + Math.random() * 0.3),
+                transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+            });
+            const p = new THREE.Mesh(
+                new THREE.SphereGeometry(0.04 + Math.random() * 0.05, 5, 5), pm
+            );
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            const r = 0.3 + Math.random() * 0.6;
+            p.position.set(
+                Math.sin(phi) * Math.cos(theta) * r,
+                Math.cos(phi) * r * 0.5 + 0.4,
+                Math.sin(phi) * Math.sin(theta) * r
+            );
+            p.userData.vel = new THREE.Vector3(
+                (Math.random() - 0.5) * 11,
+                Math.random() * 8 + 2,
+                (Math.random() - 0.5) * 11
+            );
+            p.visible = false;
+            boomGroup.add(p);
+            sparks.push(p);
+        }
+
+        // ══════════════════════════════════════════════════════
+        //  TARGET MARKERS + STUN BADGE
+        // ══════════════════════════════════════════════════════
+        const markerGroup = new THREE.Group();
+        markerGroup.position.set(END.x, 0, END.z);
+        markerGroup.visible = false;
+        wikiEffectRoot.add(markerGroup);
+
+        const beaconMat = new THREE.MeshBasicMaterial({
+            color: 0x7ac8ff, transparent: true, opacity: 0,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+        const beacon = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.16, 1.6, 10, 1, true),
+            beaconMat
+        );
+        beacon.position.y = 0.8;
+        markerGroup.add(beacon);
+
+        const plateMat = new THREE.MeshBasicMaterial({
+            color: 0xff3366, transparent: true, opacity: 0,
+            side: THREE.DoubleSide, depthWrite: false,
+        });
+        const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), plateMat);
+        plate.rotation.x = -Math.PI / 2;
+        plate.position.y = 0.06;
+        markerGroup.add(plate);
+
+        const markerRingMat = new THREE.MeshBasicMaterial({
+            color: 0xd8f4ff, transparent: true, opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        const markerRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.35, 0.45, 32), markerRingMat
+        );
+        markerRing.rotation.x = -Math.PI / 2;
+        markerRing.position.y = 0.07;
+        markerGroup.add(markerRing);
+
+        // Floating stun bolt above the target — same sprite used in-game
+        const stunSprite = createStunSprite();
+        stunSprite.position.set(0, 1.4, 0);
+        stunSprite.scale.set(0, 0, 1);
+        stunSprite.material.opacity = 0;
+        markerGroup.add(stunSprite);
+
+        // ══════════════════════════════════════════════════════
+        //  TIMELINE
+        // ══════════════════════════════════════════════════════
+        const startTime = performance.now();
+        const T_CHARGE = 550;
+        const T_FIRE = 1150;
+        const T_TOTAL = 3100;
+
+        const BLUE_GLOW = new THREE.Color(0x7ac8ff);
+        const BLUE_DEEP = new THREE.Color(0x4fd4ff);
+        const DAMAGED = new THREE.Color(0x8a5a3a);
+
+        const animate = () => {
+            const t = performance.now() - startTime;
+            if (t >= T_TOTAL) return;
+
+            // ─────────────────────────────────────────────
+            //  CHARGE PHASE
+            // ─────────────────────────────────────────────
+            if (t < T_CHARGE) {
+                const k = t / T_CHARGE;
+                const pulse = 0.7 + 0.3 * Math.sin(t / 40);
+
+                // Rook glows electric blue
+                for (const m of rookMats) {
+                    const c = m.color.clone().lerp(BLUE_GLOW, k * 0.7);
+                    m.mesh.material.color.copy(c);
+                    if (m.mesh.material.emissive && m.emissive) {
+                        m.mesh.material.emissive = BLUE_DEEP.clone();
+                        m.mesh.material.emissiveIntensity = k * pulse * 1.6;
+                    }
+                }
+
+                // Charge ring pulses at the rook's feet
+                chargeRingMat.opacity = k * 0.85 * pulse;
+                chargeRing.scale.setScalar(1 + Math.sin(t / 80) * 0.15);
+            }
+            // ─────────────────────────────────────────────
+            //  FIRE PHASE — the crackling orb arcs to the target
+            // ─────────────────────────────────────────────
+            else if (t < T_FIRE) {
+                const k = (t - T_CHARGE) / (T_FIRE - T_CHARGE);
+                const ease = k < 0.5
+                    ? 2 * k * k
+                    : 1 - Math.pow(-2 * k + 2, 2) / 2;
+
+                projGroup.visible = true;
+
+                // Rook keeps glowing, gently fades
+                for (const m of rookMats) {
+                    if (m.mesh.material.emissive && m.emissive) {
+                        m.mesh.material.emissiveIntensity = (1 - k) * 1.2;
+                    }
+                }
+                chargeRingMat.opacity *= 0.9;
+
+                // Ball path (arc)
+                const pos = new THREE.Vector3().lerpVectors(START, END, ease);
+                pos.y = 0.6 + Math.sin(k * Math.PI) * 1.3;
+                projGroup.position.copy(pos);
+
+                // Spin the orbiting arcs
+                const now = performance.now();
+                const spinAngle = now / 1000 * 12;
+                for (const arc of arcs) {
+                    arc.quaternion.setFromAxisAngle(
+                        arc.userData.axis, spinAngle * arc.userData.spinSpeed * 0.3
+                    );
+                    arc.scale.setScalar(1 + Math.sin(now / 40) * 0.15);
+                    arc.material.opacity = 0.9;
+                }
+                core.scale.setScalar(0.9 + Math.sin(now / 25) * 0.15);
+                glow.scale.setScalar(1 + k * 0.8);
+                proj.rotation.x += 0.30;
+                proj.rotation.z += 0.25;
+            }
+            // ─────────────────────────────────────────────
+            //  IMPACT PHASE
+            // ─────────────────────────────────────────────
+            else {
+                const it = t - T_FIRE;
+                const k = Math.min(it / 900, 1);       // 0..1 over 900ms
+
+                projGroup.visible = false;
+                if (!boomGroup.visible) boomGroup.visible = true;
+
+                // Explosion spheres
+                const s = 0.1 + k * 9;
+                boomCore.scale.setScalar(s);
+                boomCoreMat.opacity = Math.max(0, 0.95 * (1 - k * 1.6));
+                boomMain.scale.setScalar(s * 1.5);
+                boomMainMat.opacity = Math.max(0, 0.95 * (1 - k * 1.3));
+                boomOuter.scale.setScalar(s * 2.4);
+                boomOuterMat.opacity = Math.max(0, 0.40 * (1 - k * 1.1));
+
+                // Ground rings
+                for (const r of groundRings) {
+                    const rt = Math.max(0, (k - r.delay) / 0.7);
+                    if (rt >= 1) { r.mesh.visible = false; r.mat.opacity = 0; continue; }
+                    r.mesh.visible = true;
+                    const eased = 1 - Math.pow(1 - rt, 3);
+                    r.mesh.scale.setScalar(1 + eased * 8);
+                    r.mat.opacity = 0.9 * (1 - rt);
+                }
+
+                // Lightning arcs
+                for (const arc of lightningArcs) {
+                    const at = Math.max(0, (k - arc.delay) / 0.55);
+                    if (at >= 1) { arc.mesh.visible = false; arc.mat.opacity = 0; continue; }
+                    arc.mesh.visible = true;
+                    const flick = Math.sin(at * Math.PI * 3.5);
+                    arc.mat.opacity = Math.abs(flick) * 0.95 * (1 - at * 0.7);
+                }
+
+                // Shards
+                for (const shard of shards) {
+                    shard.visible = true;
+                    shard.position.addScaledVector(shard.userData.vel, 0.022);
+                    shard.userData.vel.y -= 0.28;
+                    shard.userData.vel.multiplyScalar(0.97);
+                    shard.rotation.x += shard.userData.spin.x * 0.02;
+                    shard.rotation.y += shard.userData.spin.y * 0.02;
+                    shard.rotation.z += shard.userData.spin.z * 0.02;
+                    shard.material.opacity = Math.max(0, 1 - k * 1.15);
+                    shard.scale.setScalar(Math.max(0.1, 1 - k * 0.45));
+                }
+
+                // Sparks
+                for (const p of sparks) {
+                    p.visible = true;
+                    p.position.addScaledVector(p.userData.vel, 0.02);
+                    p.userData.vel.y -= 0.22;
+                    p.userData.vel.multiplyScalar(0.96);
+                    p.material.opacity = Math.max(0, 1 - k * 1.4);
+                    p.scale.setScalar(Math.max(0.1, 1 - k * 0.5));
+                }
+
+                // Target markers
+                markerGroup.visible = true;
+                const tt = Math.min(1, k / 0.55);
+                beaconMat.opacity = Math.max(0, 1 - tt) * 0.9;
+                beacon.scale.setScalar(0.6 + tt * 1.4);
+                plateMat.opacity = Math.max(0, 1 - k * 1.1) * 0.55;
+                markerRingMat.opacity = Math.max(0, 1 - k * 1.2) * 0.95;
+                markerRing.scale.setScalar(1 + k * 5);
+
+                // Stun sprite pops in shortly after the impact
+                if (k > 0.2) {
+                    const sk = Math.min(1, (k - 0.2) / 0.35);
+                    const scl = 0.5 * sk;
+                    stunSprite.scale.set(scl, scl, 1);
+                    stunSprite.material.opacity = sk * (0.85 + 0.15 * Math.sin(it / 100));
+                }
+
+                // Target piece darkens ("damaged" look)
+                if (k > 0.15) {
+                    for (const m of targetMats) {
+                        m.mesh.material.color.lerp(DAMAGED, 0.4);
+                    }
+                }
+
+                // Global fade-out over the last ~650ms
+                if (k > 0.75) {
+                    const fade = 1 - (k - 0.75) / 0.25;
+                    boomCoreMat.opacity *= fade;
+                    boomMainMat.opacity *= fade;
+                    boomOuterMat.opacity *= fade;
+                    stunSprite.material.opacity *= fade;
+                    plateMat.opacity *= fade;
+                    markerRingMat.opacity *= fade;
+                    beaconMat.opacity *= fade;
+                }
+            }
+
+            requestAnimationFrame(animate);
         };
-        fly();
+        animate();
     });
 }
 
