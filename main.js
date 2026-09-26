@@ -1375,7 +1375,11 @@ const PIECE_PARAMS = {
         "color": "#f5f0e1",
         "roughness": 0.25,
         "metalness": 0.2,
-        "position": { "x": -4.2, "y": 0, "z": 0 }
+        "position": {
+            "x": -4.2,
+            "y": 0,
+            "z": 0
+        }
     },
     "rook": {
         "bodyRadius": 0.2,
@@ -1385,12 +1389,116 @@ const PIECE_PARAMS = {
         "color": "#f5f0e1",
         "roughness": 0.25,
         "metalness": 0.2,
-        "position": { "x": -2.52, "y": 0.02, "z": 0 },
+        "position": {
+            "x": -2.52,
+            "y": 0.02,
+            "z": 0
+        },
         "parts": {
-            "custom_1002": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy Copy" },
-            "custom_1000": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0.21 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy" },
-            "custom_1001": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.21, "y": 0.62, "z": 0 }, "rotation": { "x": 0, "y": 1.56, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy" },
-            "custom_1003": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": -0.21 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 0.4 }, "name": "Box Copy Copy" }
+            "custom_1002": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.21,
+                    "y": 0.62,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 1.56,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy Copy Copy"
+            },
+            "custom_1000": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.62,
+                    "z": 0.21
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy"
+            },
+            "custom_1001": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.21,
+                    "y": 0.62,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 1.56,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy Copy"
+            },
+            "custom_1003": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.62,
+                    "z": -0.21
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 0.4
+                },
+                "name": "Box Copy Copy"
+            }
         }
     },
     "knight": {
@@ -1405,37 +1513,679 @@ const PIECE_PARAMS = {
         "color": "#f5f0e1",
         "roughness": 0.25,
         "metalness": 0.2,
-        "position": { "x": -0.84, "y": 0.02, "z": 0 },
+        "position": {
+            "x": -0.84,
+            "y": 0.02,
+            "z": 0
+        },
         "parts": {
-            "body": { "deleted": true },
-            "neck": { "deleted": true },
-            "head": { "deleted": true },
-            "custom_1022": { "type": "sphere", "geometryParams": { "radius": 0.15 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.17, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 2, "y": 0.69, "z": 2 }, "name": "Sphere" },
-            "custom_1023": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.3229, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.85, "y": 0.8, "z": 1.85 }, "name": "Cone" },
-            "custom_1024": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.53, "z": -0.03 }, "rotation": { "x": -0.38, "y": 0.17, "z": -0.04 }, "scale": { "x": 0.92, "y": 1.77, "z": 0.92 }, "name": "Cylinder" },
-            "custom_1030": { "type": "octahedron", "geometryParams": { "radius": 0.2, "detail": 0 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.0818, "y": 0.94, "z": -0.18 }, "rotation": { "x": -0.05, "y": 0.03, "z": 0.19 }, "scale": { "x": 0.43, "y": 1, "z": 0.63 }, "name": "Octa" },
-            "custom_1031": { "type": "octahedron", "geometryParams": { "radius": 0.2, "detail": 0 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.0794, "y": 0.94, "z": -0.18 }, "rotation": { "x": -0.05, "y": 0.03, "z": -0.19 }, "scale": { "x": 0.43, "y": 1, "z": 0.63 }, "name": "Octa Copy" },
-            "custom_1033": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.4314, "z": -0.0939 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box" },
-            "custom_1034": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.5162, "z": -0.1167 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box Copy" },
-            "custom_1035": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.5942, "z": -0.1273 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box Copy Copy" },
-            "custom_1036": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7013, "z": -0.1437 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box Copy Copy Copy" },
-            "custom_1037": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.6559, "z": -0.142 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box Copy Copy Copy Copy" },
-            "custom_1038": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7539, "z": -0.142 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box Copy Copy Copy Copy Copy" },
-            "custom_1040": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8542, "z": -0.1892 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.2543, "z": 0.6819 }, "name": "Box Copy Copy Copy Copy Copy Copy" },
-            "custom_1041": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8718, "z": -0.133 }, "rotation": { "x": -0.6105, "y": 0, "z": 0 }, "scale": { "x": 0.3144, "y": 1.7371, "z": 1 }, "name": "Box Copy Copy Copy Copy Copy Copy Copy" },
-            "custom_1043": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.33, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.6, "y": 0.06, "z": 1.6 }, "name": "Cylinder" },
-            "custom_1045": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.47, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.45, "y": 1, "z": 1.45 }, "name": "Cone" },
-            "custom_1046": { "type": "sphere", "geometryParams": { "radius": 0.15 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.11, "y": 0.92, "z": 0.02 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.35, "y": 0.35, "z": 0.35 }, "name": "Sphere" },
-            "custom_1047": { "type": "sphere", "geometryParams": { "radius": 0.15 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.1088, "y": 0.92, "z": 0.02 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.35, "y": 0.35, "z": 0.35 }, "name": "Sphere Copy" },
-            "custom_1048": { "type": "dodecahedron", "geometryParams": { "radius": 0.2, "detail": 0 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.985, "z": -0.0815 }, "rotation": { "x": 0.2342, "y": -0.0241, "z": -0.0591 }, "scale": { "x": -0.1606, "y": 0.7488, "z": 1.174 }, "name": "Dodeca" },
-            "custom_1049": { "type": "icosahedron", "geometryParams": { "radius": 0.2, "detail": 0 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.5253, "z": -0.0958 }, "rotation": { "x": -0.1055, "y": 0, "z": -0.04 }, "scale": { "x": 0.9458, "y": 1.725, "z": 0.9099 }, "name": "Icosa" },
-            "custom_1052": { "type": "air", "geometryParams": { "width": 0.3, "height": 0.3, "depth": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7179, "z": 0.3185 }, "rotation": { "x": 0.25, "y": 0, "z": 0 }, "scale": { "x": 0.7, "y": 0.13, "z": 0.51 }, "name": "Air" },
-            "custom_1056": { "type": "air", "geometryParams": { "width": 0.3, "height": 0.3, "depth": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.6574, "z": 0.3201 }, "rotation": { "x": -0.456, "y": 0.0381, "z": 0.0083 }, "scale": { "x": 1, "y": 0.1215, "z": 0.3373 }, "name": "Air Copy" },
-            "custom_1064": { "type": "dodecahedron", "geometryParams": { "radius": 0.2, "detail": 0 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.5887, "z": -0.0514 }, "rotation": { "x": -0.468, "y": 0.091, "z": 0.0164 }, "scale": { "x": 1.0629, "y": 2.18, "z": 0.8604 }, "name": "Dodeca" },
-            "custom_1065": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.04, "y": 0.75, "z": 0.37 }, "rotation": { "x": 1.64, "y": 0.02, "z": -0.07 }, "scale": { "x": 0.1, "y": 0.1, "z": 0.1 }, "name": "Cylinder" },
-            "custom_1066": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.04, "y": 0.75, "z": 0.37 }, "rotation": { "x": 1.64, "y": 0.02, "z": -0.07 }, "scale": { "x": 0.1, "y": 0.1, "z": 0.1 }, "name": "Cylinder Copy" },
-            "custom_1070": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.18, "z": 0 }, "rotation": { "x": -3.14, "y": -0.29, "z": 0 }, "scale": { "x": 1.45, "y": 1, "z": 1.45 }, "name": "Cone Copy" },
-            "custom_2000": { "type": "frustum", "name": "Frustum", "geometryParams": {}, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8282, "z": 0.0959 }, "rotation": { "x": 1.95, "y": 0, "z": 0 }, "scale": { "x": 0.928, "y": 1.95, "z": 0.72 } }
+            "body": {
+                "deleted": true
+            },
+            "neck": {
+                "deleted": true
+            },
+            "head": {
+                "deleted": true
+            },
+            "custom_1022": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.17,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 2,
+                    "y": 0.69,
+                    "z": 2
+                },
+                "name": "Sphere"
+            },
+            "custom_1023": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.3229,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.85,
+                    "y": 0.8,
+                    "z": 1.85
+                },
+                "name": "Cone"
+            },
+            "custom_1024": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.0104,
+                    "y": 0.5286,
+                    "z": -0.03
+                },
+                "rotation": {
+                    "x": -0.3792,
+                    "y": -0.0108,
+                    "z": -0.0126
+                },
+                "scale": {
+                    "x": 0.92,
+                    "y": 1.5296,
+                    "z": 0.92
+                },
+                "name": "Cylinder"
+            },
+            "custom_1030": {
+                "type": "octahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.0818,
+                    "y": 0.94,
+                    "z": -0.18
+                },
+                "rotation": {
+                    "x": -0.05,
+                    "y": 0.03,
+                    "z": 0.19
+                },
+                "scale": {
+                    "x": 0.43,
+                    "y": 1,
+                    "z": 0.63
+                },
+                "name": "Octa"
+            },
+            "custom_1031": {
+                "type": "octahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.0794,
+                    "y": 0.94,
+                    "z": -0.18
+                },
+                "rotation": {
+                    "x": -0.05,
+                    "y": 0.03,
+                    "z": -0.19
+                },
+                "scale": {
+                    "x": 0.43,
+                    "y": 1,
+                    "z": 0.63
+                },
+                "name": "Octa Copy"
+            },
+            "custom_1033": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.4314,
+                    "z": -0.0939
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box"
+            },
+            "custom_1034": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5162,
+                    "z": -0.1167
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy"
+            },
+            "custom_1035": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5942,
+                    "z": -0.1273
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy"
+            },
+            "custom_1036": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7013,
+                    "z": -0.1437
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy"
+            },
+            "custom_1037": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.6559,
+                    "z": -0.142
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy Copy"
+            },
+            "custom_1038": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7539,
+                    "z": -0.142
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy Copy Copy"
+            },
+            "custom_1040": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8542,
+                    "z": -0.1892
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.2543,
+                    "z": 0.6819
+                },
+                "name": "Box Copy Copy Copy Copy Copy Copy"
+            },
+            "custom_1041": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8718,
+                    "z": -0.133
+                },
+                "rotation": {
+                    "x": -0.6105,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3144,
+                    "y": 1.7371,
+                    "z": 1
+                },
+                "name": "Box Copy Copy Copy Copy Copy Copy Copy"
+            },
+            "custom_1043": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.33,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.6,
+                    "y": 0.06,
+                    "z": 1.6
+                },
+                "name": "Cylinder"
+            },
+            "custom_1045": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.47,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.45,
+                    "y": 1,
+                    "z": 1.45
+                },
+                "name": "Cone"
+            },
+            "custom_1046": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.11,
+                    "y": 0.92,
+                    "z": 0.02
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.35,
+                    "y": 0.35,
+                    "z": 0.35
+                },
+                "name": "Sphere"
+            },
+            "custom_1047": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.1088,
+                    "y": 0.92,
+                    "z": 0.02
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.35,
+                    "y": 0.35,
+                    "z": 0.35
+                },
+                "name": "Sphere Copy"
+            },
+            "custom_1048": {
+                "type": "dodecahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.985,
+                    "z": -0.0815
+                },
+                "rotation": {
+                    "x": 0.2342,
+                    "y": -0.0241,
+                    "z": -0.0591
+                },
+                "scale": {
+                    "x": -0.1606,
+                    "y": 0.7488,
+                    "z": 1.174
+                },
+                "name": "Dodeca"
+            },
+            "custom_1049": {
+                "type": "icosahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5253,
+                    "z": -0.0958
+                },
+                "rotation": {
+                    "x": -0.1055,
+                    "y": 0,
+                    "z": -0.04
+                },
+                "scale": {
+                    "x": 0.9458,
+                    "y": 1.725,
+                    "z": 0.9099
+                },
+                "name": "Icosa"
+            },
+            "custom_1052": {
+                "type": "air",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7179,
+                    "z": 0.3185
+                },
+                "rotation": {
+                    "x": 0.25,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.7,
+                    "y": 0.13,
+                    "z": 0.51
+                },
+                "name": "Air"
+            },
+            "custom_1056": {
+                "type": "air",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.6574,
+                    "z": 0.3201
+                },
+                "rotation": {
+                    "x": -0.456,
+                    "y": 0.0381,
+                    "z": 0.0083
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 0.1215,
+                    "z": 0.3373
+                },
+                "name": "Air Copy"
+            },
+            "custom_1064": {
+                "type": "dodecahedron",
+                "geometryParams": {
+                    "radius": 0.2,
+                    "detail": 0
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5887,
+                    "z": -0.0514
+                },
+                "rotation": {
+                    "x": -0.468,
+                    "y": 0.091,
+                    "z": 0.0164
+                },
+                "scale": {
+                    "x": 1.0629,
+                    "y": 2.18,
+                    "z": 0.8604
+                },
+                "name": "Dodeca"
+            },
+            "custom_1065": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.04,
+                    "y": 0.75,
+                    "z": 0.37
+                },
+                "rotation": {
+                    "x": 1.64,
+                    "y": 0.02,
+                    "z": -0.07
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.1,
+                    "z": 0.1
+                },
+                "name": "Cylinder"
+            },
+            "custom_1066": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.04,
+                    "y": 0.75,
+                    "z": 0.37
+                },
+                "rotation": {
+                    "x": 1.64,
+                    "y": 0.02,
+                    "z": -0.07
+                },
+                "scale": {
+                    "x": 0.1,
+                    "y": 0.1,
+                    "z": 0.1
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1070": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.18,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -3.14,
+                    "y": -0.29,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.45,
+                    "y": 1,
+                    "z": 1.45
+                },
+                "name": "Cone Copy"
+            },
+            "custom_2000": {
+                "type": "frustum",
+                "name": "Frustum",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8282,
+                    "z": 0.0959
+                },
+                "rotation": {
+                    "x": 1.95,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.928,
+                    "y": 1.95,
+                    "z": 0.72
+                }
+            }
         }
     },
     "bishop": {
@@ -1445,25 +2195,395 @@ const PIECE_PARAMS = {
         "color": "#ffffff",
         "roughness": 0.25,
         "metalness": 0.2,
-        "position": { "x": 0.84, "y": 0.02, "z": 0 },
+        "position": {
+            "x": 0.84,
+            "y": 0.02,
+            "z": 0
+        },
         "parts": {
-            "body": { "deleted": true },
-            "sphere": { "deleted": true },
-            "custom_1000": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.002, "y": 0.2385, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.9999, "y": 0.9193, "z": 1.9931 }, "name": "Cone" },
-            "custom_1001": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.1306, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.2957, "y": 1, "z": 1.2146 }, "name": "Cylinder" },
-            "custom_1003": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.52, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.25, "y": 2.91, "z": 1.25 }, "name": "Cone" },
-            "custom_1004": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.59, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.65, "y": 1.25, "z": 0.65 }, "name": "Cylinder" },
-            "custom_1005": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.6888, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": -0.0615, "z": 1 }, "name": "Cylinder" },
-            "custom_1006": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7085, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 }, "name": "Cylinder Copy" },
-            "custom_1007": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7318, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 }, "name": "Cylinder" },
-            "custom_1009": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.016, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.51, "y": 0.15, "z": 0.56 }, "name": "Cylinder" },
-            "custom_1010": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9859, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.3, "y": 0.0559, "z": 0.3 }, "name": "Cylinder Copy" },
-            "base": { "position": { "x": 0, "y": 0.06, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
-            "custom_1016": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7763, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 }, "name": "Cylinder Copy" },
-            "custom_1017": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9228, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.85, "y": 0.7, "z": 0.85 }, "name": "Cone" },
-            "custom_1018": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.754, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 3.15 }, "scale": { "x": 0.85, "y": 0.45, "z": 0.85 }, "name": "Cone Copy" },
-            "custom_1021": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7686, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 }, "name": "Cylinder Copy Copy" },
-            "custom_2000": { "type": "air", "name": "Air Cut", "geometryParams": { "width": 0.3, "height": 0.3, "depth": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": -0.0439, "y": 0.9095, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": -0.6966 }, "scale": { "x": 0.5051, "y": 0.0664, "z": 0.5818 } }
+            "body": {
+                "deleted": true
+            },
+            "sphere": {
+                "deleted": true
+            },
+            "custom_1000": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.002,
+                    "y": 0.2385,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.9999,
+                    "y": 0.9193,
+                    "z": 1.9931
+                },
+                "name": "Cone"
+            },
+            "custom_1001": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.1306,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.2957,
+                    "y": 1,
+                    "z": 1.2146
+                },
+                "name": "Cylinder"
+            },
+            "custom_1003": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.52,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.25,
+                    "y": 2.91,
+                    "z": 1.25
+                },
+                "name": "Cone"
+            },
+            "custom_1004": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.59,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.65,
+                    "y": 1.25,
+                    "z": 0.65
+                },
+                "name": "Cylinder"
+            },
+            "custom_1005": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.6888,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": -0.0615,
+                    "z": 1
+                },
+                "name": "Cylinder"
+            },
+            "custom_1006": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7085,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.8292,
+                    "y": -0.0999,
+                    "z": 0.8503
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1007": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7318,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5847,
+                    "y": 0.0505,
+                    "z": 0.612
+                },
+                "name": "Cylinder"
+            },
+            "custom_1009": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.016,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.51,
+                    "y": 0.15,
+                    "z": 0.56
+                },
+                "name": "Cylinder"
+            },
+            "custom_1010": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9859,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 0.0559,
+                    "z": 0.3
+                },
+                "name": "Cylinder Copy"
+            },
+            "base": {
+                "position": {
+                    "x": 0,
+                    "y": 0.06,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "custom_1016": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7763,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5847,
+                    "y": 0.0505,
+                    "z": 0.612
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1017": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9228,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.85,
+                    "y": 0.7,
+                    "z": 0.85
+                },
+                "name": "Cone"
+            },
+            "custom_1018": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.754,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 3.15
+                },
+                "scale": {
+                    "x": 0.85,
+                    "y": 0.45,
+                    "z": 0.85
+                },
+                "name": "Cone Copy"
+            },
+            "custom_1021": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7686,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.8292,
+                    "y": -0.0999,
+                    "z": 0.8503
+                },
+                "name": "Cylinder Copy Copy"
+            },
+            "custom_2000": {
+                "type": "air",
+                "name": "Air Cut",
+                "geometryParams": {
+                    "width": 0.3,
+                    "height": 0.3,
+                    "depth": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.0439,
+                    "y": 0.9095,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -0.6966
+                },
+                "scale": {
+                    "x": 0.5051,
+                    "y": 0.0664,
+                    "z": 0.5818
+                }
+            }
         }
     },
     "queen": {
@@ -1475,14 +2595,396 @@ const PIECE_PARAMS = {
         "color": "#f5f0e1",
         "roughness": 0.25,
         "metalness": 0.2,
-        "position": { "x": 2.52, "y": 0.03, "z": 0 },
+        "position": {
+            "x": 2.52,
+            "y": 0.03,
+            "z": 0
+        },
         "parts": {
-            "custom_1000": { "type": "torus", "geometryParams": { "radius": 0.15, "tube": 0.05 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.57, "z": 0 }, "rotation": { "x": -1.56, "y": 0, "z": 0 }, "scale": { "x": 1.56, "y": 1.58, "z": 1.12 }, "name": "Torus" },
-            "custom_1001": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0 }, "rotation": { "x": -3.14, "y": 0, "z": 0 }, "scale": { "x": 2.12, "y": 0.5, "z": 1 }, "name": "Cone" },
-            "custom_1002": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.62, "z": 0 }, "rotation": { "x": -3.14, "y": -1.58, "z": 0 }, "scale": { "x": 2.16, "y": 0.5, "z": 1 }, "name": "Cone" },
-            "spike": { "position": { "x": 0, "y": 0.79, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
-            "crown": { "position": { "x": 0, "y": 0.52, "z": 0 }, "rotation": { "x": -3.14, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 0.48, "z": 1 } },
-            "body": { "position": { "x": 0, "y": 0.32, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.7, "y": 1, "z": 0.7 } }
+            "custom_1000": {
+                "type": "torus",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "tube": 0.05
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.14,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -1.56,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.6,
+                    "y": 1.6,
+                    "z": 1.6
+                },
+                "name": "Torus"
+            },
+            "spike": {
+                "position": {
+                    "x": 0,
+                    "y": 0.9022,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 2.26,
+                    "z": 1
+                }
+            },
+            "crown": {
+                "position": {
+                    "x": 0,
+                    "y": 0.1909,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 0.48,
+                    "z": 1
+                }
+            },
+            "body": {
+                "position": {
+                    "x": 0,
+                    "y": 0.4911,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 1,
+                    "z": 0.3
+                },
+                "deleted": true
+            },
+            "custom_2002": {
+                "type": "frustum",
+                "name": "Frustum",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.33,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.3,
+                    "y": 0.7,
+                    "z": 1.3
+                }
+            },
+            "custom_2003": {
+                "type": "frustum",
+                "name": "Frustum Copy",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5407,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.7,
+                    "y": 2.03,
+                    "z": 0.7
+                }
+            },
+            "custom_2004": {
+                "type": "frustum",
+                "name": "Frustum Copy",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7832,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -3.15
+                },
+                "scale": {
+                    "x": 1.3,
+                    "y": 0.2,
+                    "z": 1.3
+                }
+            },
+            "custom_2005": {
+                "type": "torus",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "tube": 0.05
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8255,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -1.56,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.2,
+                    "y": 1.2,
+                    "z": 0.59
+                },
+                "name": "Torus Copy"
+            },
+            "custom_2006": {
+                "type": "frustum",
+                "name": "Frustum Copy Copy",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.73,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -3.15
+                },
+                "scale": {
+                    "x": 0.8,
+                    "y": 0.44,
+                    "z": 0.8
+                }
+            },
+            "custom_2007": {
+                "type": "torus",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "tube": 0.05
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8843,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -1.56,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.85,
+                    "y": 0.85,
+                    "z": 0.51
+                },
+                "name": "Torus Copy Copy"
+            },
+            "custom_2008": {
+                "type": "cylinder",
+                "name": "Cylinder",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9041,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 0.403,
+                    "z": 1
+                }
+            },
+            "custom_2009": {
+                "type": "torus",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "tube": 0.05
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9525,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": -1.56,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.85,
+                    "y": 0.85,
+                    "z": 0.51
+                },
+                "name": "Torus Copy Copy Copy"
+            },
+            "custom_2010": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9,
+                    "z": -0.11
+                },
+                "rotation": {
+                    "x": 1.17,
+                    "y": -1.56,
+                    "z": -3.14
+                },
+                "scale": {
+                    "x": 1.64,
+                    "y": 0.2,
+                    "z": 0.67
+                },
+                "name": "Cone Copy"
+            },
+            "custom_2011": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9,
+                    "z": 0.11
+                },
+                "rotation": {
+                    "x": -1.17,
+                    "y": -1.56,
+                    "z": -3.14
+                },
+                "scale": {
+                    "x": 1.64,
+                    "y": 0.2,
+                    "z": 0.67
+                },
+                "name": "Cone Copy Copy"
+            },
+            "custom_2012": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": -0.11,
+                    "y": 0.8991,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 1.98
+                },
+                "scale": {
+                    "x": 1.64,
+                    "y": 0.2,
+                    "z": 0.67
+                },
+                "name": "Cone Copy Copy Copy"
+            },
+            "custom_2013": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.11,
+                    "y": 0.9,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -1.98
+                },
+                "scale": {
+                    "x": 1.64,
+                    "y": 0.2,
+                    "z": 0.67
+                },
+                "name": "Cone Copy Copy Copy Copy"
+            },
+            "custom_2014": {
+                "type": "sphere",
+                "name": "Sphere",
+                "geometryParams": {},
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.2217,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.35,
+                    "y": 0.35,
+                    "z": 0.35
+                }
+            }
         }
     },
     "king": {
@@ -1496,27 +2998,401 @@ const PIECE_PARAMS = {
         "color": "#ffffff",
         "roughness": 0.25,
         "metalness": 0.2,
-        "position": { "x": 4.2, "y": 0.04, "z": 0 },
+        "position": {
+            "x": 4.2,
+            "y": 0.04,
+            "z": 0
+        },
         "parts": {
-            "base": { "position": { "x": 0, "y": 0.06, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": 1, "z": 1 } },
-            "body": { "deleted": true },
-            "crown": { "deleted": true },
-            "crossV": { "deleted": true },
-            "crossH": { "deleted": true },
-            "custom_1000": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0.002, "y": 0.2539, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.9999, "y": 0.9193, "z": 1.9931 }, "name": "Cone" },
-            "custom_1001": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.1491, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.2957, "y": 1, "z": 1.2146 }, "name": "Cylinder" },
-            "custom_1003": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.4262, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1.0914, "y": 2.9097, "z": 1.2881 }, "name": "Cone" },
-            "custom_1004": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.5664, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.4607, "y": 1.5936, "z": 0.52 }, "name": "Cylinder" },
-            "custom_1005": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.736, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 1, "y": -0.0615, "z": 1 }, "name": "Cylinder" },
-            "custom_1006": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.7539, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.8292, "y": -0.0999, "z": 0.8503 }, "name": "Cylinder Copy" },
-            "custom_1007": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8041, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5847, "y": 0.0505, "z": 0.612 }, "name": "Cylinder" },
-            "custom_1008": { "type": "cone", "geometryParams": { "radius": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.8217, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": -3.15 }, "scale": { "x": 1, "y": 1, "z": 1 }, "name": "Cone" },
-            "custom_1009": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9791, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.51, "y": 0.0552, "z": 0.5632 }, "name": "Cylinder" },
-            "custom_1010": { "type": "cylinder", "geometryParams": { "radiusTop": 0.15, "radiusBottom": 0.15, "height": 0.3 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.9859, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.3, "y": 0.0559, "z": 0.3 }, "name": "Cylinder Copy" },
-            "custom_1012": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.0719, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.9734, "y": 0.3662, "z": 0.2203 }, "name": "Box" },
-            "custom_1013": { "type": "box", "geometryParams": { "width": 0.2, "height": 0.2, "depth": 0.2 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.07, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": -1.58 }, "scale": { "x": 0.8, "y": 0.37, "z": 0.22 }, "name": "Box Copy" },
-            "custom_1015": { "type": "frustum", "geometryParams": { "radiusTop": 0.08, "radiusBottom": 0.18, "height": 0.3, "segments": 16 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 1.17, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.25, "y": 0.14, "z": 0.15 }, "name": "Frustum" },
-            "custom_1016": { "type": "sphere", "geometryParams": { "radius": 0.15 }, "roughness": 0.5, "metalness": 0.2, "position": { "x": 0, "y": 0.523, "z": 0 }, "rotation": { "x": 0, "y": 0, "z": 0 }, "scale": { "x": 0.5268, "y": 0.6517, "z": 0.6517 }, "name": "Sphere" }
+            "base": {
+                "position": {
+                    "x": 0,
+                    "y": 0.06,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                }
+            },
+            "body": {
+                "deleted": true
+            },
+            "crown": {
+                "deleted": true
+            },
+            "crossV": {
+                "deleted": true
+            },
+            "crossH": {
+                "deleted": true
+            },
+            "custom_1000": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0.002,
+                    "y": 0.2539,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.9999,
+                    "y": 0.9193,
+                    "z": 1.9931
+                },
+                "name": "Cone"
+            },
+            "custom_1001": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.1491,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.2957,
+                    "y": 1,
+                    "z": 1.2146
+                },
+                "name": "Cylinder"
+            },
+            "custom_1003": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.4262,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1.0914,
+                    "y": 2.9097,
+                    "z": 1.2881
+                },
+                "name": "Cone"
+            },
+            "custom_1004": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.5664,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.4607,
+                    "y": 1.5936,
+                    "z": 0.52
+                },
+                "name": "Cylinder"
+            },
+            "custom_1005": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.736,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 1,
+                    "y": -0.0615,
+                    "z": 1
+                },
+                "name": "Cylinder"
+            },
+            "custom_1006": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.7539,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.8292,
+                    "y": -0.0999,
+                    "z": 0.8503
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1007": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8041,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5847,
+                    "y": 0.0505,
+                    "z": 0.612
+                },
+                "name": "Cylinder"
+            },
+            "custom_1008": {
+                "type": "cone",
+                "geometryParams": {
+                    "radius": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.8217,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -3.15
+                },
+                "scale": {
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                },
+                "name": "Cone"
+            },
+            "custom_1009": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9791,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.51,
+                    "y": 0.0552,
+                    "z": 0.5632
+                },
+                "name": "Cylinder"
+            },
+            "custom_1010": {
+                "type": "cylinder",
+                "geometryParams": {
+                    "radiusTop": 0.15,
+                    "radiusBottom": 0.15,
+                    "height": 0.3
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.9859,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.3,
+                    "y": 0.0559,
+                    "z": 0.3
+                },
+                "name": "Cylinder Copy"
+            },
+            "custom_1012": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.0719,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.9734,
+                    "y": 0.3662,
+                    "z": 0.2203
+                },
+                "name": "Box"
+            },
+            "custom_1013": {
+                "type": "box",
+                "geometryParams": {
+                    "width": 0.2,
+                    "height": 0.2,
+                    "depth": 0.2
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.07,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": -1.58
+                },
+                "scale": {
+                    "x": 0.8,
+                    "y": 0.37,
+                    "z": 0.22
+                },
+                "name": "Box Copy"
+            },
+            "custom_1015": {
+                "type": "frustum",
+                "geometryParams": {
+                    "radiusTop": 0.08,
+                    "radiusBottom": 0.18,
+                    "height": 0.3,
+                    "segments": 16
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 1.17,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.25,
+                    "y": 0.14,
+                    "z": 0.15
+                },
+                "name": "Frustum"
+            },
+            "custom_1016": {
+                "type": "sphere",
+                "geometryParams": {
+                    "radius": 0.15
+                },
+                "roughness": 0.5,
+                "metalness": 0.2,
+                "position": {
+                    "x": 0,
+                    "y": 0.523,
+                    "z": 0
+                },
+                "rotation": {
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "scale": {
+                    "x": 0.5268,
+                    "y": 0.6517,
+                    "z": 0.6517
+                },
+                "name": "Sphere"
+            }
         }
     }
 };
