@@ -63,8 +63,11 @@ const AI_CONFIGS = {
     // ── "Hard" rules ──
     // Normal + 4-ply lookahead, near-zero self damage, aggressive king/piece hunting
     hard: {
-        maxDepth: 3,
-        timeLimit: 2000,
+        // ★ On low-end devices (2 cores / ≤2 GB RAM) use 3-ply:
+        //   depth 4 is too heavy for cheap phones and can lock the UI
+        //   for the full 3 s budget. `IS_LOW_END` is defined in main.js.
+        maxDepth: (typeof IS_LOW_END !== 'undefined' && IS_LOW_END) ? 3 : 4,
+        timeLimit: (typeof IS_LOW_END !== 'undefined' && IS_LOW_END) ? 2000 : 3000,
         randomness: 0,
         captureWeight: 1.6,
         damageWeight: 1.3,
@@ -77,6 +80,25 @@ const AI_CONFIGS = {
         friendlyFireStrict: true,    // ★ document the enforced policy
     },
 };
+
+// ============================================================
+//  AI YIELD HELPER
+//  The synchronous minimax search blocks the main thread, which
+//  freezes the render loop and every input handler (camera drag,
+//  pinch-zoom, hover). We periodically hand control back to the
+//  browser via setTimeout(0) so rAF + pointer events can run.
+// ============================================================
+const AI_YIELD_EVERY_MS = 40;   // ≈ 2–3 frames at 60 fps
+let _aiLastYieldTs = 0;
+
+// Runs synchronously when it's not time to yield yet — no micro-task
+// overhead on the common path.
+async function aiMaybeYield() {
+    const now = performance.now();
+    if (now - _aiLastYieldTs < AI_YIELD_EVERY_MS) return;
+    _aiLastYieldTs = now;
+    await new Promise(resolve => setTimeout(resolve, 0));
+}
 
 // ============================================================
 //  FRIENDLY-FIRE DETECTION
@@ -837,11 +859,14 @@ function scoreActionImmediate(game, action, side, cfg) {
 // ============================================================
 //  MINIMAX WITH ALPHA-BETA
 // ============================================================
-function minimax(game, depth, alpha, beta, isMax, aiSide, startTime, timeLimit, cfg) {
+async function minimax(game, depth, alpha, beta, isMax, aiSide, startTime, timeLimit, cfg) {
+    // ★ Yield here — this is the hot path, hit thousands of times
+    //   per search. Cheap synchronous check when not due.
+    await aiMaybeYield();
+
     if (performance.now() - startTime > timeLimit)
         return evaluateBoard(game, aiSide, cfg);
 
-    // Terminal: king missing
     if (!game.findKing('white') || !game.findKing('black'))
         return evaluateBoard(game, aiSide, cfg);
 
@@ -852,28 +877,29 @@ function minimax(game, depth, alpha, beta, isMax, aiSide, startTime, timeLimit, 
     const actions = generateActions(game, side);
 
     if (actions.length === 0) {
-        // No moves: checkmate or stalemate
         return game.isInCheck(side, game.board)
             ? (side === aiSide ? -Infinity : Infinity)
             : 0;
     }
 
-    // Move ordering: MVV-LVA-ish (best immediate score first)
     actions.sort((a, b) =>
         scoreActionImmediate(game, b, side, cfg) -
         scoreActionImmediate(game, a, side, cfg)
     );
 
-    // Prune branching on deeper plies (king captures are always ordered first)
     const branchLimit = depth >= 3 ? 14 : (depth === 2 ? 18 : 24);
     const searchList = actions.length > branchLimit ? actions.slice(0, branchLimit) : actions;
 
     if (isMax) {
         let best = -Infinity;
         for (const action of searchList) {
+            await aiMaybeYield();                                   // ★
             if (performance.now() - startTime > timeLimit) break;
             const next = simulateAction(game, action);
-            const val = minimax(next, depth - 1, alpha, beta, false, aiSide, startTime, timeLimit, cfg);
+            const val = await minimax(                              // ★ await
+                next, depth - 1, alpha, beta, false,
+                aiSide, startTime, timeLimit, cfg
+            );
             if (val > best) best = val;
             if (best > alpha) alpha = best;
             if (beta <= alpha) break;
@@ -882,9 +908,13 @@ function minimax(game, depth, alpha, beta, isMax, aiSide, startTime, timeLimit, 
     } else {
         let best = Infinity;
         for (const action of searchList) {
+            await aiMaybeYield();                                   // ★
             if (performance.now() - startTime > timeLimit) break;
             const next = simulateAction(game, action);
-            const val = minimax(next, depth - 1, alpha, beta, true, aiSide, startTime, timeLimit, cfg);
+            const val = await minimax(                              // ★ await
+                next, depth - 1, alpha, beta, true,
+                aiSide, startTime, timeLimit, cfg
+            );
             if (val < best) best = val;
             if (best < beta) beta = best;
             if (beta <= alpha) break;
@@ -896,32 +926,28 @@ function minimax(game, depth, alpha, beta, isMax, aiSide, startTime, timeLimit, 
 // ============================================================
 //  ROOT SELECTION
 // ============================================================
-function selectBestAction(game, aiSide, cfg) {
+async function selectBestAction(game, aiSide, cfg) {
     const actions = generateActions(game, aiSide);
     if (actions.length === 0) return null;
 
     const startTime = performance.now();
 
-    // Pre-sort by immediate score for good ordering
     actions.sort((a, b) =>
         scoreActionImmediate(game, b, aiSide, cfg) -
         scoreActionImmediate(game, a, aiSide, cfg)
     );
 
-    // ── Easy AI: 1-ply greedy with noise ──
+    // ── Easy AI: 1-ply greedy (too fast to need yielding) ──
     if (cfg.maxDepth === 1) {
         const scored = actions.map(a => ({
             action: a,
             score: scoreActionImmediate(game, a, aiSide, cfg),
         }));
-
         if (cfg.randomness > 0) {
             const noise = 250 * cfg.randomness;
             for (const s of scored) s.score += (Math.random() - 0.5) * noise * 2;
         }
         scored.sort((a, b) => b.score - a.score);
-
-        // Occasionally pick a suboptimal move for variety
         if (cfg.randomness > 0 && Math.random() < cfg.randomness * 0.5 && scored.length > 1) {
             const idx = Math.min(scored.length - 1, 1 + Math.floor(Math.random() * 2));
             return scored[idx].action;
@@ -929,7 +955,7 @@ function selectBestAction(game, aiSide, cfg) {
         return scored[0].action;
     }
 
-    // ── Normal / Hard: iterative deepening minimax ──
+    // ── Normal / Hard: iterative deepening ──
     let bestAction = actions[0];
     let bestScore = -Infinity;
 
@@ -939,99 +965,93 @@ function selectBestAction(game, aiSide, cfg) {
         let depthCompleted = true;
 
         for (const action of actions) {
-            if (performance.now() - startTime > cfg.timeLimit) { depthCompleted = false; break; }
+            await aiMaybeYield();                                   // ★
+            if (performance.now() - startTime > cfg.timeLimit) {
+                depthCompleted = false; break;
+            }
             const next = simulateAction(game, action);
-            const val = minimax(next, depth - 1, -Infinity, Infinity, false, aiSide, startTime, cfg.timeLimit, cfg);
+            const val = await minimax(                              // ★ await
+                next, depth - 1, -Infinity, Infinity, false,
+                aiSide, startTime, cfg.timeLimit, cfg
+            );
             if (val > depthBestScore) { depthBestScore = val; depthBest = action; }
-            if (performance.now() - startTime > cfg.timeLimit) { depthCompleted = false; break; }
+            if (performance.now() - startTime > cfg.timeLimit) {
+                depthCompleted = false; break;
+            }
         }
 
-        // ★ Only trust a depth that finished. If the clock cut the search short,
-        //   the remaining candidates were never evaluated — adopting that partial
-        //   result makes the AI blindly play the highest-ordered action (the
-        //   cannon), which is exactly the "ignores its doomed king" behaviour.
-        //   depth 1 is exempt: those are plain static evals, still valid.
         if (depthBest && (depthCompleted || depth === 1)) {
             bestAction = depthBest;
             bestScore = depthBestScore;
         }
-
         if (!depthCompleted) break;
 
         if (depthBest) {
             const idx = actions.indexOf(depthBest);
             if (idx > 0) { actions.splice(idx, 1); actions.unshift(depthBest); }
         }
-
         if (bestScore === Infinity) break;
         if (performance.now() - startTime > cfg.timeLimit) break;
     }
 
-    // Small residual randomness for Normal (fractional)
     if (cfg.randomness > 0 && Math.random() < cfg.randomness) {
         const pool = actions.slice(0, Math.min(3, actions.length));
         return pool[Math.floor(Math.random() * pool.length)];
     }
-
     return bestAction;
 }
 
 // ============================================================
 //  MAIN AI ENTRY POINT  (non-blocking indicator + yield)
 // ============================================================
-function makeAIMove() {
+async function makeAIMove() {
     if (gameOverFlag || currentMode !== 'ai') { aiThinking = false; return; }
     aiThinking = true;
-
-    // Show the "AI thinking" indicator
     showAIThinking(true);
 
-    // ── Yield to the browser so the indicator is actually painted ──
-    //    Two nested rAFs guarantee the current frame is committed,
-    //    then setTimeout(0) lets the style/layout pass complete
-    //    before we enter the heavy synchronous minimax.
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                try {
-                    const baseCfg = AI_CONFIGS[aiDifficulty] || AI_CONFIGS.easy;
-                    const aiSide = gameState.turn;
-
-                    // ★ Track how passive the opponent has been, then build
-                    //   an effective config for this one move.
-                    updatePassivityTracker(gameState, aiSide);
-                    const aggression = getAggressionMultiplier();
-
-                    const cfg = Object.assign({}, baseCfg, {
-                        aggressionBonus: aggression,
-                        kingCaptureBonus: baseCfg.kingCaptureBonus * (1 + aggression * 0.30),
-                        captureWeight: baseCfg.captureWeight * (1 + aggression * 0.20),
-                    });
-
-                    if (aggression > 0 && aiDifficulty === 'hard') {
-                        console.log(`🔥 AI aggression boost: ${(aggression * 100).toFixed(0)}% (opponent passive for ${aiPassivityTracker.opponentPassiveTurns} turns)`);
-                    }
-
-                    const action = selectBestAction(gameState, aiSide, cfg);
-
-                    if (!action) {
-                        aiThinking = false;
-                        showAIThinking(false);
-                        checkGameStatus();
-                        return;
-                    }
-
-                    aiThinking = false;
-                    showAIThinking(false);
-                    executeChosenAction(action);
-                } catch (err) {
-                    console.error('❌ AI move error:', err);
-                    aiThinking = false;
-                    showAIThinking(false);
-                }
-            }, 0);
-        });
+    // ★ Wait for two frames so the "AI thinking" badge is committed
+    //   to the screen before we begin the heavy search.
+    await new Promise(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
     });
+
+    try {
+        const baseCfg = AI_CONFIGS[aiDifficulty] || AI_CONFIGS.easy;
+        const aiSide = gameState.turn;
+
+        updatePassivityTracker(gameState, aiSide);
+        const aggression = getAggressionMultiplier();
+
+        const cfg = Object.assign({}, baseCfg, {
+            aggressionBonus: aggression,
+            kingCaptureBonus: baseCfg.kingCaptureBonus * (1 + aggression * 0.30),
+            captureWeight: baseCfg.captureWeight * (1 + aggression * 0.20),
+        });
+
+        if (aggression > 0 && aiDifficulty === 'hard') {
+            console.log(`🔥 AI aggression boost: ${(aggression * 100).toFixed(0)}% ` +
+                `(opponent passive for ${aiPassivityTracker.opponentPassiveTurns} turns)`);
+        }
+
+        // ★ IMPORTANT: this now yields every ~40 ms; camera input
+        //   keeps firing during the whole search.
+        const action = await selectBestAction(gameState, aiSide, cfg);
+
+        if (!action) {
+            aiThinking = false;
+            showAIThinking(false);
+            checkGameStatus();
+            return;
+        }
+
+        aiThinking = false;
+        showAIThinking(false);
+        executeChosenAction(action);
+    } catch (err) {
+        console.error('❌ AI move error:', err);
+        aiThinking = false;
+        showAIThinking(false);
+    }
 }
 
 // ============================================================

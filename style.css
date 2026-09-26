@@ -4047,37 +4047,39 @@ body.force-landscape #rotateDeviceOverlay {
    ============================================================ */
 @media (pointer: coarse),
 (max-width: 900px) {
-
-    /* ── 1. Main menu / AI difficulty / multiplayer / room setup ──
-       ──    Waiting lobby / Promotion / Revive chooser       ──
-       ──    Restart confirm / Back-to-menu confirm / Game over ── */
     .overlay>.panel {
         zoom: 0.78;
+        /* Blink / WebKit */
+        /* Firefox fallback — visually equivalent */
+        max-width: min(520px, 92vw);
+        padding: 22px 26px;
+        font-size: 0.92rem;
     }
 
-    /* ── 2. Settings panel (same .panel base) ── */
     #settingsOverlay .panel {
         zoom: 0.78;
+        max-width: min(460px, 92vw);
+        padding: 22px 26px;
     }
 
-    /* ── 3. Wiki / 技能圖鑑 ── */
     #wikiOverlay .wiki-layout {
         zoom: 0.72;
+        max-height: 88vh;
     }
 
-    /* ── 4. In-game choice bar (移動 / 特殊技能) ── */
     #actionBar {
         zoom: 0.82;
+        padding: 8px 14px;
     }
 
-    /* ── 5. Aim hint (自由瞄準提示) ── */
     #aimHint {
         zoom: 0.85;
+        font-size: 0.85rem;
     }
 
-    /* ── 6. Game-over floating status bar ── */
     .game-over-status-bar {
         zoom: 0.85;
+        padding: 8px 12px;
     }
 }
 

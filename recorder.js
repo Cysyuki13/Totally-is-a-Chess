@@ -127,12 +127,7 @@
         recorder.active = true;
         recorder.playerColor = playerColor;
         recorder.aiColor = playerColor === 'white' ? 'black' : 'white';
-
-        // ★ NEW — capture the AI difficulty at the moment the game starts.
-        //   `aiDifficulty` is declared in ai.js; guard against it being
-        //   missing (e.g. if recorder.js is ever loaded on its own).
         recorder.difficulty = (typeof aiDifficulty !== 'undefined') ? aiDifficulty : null;
-
         recorder.startTime = performance.now();
         recorder.endTime = 0;
         recorder.lastRecordedIndex = 0;
@@ -780,6 +775,19 @@
                 startGameRecording(playerColor || 'white');
             };
             window.startAIGame.__recorderWrapped = true;
+        }
+
+        const _restart = window.restartGame;
+        if (typeof _restart === 'function' && !_restart.__recorderWrapped) {
+            window.restartGame = function () {
+                _restart.apply(this, arguments);
+                // restartGame() → initNewGame() → new ChessGame()
+                // reset the recorder for the fresh match
+                if (currentMode === 'ai') {
+                    startGameRecording(playerColor || 'white');
+                }
+            };
+            window.restartGame.__recorderWrapped = true;
         }
 
         const _sync = window.syncPiecesAfterMove;

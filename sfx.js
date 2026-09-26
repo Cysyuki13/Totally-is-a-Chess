@@ -6,7 +6,7 @@
 // ── File-based SFX paths (relative to index.html) ──
 const SFX_FILE_MAP = {
     ui_click: 'assets/sounds/button_sound.mp3',
-    move:     'assets/sounds/chess_move.mp3',
+    move: 'assets/sounds/chess_move.mp3',
 };
 
 const sfxFileCache = {};
@@ -32,14 +32,15 @@ function playSfxFile(type) {
     const cached = sfxFileCache[type];
     if (!cached) return false;
 
-    // Clone so overlapping sounds don't cut each other off
-    const clone = cached.cloneNode();
+    // Build a fresh Audio element — cloneNode() is unreliable across browsers
+    // (Safari sometimes fails to preserve src; some Android Chrome builds
+    // silently drop the cloned node entirely).
+    const clone = new Audio(cached.src);
     clone.volume = (typeof gameSettings !== 'undefined' && gameSettings && gameSettings.sfxVolume != null)
         ? gameSettings.sfxVolume / 100
         : 0.8;
 
-    // Browsers may block autoplay before a user gesture — swallow the error
-    clone.play().catch(() => {});
+    clone.play().catch(() => { });
     return true;
 }
 

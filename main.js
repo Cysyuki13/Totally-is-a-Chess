@@ -3,7 +3,6 @@
 // ============================================================
 let scene, camera, renderer, raycaster, clock;
 let boardGroup, piecesGroup, highlightsGroup, ghostLineGroup;
-let boardSquares = [];
 let pieceObjects = {};
 let selectedPiece = null;
 let validMoves = [];
@@ -26,6 +25,8 @@ let pendingPromotion = null;
 let mouse = new THREE.Vector2();
 let touchActive = false;
 let selectedPiecePulse = 0;
+let _pinchStartDist = null;
+let _pinchStartRadius = null;
 
 // ★ 棋子唯一 ID（用來推算「已陣亡棋子」，供皇后復活使用）
 let _pieceIdCounter = 0;
@@ -552,9 +553,6 @@ class ChessGame {
                         const target = b[tr][tc];
                         if (target && target.color === enemy) {
                             moves.push({ r: tr, c: tc, capture: true, enPassant: false });
-                        } else if (!target && this.enPassantTarget &&
-                            this.enPassantTarget.r === tr && this.enPassantTarget.c === tc) {
-                            moves.push({ r: tr, c: tc, capture: true, enPassant: true });
                         }
                     }
                 }
@@ -677,6 +675,11 @@ class ChessGame {
             tempGameObj.board = tempBoard;
             tempGameObj.enPassantTarget = null;
             tempGameObj.castlingRights = this.castlingRights;
+            tempGameObj.moveHistory = this.moveHistory;      // ← add these
+            tempGameObj.fullMoveNumber = this.fullMoveNumber;
+            tempGameObj.halfMoveClock = this.halfMoveClock;
+            tempGameObj.turn = this.turn;
+            tempGameObj.initialPieces = this.initialPieces;
             if (!tempGameObj.isSquareAttacked(kingPos.r, kingPos.c, enemyColor, tempBoard)) {
                 legal.push(move);
             }
@@ -698,6 +701,9 @@ class ChessGame {
         }
         this.putOnSkillCooldown(caster);
         this.halfMoveClock++;
+
+        // FIX: Expire en passant status when a skill is used
+        this.enPassantTarget = null;
         if (!deferFlip) this.flipTurn();
         this.moveHistory.push({
             type: 'ability',
@@ -756,6 +762,11 @@ class ChessGame {
             const epRow = piece.color === 'white' ? toR - 1 : toR + 1;
             const epCaptured = this.board[epRow][toC];
             this.board[epRow][toC] = null;
+
+            // FIX: Place the capturing pawn onto the target square (E3)
+            const newPiece = { ...piece, hasMoved: true };
+            this.board[toR][toC] = newPiece;
+
             this.moveHistory.push({
                 fromR, fromC, toR, toC,
                 piece: { ...piece },
@@ -1963,7 +1974,6 @@ function createBoard3D() {
     const lightMat = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: 0.4 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.4 });
     for (let r = 0; r < 8; r++) {
-        boardSquares[r] = [];
         for (let c = 0; c < 8; c++) {
             const isLight = (r + c) % 2 === 0;
             const geo = getGeo('boardSquare', () => new THREE.BoxGeometry(0.98, 0.1, 0.98));
@@ -1972,7 +1982,6 @@ function createBoard3D() {
             square.receiveShadow = true;
             square.userData = { row: r, col: c, type: 'square' };
             boardGroup.add(square);
-            boardSquares[r][c] = square;
         }
     }
     const borderGeo = getGeo('boardBorder', () => new THREE.BoxGeometry(8.6, 0.15, 8.6));
@@ -2339,7 +2348,22 @@ function createPieces3D() {
                 }
                 piecesGroup.add(obj);
 
-                if (piece.type === 'king' && typeof kingSkillState !== 'undefined') {
+                if (gameSettings.showCooldownNumbers &&
+                    piece.type === 'king' &&
+                    typeof kingSkillState !== 'undefined') {
+                    // ★ De-dup: if the generic block above already attached a sprite,
+                    //   remove it so the king's domain badge doesn't overlap.
+                    if (obj.userData.cooldownSprite) {
+                        obj.remove(obj.userData.cooldownSprite);
+                        if (obj.userData.cooldownSprite.material) {
+                            if (obj.userData.cooldownSprite.material.map) {
+                                obj.userData.cooldownSprite.material.map.dispose();
+                            }
+                            obj.userData.cooldownSprite.material.dispose();
+                        }
+                        obj.userData.cooldownSprite = null;
+                    }
+
                     const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[piece.color];
                     const domainCd = Math.max(0, KING_DOMAIN_COOLDOWN - movesSince);
                     const usesLeft = kingSkillState.uses[piece.color];
@@ -2376,13 +2400,21 @@ function createPieces3D() {
 
 function updateHealthVisuals(row, col, hp, maxHp) {
     const pieceObj = pieceObjects[`${row},${col}`];
-    if (pieceObj && pieceObj.userData.hpSprite) {
-        const sprite = pieceObj.userData.hpSprite;
-        if (hp >= maxHp) sprite.visible = false;
-        else {
-            sprite.visible = true;
-            updateHealthBarTexture(sprite, hp, maxHp);
-        }
+    if (!pieceObj) return;
+
+    // ── No sprite yet? Create one on demand ──
+    if (!pieceObj.userData.hpSprite) {
+        if (hp >= maxHp) return;          // still full HP → no bar needed
+        addHealthBarToModel(pieceObj, hp, maxHp);
+        return;
+    }
+
+    const sprite = pieceObj.userData.hpSprite;
+    if (hp >= maxHp) {
+        sprite.visible = false;
+    } else {
+        sprite.visible = true;
+        updateHealthBarTexture(sprite, hp, maxHp);
     }
 }
 
@@ -3679,8 +3711,6 @@ function updateRemoteAimPosition(targetX, targetZ) {
 }
 
 function playRemoteCannonFire(fromR, fromC, targetX, targetZ, targets, damage) {
-    console.log('🎬 playRemoteCannonFire start', { fromR, fromC, targetX, targetZ, targets, damage });
-
     const remoteRook = gameState.getPiece(fromR, fromC);
     gameState.putOnSkillCooldown(remoteRook);
 
@@ -3688,7 +3718,6 @@ function playRemoteCannonFire(fromR, fromC, targetX, targetZ, targets, damage) {
     const endPos = new THREE.Vector3(targetX, 0.05, targetZ);
 
     const actualTargets = targets ? targets.map(t => ({ r: t.r, c: t.c })) : [];
-    console.log('   → actualTargets:', actualTargets);
 
     if (actualTargets.length > 0) {
         for (const t of actualTargets) {
@@ -3717,7 +3746,6 @@ function playRemoteCannonFire(fromR, fromC, targetX, targetZ, targets, damage) {
     isAnimating = true;
 
     const finalize = () => {
-        console.log('🎬 playRemoteCannonFire finalize');
         gameState.flipTurn();
         syncPiecesAfterMove();
         switchTimer(gameState.turn);
@@ -3728,12 +3756,7 @@ function playRemoteCannonFire(fromR, fromC, targetX, targetZ, targets, damage) {
         hideRemoteAim();
     };
 
-    console.log('   → about to call flyCannonball');
-    console.log('   → typeof flyCannonball:', typeof flyCannonball);
-    console.log('   → typeof fireAreaCannonVisual:', typeof fireAreaCannonVisual);
-
     flyCannonball(startPos, endPos, () => {
-        console.log('   → flyCannonball callback fired');
         if (actualTargets.length > 0) {
             const worldPos = new THREE.Vector3(targetX, 0.05, targetZ);
             fireAreaCannonVisual(worldPos, actualTargets, damage, finalize);
@@ -4479,12 +4502,20 @@ function executeMove(fromR, fromC, toR, toC, promotionType, moveData, isRemote =
 
     if (targetPiece) {
         playSFX('capture');
+        // ★ Show the victim's current HP as the damage number.
+        //   That is what the piece "had left" and it visually reads as
+        //   "this piece is dead", which is the point of the number.
+        //   (If you ever want actual damage dealt, replace with
+        //    `targetPiece.maxHp - (targetPiece.hp - targetPiece.maxHp)`
+        //    or a fixed "-K.O." label — but current behaviour is fine.)
         showDamageEffect(toR, toC, targetPiece.hp);
+        spawnCaptureSignature(
+            targetPiece.type, toR, toC,
+            gameState.getPiece(fromR, fromC)?.color || playerColor
+        );
     } else {
         playSFX('move');
     }
-
-    if (targetPiece) showDamageEffect(toR, toC, targetPiece.hp);
 
     const pieceObj = pieceObjects[`${fromR},${fromC}`];
     if (!pieceObj) { isAnimating = false; return; }
@@ -4740,6 +4771,16 @@ function serializeGameState() {
             isInfinite: timerState.isInfinite,
         },
         roomSettings: { ...roomSettings },
+
+        recorder: (window.gameRecorder && {
+            playerColor: window.gameRecorder.playerColor,
+            aiColor: window.gameRecorder.aiColor,
+            difficulty: window.gameRecorder.difficulty,
+            startTime: window.gameRecorder.startTime,
+            lastRecordedIndex: window.gameRecorder.lastRecordedIndex,
+            records: window.gameRecorder.records,
+            result: window.gameRecorder.result,
+        }) || null,
     };
 }
 
@@ -4757,6 +4798,11 @@ function applySerializedState(state) {
     gameState.initialPieces = state.initialPieces || [];
     gameState.gameOver = false;
     gameState.gameResult = null;
+
+    if (state.recorder && window.gameRecorder) {
+        Object.assign(window.gameRecorder, state.recorder);
+        window.gameRecorder.active = true;
+    }
 
     if (state.kingSkillState) {
         kingSkillState.uses = state.kingSkillState.uses;
@@ -5602,6 +5648,19 @@ function createRoomWithSettings() {
     settingsReceived = true;
 
     destroyPeer();
+
+    // ★ Free mini-renderer WebGL contexts — they are NOT released by
+    //   just hiding the overlays. Without this, opening/closing the
+    //   domain expansion a few times exhausts the browser's WebGL
+    //   context limit and rendering silently breaks.
+    if (vsRenderers.left) { vsRenderers.left.dispose(); vsRenderers.left = null; }
+    if (vsRenderers.right) { vsRenderers.right.dispose(); vsRenderers.right = null; }
+    if (battleRenderers.player) { battleRenderers.player.dispose(); battleRenderers.player = null; }
+    if (battleRenderers.opponent) { battleRenderers.opponent.dispose(); battleRenderers.opponent = null; }
+
+    // Make sure the overlays are hidden so no stale canvas stays visible
+    document.getElementById('vsOverlay')?.classList.add('hidden');
+    document.getElementById('battleOverlay')?.classList.add('hidden');
     document.getElementById('roomSettings').classList.add('hidden');
     document.getElementById('waitingCodeDisplay').textContent = roomCode;
     document.getElementById('waitingOverlay').classList.remove('hidden');
@@ -5622,9 +5681,12 @@ function createRoomWithSettings() {
     };
 
     peer.on('connection', (conn) => {
-        if (peerConnection && peerConnection.open) {
-            conn.close();
-            return;
+        // ★ Prefer the incoming connection. If the old socket is still
+        //   marked "open" but is in fact dead (LTE→WiFi handoff, dropped
+        //   ICE), we'd otherwise permanently refuse the legit reconnect.
+        if (peerConnection) {
+            try { peerConnection.close(); } catch (_) { /* ignore */ }
+            peerConnection = null;
         }
         peerConnection = conn;
         currentMode = 'multiplayer';
@@ -5950,7 +6012,14 @@ function setupPeerConnection() {
                 const r = data.checkerR, c = data.checkerC;
                 if (r !== undefined && c !== undefined && gameState.board[r][c]) {
                     gameState.board[r][c] = null;
-                    gameState.moveHistory.push({ type: 'domain_kill', r, c });
+                    gameState.moveHistory.push({
+                        type: 'domain_kill',
+                        fromR: data.defenderKingR ?? null,   // ★ NEW
+                        fromC: data.defenderKingC ?? null,   // ★ NEW
+                        toR: r,
+                        toC: c,
+                        r, c,
+                    });
                     syncPiecesAfterMove();
                 }
 
@@ -5958,6 +6027,7 @@ function setupPeerConnection() {
                 kingSkillState.context = null;
                 battleState = null;
                 isAnimating = false;
+                switchTimer(gameState.turn);
                 updateTurnIndicator();
                 checkGameStatus();
             }
@@ -6012,7 +6082,6 @@ function setupPeerConnection() {
         }
         if (data.type === 'aim_cancel') { hideRemoteAim(); return; }
         if (data.type === 'aim_fire') {
-            console.log('🔫 aim_fire received', data);
             try {
                 const targets = data.targets || [];
                 playRemoteCannonFire(
@@ -6022,7 +6091,7 @@ function setupPeerConnection() {
                     data.damage || ABILITIES.rook.damage
                 );
             } catch (err) {
-                console.error('❌ playRemoteCannonFire threw:', err);
+                console.error('playRemoteCannonFire threw:', err);
             }
             return;
         }
@@ -6835,15 +6904,6 @@ function maybeOfferDomainExpansion() {
     }, 750);
 }
 
-function showDomainPrompt(color, checker) {
-    kingSkillState.context = { color, checker };
-    document.getElementById('domainPromptUses').textContent = kingSkillState.uses[color];
-    const movesSince = gameState.fullMoveNumber - kingSkillState.lastUsedMove[color];
-    const cd = Math.max(0, KING_DOMAIN_COOLDOWN - movesSince);
-    document.getElementById('domainPromptCd').textContent = cd;
-    document.getElementById('domainPromptOverlay').classList.remove('hidden');
-}
-
 function acceptDomainExpansion(color, checker) {
     document.getElementById('domainPromptOverlay').classList.add('hidden');
 
@@ -7593,6 +7653,7 @@ function setSfxVolume(v) {
     gameSettings.sfxVolume = Math.max(0, Math.min(100, parseInt(v) || 0));
     document.getElementById('sfxVolumeValue').textContent = gameSettings.sfxVolume + '%';
     saveGameSettings();
+    if (typeof updateSFXVolume === 'function') updateSFXVolume();
 }
 
 function setQueenVoiceEnabled(enabled) {
@@ -7641,6 +7702,23 @@ function applyGraphicsQuality(quality) {
     if (shadowOn && shadowType !== undefined) {
         renderer.shadowMap.type = shadowType;
     }
+
+    // ── Resize shadow maps to match the quality tier ──
+    let shadowSize;
+    if (quality === 'low') shadowSize = 0;      // shadows off
+    else if (quality === 'high') shadowSize = 2048;
+    else shadowSize = 1024;
+
+    if (shadowOn) {
+        scene.traverse(n => {
+            if (n.isDirectionalLight && n.castShadow && n.shadow) {
+                if (n.shadow.map) { n.shadow.map.dispose(); n.shadow.map = null; }
+                n.shadow.mapSize.width = shadowSize;
+                n.shadow.mapSize.height = shadowSize;
+            }
+        });
+    }
+
     renderer.shadowMap.needsUpdate = true;
     scene.traverse(n => { if (n.material) n.material.needsUpdate = true; });
 }
@@ -7656,6 +7734,7 @@ function resetSettingsToDefaults() {
     syncSettingsUI();
     applyGraphicsQuality(gameSettings.graphicsQuality);
     updateMusicVolume();
+    if (typeof updateSFXVolume === 'function') updateSFXVolume();
     if (gameSettings.musicEnabled) startMenuMusic();
 }
 

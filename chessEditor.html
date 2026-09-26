@@ -1961,18 +1961,29 @@
               </div>`;
         }
 
+        function debounce(fn, ms) {
+            let t = null;
+            return function (...args) {
+                clearTimeout(t);
+                t = setTimeout(() => fn.apply(this, args), ms);
+            };
+        }
+
         function bindRange(id, onChange, opts = {}) {
             const range = document.getElementById(id);
             const num = document.getElementById(id + '_num');
             if (!range) return;
             const step = parseFloat(range.step) || 0.01;
             const dec = decimalsFor(step);
+            const pushDebounced = debounce(() => {
+                if (!opts.noHistory) pushHistory();
+            }, 300);
 
             range.addEventListener('input', () => {
                 const v = parseFloat(range.value);
                 if (num) num.value = v.toFixed(dec);
                 onChange(v);
-                if (!opts.noHistory) pushHistory();
+                pushDebounced();      // ← only pushes after 300 ms of quiet
             });
 
             if (!num) return;

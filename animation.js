@@ -2453,6 +2453,24 @@ function fireAreaCannonVisual(centerPos, targets, damage, callback) {
         if (bt >= 1) {
             scene.remove(boomGroup);
             scene.remove(markerGroup);
+            boomGroup.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) {
+                    if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                    else n.material.dispose();
+                }
+            });
+            markerGroup.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) {
+                    if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                    else n.material.dispose();
+                }
+            });
+            for (const r of groundRings) {
+                if (r.mesh.geometry) r.mesh.geometry.dispose();
+                if (r.mat) r.mat.dispose();
+            }
             if (flashEl.parentNode) flashEl.remove();
 
             if (shakeHandle === window._domainShake) {
@@ -2578,7 +2596,17 @@ function createEmptyExplosion(position) {
     const boomStart = clock.getElapsedTime();
     const animateBoom = () => {
         const bt = (clock.getElapsedTime() - boomStart) / 0.5;
-        if (bt >= 1) { scene.remove(boomGroup); return; }
+        if (bt >= 1) {
+            scene.remove(boomGroup);
+            boomGroup.traverse(n => {
+                if (n.geometry) n.geometry.dispose();
+                if (n.material) {
+                    if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                    else n.material.dispose();
+                }
+            });
+            return;
+        }
         const s = 1 + bt * 7;
         mainBoom.scale.setScalar(s);
         mainBoom.material.opacity = 0.8 * (1 - bt * 1.2);
@@ -2855,9 +2883,22 @@ function fireCannonVisual(fR, fC, tR, tC, damage, callback) {
                 const bt = (clock.getElapsedTime() - boomStart) / 0.6;
                 if (bt >= 1) {
                     scene.remove(boomGroup);
-                    for (const p of trailParticles) scene.remove(p);
+                    boomGroup.traverse(n => {
+                        if (n.geometry) n.geometry.dispose();
+                        if (n.material) {
+                            if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+                            else n.material.dispose();
+                        }
+                    });
+                    for (const p of trailParticles) {
+                        scene.remove(p);
+                        if (p.geometry) p.geometry.dispose();
+                        if (p.material) p.material.dispose();
+                    }
                     scene.remove(proj);
                     scene.remove(glow);
+                    proj.geometry.dispose(); proj.material.dispose();
+                    glow.geometry.dispose(); glow.material.dispose();
                     showDamageEffect(tR, tC, damage);
                     setTimeout(callback, 300);
                     return;
@@ -4162,13 +4203,13 @@ function buildKnightKillSignature(ctx) {
     // Determine the attacker's color (opposite of the king's color)
     const attackerColor = isWhiteKing ? 'black' : 'white';
     const tint = attackerColor === 'white' ? 0x9fe8ff : 0xb46cff;
-    
+
     const ghosts = [];
     const COUNT = isKingKill ? 12 : 4;
 
     for (let i = 0; i < COUNT; i++) {
         const ghostGroup = new THREE.Group();
-        
+
         // Create the actual 3D knight model
         const knightModel = createPieceModel(
             'knight', attackerColor, 100, 100, PIECE_PARAMS.knight || {}
@@ -4214,11 +4255,11 @@ function buildKnightKillSignature(ctx) {
             impactPos.z + Math.sin(startAngle) * startRadius
         );
 
-        ghosts.push({ 
-            mesh: ghostGroup, 
-            mats: ghostMats, 
-            startPos, 
-            delay: i * (isKingKill ? 0.06 : 0.05) 
+        ghosts.push({
+            mesh: ghostGroup,
+            mats: ghostMats,
+            startPos,
+            delay: i * (isKingKill ? 0.06 : 0.05)
         });
     }
 
@@ -4250,9 +4291,9 @@ function buildKnightKillSignature(ctx) {
                 for (const g of ghosts) {
                     const k = Math.max(0, Math.min(1,
                         (ft - g.delay) / (isKingKill ? 0.28 : 0.35)));
-                    if (k <= 0) { 
+                    if (k <= 0) {
                         for (const m of g.mats) m.opacity = 0;
-                        continue; 
+                        continue;
                     }
 
                     const target = new THREE.Vector3(
@@ -4264,7 +4305,7 @@ function buildKnightKillSignature(ctx) {
                     g.mesh.lookAt(target);
 
                     const fadeOut = k > 0.9 ? (1 - (k - 0.9) / 0.1) : 1;
-                    
+
                     // Update opacity for all cloned materials
                     for (const m of g.mats) m.opacity = 0.95 * fadeOut;
 
@@ -5265,6 +5306,10 @@ function finalizeDomainKill(defenderColor, checker) {
         gameState.board[r][c] = null;
         gameState.moveHistory.push({
             type: 'domain_kill',
+            fromR: defenderKing ? defenderKing.r : null,      // ★ NEW
+            fromC: defenderKing ? defenderKing.c : null,      // ★ NEW
+            toR: r,                                           // ★ NEW
+            toC: c,                                           // ★ NEW
             r, c,
             piece: { ...victimPiece },
         });
@@ -5272,6 +5317,7 @@ function finalizeDomainKill(defenderColor, checker) {
 
     syncPiecesAfterMove();
     gameState.flipTurn();
+    switchTimer(gameState.turn);
 
     if (currentMode === 'multiplayer' && peerConnection?.open && defenderColor === playerColor) {
         peerConnection.send({
@@ -5279,6 +5325,8 @@ function finalizeDomainKill(defenderColor, checker) {
             winner: 'defender',
             checkerR: r,
             checkerC: c,
+            defenderKingR: dk ? dk.r : null,
+            defenderKingC: dk ? dk.c : null,
         });
     }
 
@@ -5870,6 +5918,10 @@ function finalizeKingKill(kingColor, checker) {
             gameState.board[king.r][king.c] = null;
             gameState.moveHistory.push({
                 type: 'domain_kill_king',
+                fromR: checker ? checker.r : null,            // ★ NEW
+                fromC: checker ? checker.c : null,            // ★ NEW
+                toR: king.r,                                  // ★ NEW
+                toC: king.c,                                  // ★ NEW
                 r: king.r, c: king.c,
                 piece: { ...kingPiece },
             });
