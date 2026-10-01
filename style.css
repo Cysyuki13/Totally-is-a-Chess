@@ -4723,3 +4723,85 @@ body.force-landscape #rotateDeviceOverlay {
     opacity: 0.5;
     color: #f0e6d3;
 }
+
+/* iPhone CSS 模拟全屏模式 */
+body.css-fullscreen {
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+}
+
+/* 只需确保画布铺满 viewport 即可，z-index 不用变 */
+body.css-fullscreen #gameCanvas,
+body.css-fullscreen #gameCanvas canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    /* ★ 不要寫 z-index: 9999 */
+}
+
+/* ============================================================ */
+/*  ★ ORIENTATION CHOICE OVERLAY                                 */
+/* ============================================================ */
+.orientation-buttons {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    max-width: 420px;
+    margin: 8px auto 0;
+    width: 100%;
+}
+
+.orientation-buttons .btn {
+    margin: 0;
+    width: 100%;
+    padding: 20px 12px;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    line-height: 1.2;
+}
+
+.orientation-buttons .btn .orient-icon {
+    font-size: 2rem;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.orientation-buttons .btn .orient-label {
+    font-weight: 900;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+}
+
+.orientation-buttons .btn .orient-sub {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    letter-spacing: 2px;
+    font-weight: 700;
+}
+
+@media (max-width: 480px) {
+    .orientation-buttons .btn {
+        padding: 16px 8px;
+    }
+
+    .orientation-buttons .btn .orient-icon {
+        font-size: 1.6rem;
+    }
+
+    .orientation-buttons .btn .orient-label {
+        font-size: 0.95rem;
+    }
+
+    .orientation-buttons .btn .orient-sub {
+        font-size: 0.62rem;
+    }
+}

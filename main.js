@@ -143,6 +143,13 @@ const CANNON_RANGE = 4;
 
 const IS_MOBILE = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
 
+// ★ Player's chosen orientation: 'portrait' | 'landscape' | null (not chosen yet)
+let orientationPreference = null;
+try {
+    const v = localStorage.getItem('chessOrientationPref');
+    if (v === 'portrait' || v === 'landscape') orientationPreference = v;
+} catch (_) { }
+
 // ============================================================
 //  ★ Mobile auto-fullscreen
 // ============================================================
@@ -183,6 +190,13 @@ let _mobileFsAttempted = false;
 async function enterMobileFullscreen() {
     if (IS_STANDALONE) return;
 
+    // 检测是否为 iPhone
+    if (IS_IPHONE) {
+        // 为 <body> 添加一个类，触发 CSS 全屏样式
+        document.body.classList.add('css-fullscreen');
+        return;
+    }
+
     const el = document.documentElement;
     try {
         if (!document.fullscreenElement) {
@@ -198,12 +212,16 @@ async function enterMobileFullscreen() {
         }
     } catch (err) { }
 
+    // ★ Only lock landscape if the player explicitly chose landscape.
+    //   This removes the previous "force rotate the phone" behaviour.
     try {
-        if (screen.orientation && screen.orientation.lock) {
+        if (orientationPreference === 'landscape' &&
+            screen.orientation && screen.orientation.lock) {
             await screen.orientation.lock('landscape').catch(() => { });
         }
     } catch (_) { }
 
+    // iOS 特定的滚动条隐藏逻辑（保留）
     if (IS_IOS && !IS_STANDALONE) {
         window.scrollTo(0, 1);
         setTimeout(() => window.scrollTo(0, 1), 120);
@@ -223,6 +241,8 @@ function isPortraitOrientation() {
 }
 
 async function tryLockLandscape() {
+    // iPhone 根本不支持 direction lock（即使全屏也不行）
+    if (IS_IPHONE) return false;
     if (!screen.orientation || !screen.orientation.lock) return false;
     const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
     if (!inFs) return false;
@@ -239,6 +259,14 @@ function updateRotateOverlay() {
         document.body.classList.remove('force-landscape');
         return;
     }
+
+    // ★ Respect the player's choice. If they picked portrait (or haven't
+    //   picked yet), NEVER force landscape or show the rotate overlay.
+    if (orientationPreference !== 'landscape') {
+        document.body.classList.remove('force-landscape');
+        return;
+    }
+
     if (isPortraitOrientation()) {
         document.body.classList.add('force-landscape');
     } else {
@@ -247,6 +275,12 @@ function updateRotateOverlay() {
 }
 
 async function enforceLandscape() {
+    // ★ Only do anything if the player actually asked for landscape.
+    if (orientationPreference !== 'landscape') {
+        updateRotateOverlay();
+        return;
+    }
+
     _landscapeLockAttempted = true;
 
     if (IS_MOBILE && !IS_STANDALONE) {
@@ -260,18 +294,15 @@ async function enforceLandscape() {
 function setupForceLandscape() {
     if (!IS_MOBILE) return;
 
-    const firstTap = () => {
-        if (_landscapeLockAttempted) return;
-        enforceLandscape();
-        document.removeEventListener('touchend', firstTap, true);
-        document.removeEventListener('click', firstTap, true);
-    };
-    document.addEventListener('touchend', firstTap, { capture: true, passive: true });
-    document.addEventListener('click', firstTap, { capture: true, passive: true });
+    // ★ IMPORTANT: The old "auto-lock on first tap" behaviour is GONE.
+    //   The player's decision (portrait vs landscape) is now made in the
+    //   orientation picker overlay and stored in localStorage.
 
     const onFsChange = () => {
         if (document.fullscreenElement || document.webkitFullscreenElement) {
-            tryLockLandscape();
+            if (orientationPreference === 'landscape') {
+                tryLockLandscape();
+            }
         }
         updateRotateOverlay();
     };
@@ -294,7 +325,7 @@ function setupForceLandscape() {
         if (document.visibilityState === 'visible') {
             updateRotateOverlay();
             if (document.fullscreenElement || document.webkitFullscreenElement) {
-                tryLockLandscape();
+                if (orientationPreference === 'landscape') tryLockLandscape();
             }
         }
     });
@@ -6968,6 +6999,22 @@ function resetCameraForPlayer() {
 }
 
 async function toggleFullscreen() {
+    // ★ iPhone: 用 CSS 类的有无来判断当前是否在"全屏"
+    if (IS_IPHONE) {
+        if (document.body.classList.contains('css-fullscreen')) {
+            document.body.classList.remove('css-fullscreen');
+            try {
+                if (screen.orientation && screen.orientation.unlock) {
+                    screen.orientation.unlock();
+                }
+            } catch (_) { }
+        } else {
+            document.body.classList.add('css-fullscreen');
+        }
+        return;
+    }
+
+    // 以下保持原本的原生全屏逻辑
     if (document.fullscreenElement || document.webkitFullscreenElement) {
         try {
             if (screen.orientation && screen.orientation.unlock) {
@@ -6979,6 +7026,7 @@ async function toggleFullscreen() {
         else if (document.msExitFullscreen) document.msExitFullscreen();
         return;
     }
+
     _mobileFsAttempted = true;
     await enterMobileFullscreen();
 }
@@ -7440,6 +7488,54 @@ function backToMenu() {
         updateTopBarReopenBtn();
         updateFullscreenBtnPosition();
     });
+}
+
+// ============================================================
+//  ★ ORIENTATION PICKER
+// ============================================================
+function setOrientationPreference(pref) {
+    if (pref !== 'portrait' && pref !== 'landscape') return;
+
+    orientationPreference = pref;
+    try { localStorage.setItem('chessOrientationPref', pref); } catch (_) { }
+
+    // Hide the first-launch overlay (if it's showing)
+    document.getElementById('orientationOverlay')?.classList.add('hidden');
+
+    // Show the main menu only if we're not already in a game
+    if (!currentMode) {
+        document.getElementById('mainMenu')?.classList.remove('hidden');
+    }
+
+    // Release any previously locked orientation
+    try {
+        if (screen.orientation && screen.orientation.unlock) {
+            screen.orientation.unlock();
+        }
+    } catch (_) { }
+
+    document.body.classList.remove('force-landscape');
+    updateOrientationButtons();
+
+    if (pref === 'landscape') {
+        // If we're in a user gesture (button click), we can enter fullscreen
+        // and lock landscape right now.
+        _landscapeLockAttempted = false;
+        if (IS_MOBILE && !IS_STANDALONE) {
+            enforceLandscape();
+        }
+    } else {
+        // Portrait chosen → never auto-enforce landscape again
+        _landscapeLockAttempted = true;
+        updateRotateOverlay();
+    }
+}
+
+function updateOrientationButtons() {
+    document.getElementById('orientBtnPortrait')
+        ?.classList.toggle('active', orientationPreference === 'portrait');
+    document.getElementById('orientBtnLandscape')
+        ?.classList.toggle('active', orientationPreference === 'landscape');
 }
 
 function backToMultiplayerMenu() {
@@ -9631,6 +9727,8 @@ function syncSettingsUI() {
     document.querySelectorAll('#settingsOverlay .mode-btn[data-quality]').forEach(b => {
         b.classList.toggle('active', b.dataset.quality === gameSettings.graphicsQuality);
     });
+
+    updateOrientationButtons();
 }
 
 function setMusicEnabled(enabled) {
@@ -9908,6 +10006,17 @@ window.onload = () => {
 
     setupMobileAutoFullscreen();
     setupForceLandscape();
+
+    // ★ First-launch orientation picker (mobile only)
+    if (IS_MOBILE && !orientationPreference) {
+        document.getElementById('mainMenu')?.classList.add('hidden');
+        document.getElementById('orientationOverlay')?.classList.remove('hidden');
+    } else {
+        document.getElementById('orientationOverlay')?.classList.add('hidden');
+        document.getElementById('mainMenu')?.classList.remove('hidden');
+        updateOrientationButtons();
+    }
+
     updateAIModeUI();
     updateTopBarReopenBtn();
     updateFullscreenBtnPosition();
