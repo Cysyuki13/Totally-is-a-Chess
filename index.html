@@ -29,6 +29,15 @@
 <body>
 
     <div id="gameCanvas"></div>
+
+    <!-- ★ 直向時強制顯示的旋轉提示 -->
+    <div id="rotateDeviceOverlay">
+        <div class="rotate-icon">📱</div>
+        <div class="rotate-title">請旋轉至橫向</div>
+        <div class="rotate-subtitle">Rotate your device to landscape</div>
+        <div class="rotate-arrow">↻</div>
+    </div>
+
     <div id="damageOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:100;">
     </div>
 
@@ -99,45 +108,6 @@
             <span style="font-size:2rem;">🔥</span>
             <span style="font-size:0.85rem;letter-spacing:1px;">發射</span>
         </button>
-    </div>
-
-    <!-- ============================================================ -->
-    <!--  ★ ORIENTATION CHOICE (first launch on mobile)                -->
-    <!-- ============================================================ -->
-    <div class="overlay hidden" id="orientationOverlay">
-        <div class="chess-bg" aria-hidden="true">
-            <div class="bg-grid"></div>
-            <div class="bg-glow"></div>
-            <span class="piece p1">♞</span>
-            <span class="piece p2">♛</span>
-            <span class="piece p3">♜</span>
-            <span class="piece p4">♝</span>
-            <span class="piece p5">♟</span>
-            <span class="piece p6">♚</span>
-            <span class="piece p7">♘</span>
-            <span class="piece p8">♕</span>
-        </div>
-
-        <div class="panel">
-            <h1>♞ 西洋棋</h1>
-            <p style="opacity:0.75;margin-bottom:10px;">選擇你的遊玩方向</p>
-            <p style="opacity:0.6;font-size:0.88rem;margin-bottom:22px;line-height:1.55;">
-                直向適合單手操作，橫向視野更寬廣。<br>
-                之後可隨時在 ⚙️ 設定中更改。
-            </p>
-            <div class="orientation-buttons">
-                <button class="btn" onclick="setOrientationPreference('portrait')">
-                    <span class="orient-icon">📱</span>
-                    <span class="orient-label">直向</span>
-                    <span class="orient-sub">PORTRAIT</span>
-                </button>
-                <button class="btn" onclick="setOrientationPreference('landscape')">
-                    <span class="orient-icon">🖥️</span>
-                    <span class="orient-label">橫向</span>
-                    <span class="orient-sub">LANDSCAPE</span>
-                </button>
-            </div>
-        </div>
     </div>
 
     <!-- ============================================================ -->
@@ -493,18 +463,6 @@
                     <span>🖥 全螢幕</span>
                     <button class="btn btn-secondary btn-sm" onclick="toggleFullscreen()">切換</button>
                 </label>
-            </div>
-
-            <!-- ★ Orientation -->
-            <div class="settings-block">
-                <label>📐 螢幕方向</label>
-                <div class="btn-row" style="justify-content:center;gap:6px;margin-top:4px;">
-                    <button class="mode-btn" id="orientBtnPortrait" onclick="setOrientationPreference('portrait')">📱
-                        直向</button>
-                    <button class="mode-btn" id="orientBtnLandscape" onclick="setOrientationPreference('landscape')">🖥️
-                        橫向</button>
-                </div>
-                <div class="desc">選擇遊玩時的建議螢幕方向（僅手機/平板有效）</div>
             </div>
 
             <!-- Actions -->

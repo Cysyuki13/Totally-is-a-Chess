@@ -143,13 +143,6 @@ const CANNON_RANGE = 4;
 
 const IS_MOBILE = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
 
-// ★ Player's chosen orientation: 'portrait' | 'landscape' | null (not chosen yet)
-let orientationPreference = null;
-try {
-    const v = localStorage.getItem('chessOrientationPref');
-    if (v === 'portrait' || v === 'landscape') orientationPreference = v;
-} catch (_) { }
-
 // ============================================================
 //  ★ Mobile auto-fullscreen
 // ============================================================
@@ -158,17 +151,7 @@ const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 const IS_IPHONE = /iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !/iPad/.test(navigator.userAgent));
 const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true;                     // ← ★ ADD THIS LINE BACK
-// ★ Broad "should this device see the orientation picker?" check.
-//   Some mobile browsers don't report `pointer: coarse` reliably, so we
-//   also look at the user-agent + touch capability.
-const IS_MOBILE_UA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Kindle|Silk/i
-    .test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-const SHOULD_SHOW_ORIENTATION_PICKER =
-    IS_MOBILE_UA || (IS_TOUCH && window.matchMedia('(pointer: coarse)').matches);
+    window.navigator.standalone === true;
 
 // ============================================================
 //  ★ MULTIPLAYER RECONNECTION STATE
@@ -200,12 +183,6 @@ let _mobileFsAttempted = false;
 async function enterMobileFullscreen() {
     if (IS_STANDALONE) return;
 
-    // iPhone uses a CSS-only "fake fullscreen"
-    if (IS_IPHONE) {
-        document.body.classList.add('css-fullscreen');
-        return;
-    }
-
     const el = document.documentElement;
     try {
         if (!document.fullscreenElement) {
@@ -221,11 +198,12 @@ async function enterMobileFullscreen() {
         }
     } catch (err) { }
 
-    // ★ NOTE: NO orientation lock here anymore. Fullscreen ≠ landscape.
-    //   Landscape locking is ONLY done by enforceLandscape() when the
-    //   player explicitly picks landscape in the picker / settings.
+    try {
+        if (screen.orientation && screen.orientation.lock) {
+            await screen.orientation.lock('landscape').catch(() => { });
+        }
+    } catch (_) { }
 
-    // iOS-specific scrollbar hiding
     if (IS_IOS && !IS_STANDALONE) {
         window.scrollTo(0, 1);
         setTimeout(() => window.scrollTo(0, 1), 120);
@@ -233,13 +211,18 @@ async function enterMobileFullscreen() {
 }
 
 // ============================================================
-//  ★ Landscape lock (rotate-overlay UI has been removed)
+//  ★ Auto-Force Landscape System
 // ============================================================
 let _landscapeLockAttempted = false;
 
+function isPortraitOrientation() {
+    if (screen.orientation && typeof screen.orientation.type === 'string') {
+        return screen.orientation.type.startsWith('portrait');
+    }
+    return window.innerHeight > window.innerWidth;
+}
+
 async function tryLockLandscape() {
-    // iPhone doesn't support direction lock — even in fullscreen.
-    if (IS_IPHONE) return false;
     if (!screen.orientation || !screen.orientation.lock) return false;
     const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
     if (!inFs) return false;
@@ -251,10 +234,19 @@ async function tryLockLandscape() {
     }
 }
 
-async function enforceLandscape() {
-    // ★ Only lock when the player explicitly asked for landscape.
-    if (orientationPreference !== 'landscape') return;
+function updateRotateOverlay() {
+    if (!IS_MOBILE) {
+        document.body.classList.remove('force-landscape');
+        return;
+    }
+    if (isPortraitOrientation()) {
+        document.body.classList.add('force-landscape');
+    } else {
+        document.body.classList.remove('force-landscape');
+    }
+}
 
+async function enforceLandscape() {
     _landscapeLockAttempted = true;
 
     if (IS_MOBILE && !IS_STANDALONE) {
@@ -262,24 +254,52 @@ async function enforceLandscape() {
     }
 
     await tryLockLandscape();
+    updateRotateOverlay();
 }
 
 function setupForceLandscape() {
     if (!IS_MOBILE) return;
 
-    // ★ We no longer re-lock landscape when fullscreen changes.
-    //   Fullscreen toggle (⛶ button) must be a pure fullscreen toggle —
-    //   it should NOT affect portrait / landscape at all.
-    //
-    //   The only place landscape is locked now is enforceLandscape(),
-    //   which is called once when the player explicitly taps "橫向".
+    const firstTap = () => {
+        if (_landscapeLockAttempted) return;
+        enforceLandscape();
+        document.removeEventListener('touchend', firstTap, true);
+        document.removeEventListener('click', firstTap, true);
+    };
+    document.addEventListener('touchend', firstTap, { capture: true, passive: true });
+    document.addEventListener('click', firstTap, { capture: true, passive: true });
 
+    const onFsChange = () => {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            tryLockLandscape();
+        }
+        updateRotateOverlay();
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    document.addEventListener('mozfullscreenchange', onFsChange);
+    document.addEventListener('MSFullscreenChange', onFsChange);
+
+    if (screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener('change', updateRotateOverlay);
+    }
     window.addEventListener('orientationchange', () => {
         setTimeout(updateFullscreenBtnPosition, 120);
     });
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', updateFullscreenBtnPosition);
     }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            updateRotateOverlay();
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                tryLockLandscape();
+            }
+        }
+    });
+
+    updateRotateOverlay();
 }
 
 function setupMobileAutoFullscreen() {
@@ -6948,32 +6968,17 @@ function resetCameraForPlayer() {
 }
 
 async function toggleFullscreen() {
-    // ★ The fullscreen button ONLY toggles fullscreen. It must never
-    //   change the player's orientation mode (portrait ⇄ landscape).
-    //   Orientation lock only happens when the player explicitly picks
-    //   "橫向" in the orientation picker / settings.
-
-    // ── iPhone: CSS-only "fake fullscreen" ──
-    if (IS_IPHONE) {
-        document.body.classList.toggle('css-fullscreen');
-        return;
-    }
-
-    // ── Exiting fullscreen ──
     if (document.fullscreenElement || document.webkitFullscreenElement) {
-        if (document.exitFullscreen) {
-            await document.exitFullscreen().catch(() => { });
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
-        }
-        // NOTE: deliberately NOT calling screen.orientation.unlock() here.
-        //       Whatever lock the player chose stays in effect.
+        try {
+            if (screen.orientation && screen.orientation.unlock) {
+                screen.orientation.unlock();
+            }
+        } catch (_) { }
+        if (document.exitFullscreen) await document.exitFullscreen().catch(() => { });
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        else if (document.msExitFullscreen) document.msExitFullscreen();
         return;
     }
-
-    // ── Entering fullscreen ──
     _mobileFsAttempted = true;
     await enterMobileFullscreen();
 }
@@ -7435,53 +7440,6 @@ function backToMenu() {
         updateTopBarReopenBtn();
         updateFullscreenBtnPosition();
     });
-}
-
-// ============================================================
-//  ★ ORIENTATION PICKER
-// ============================================================
-function setOrientationPreference(pref) {
-    if (pref !== 'portrait' && pref !== 'landscape') return;
-
-    orientationPreference = pref;
-    try { localStorage.setItem('chessOrientationPref', pref); } catch (_) { }
-
-    // Hide the first-launch overlay (if it's showing)
-    document.getElementById('orientationOverlay')?.classList.add('hidden');
-
-    // Show the main menu only if we're not already in a game
-    if (!currentMode) {
-        document.getElementById('mainMenu')?.classList.remove('hidden');
-    }
-
-    // Release any previously locked orientation
-    try {
-        if (screen.orientation && screen.orientation.unlock) {
-            screen.orientation.unlock();
-        }
-    } catch (_) { }
-
-    document.body.classList.remove('force-landscape');
-    updateOrientationButtons();
-
-    if (pref === 'landscape') {
-        // If we're in a user gesture (button click), we can enter fullscreen
-        // and lock landscape right now.
-        _landscapeLockAttempted = false;
-        if (IS_MOBILE && !IS_STANDALONE) {
-            enforceLandscape();
-        }
-    } else {
-        // Portrait chosen → never auto-enforce landscape again
-        _landscapeLockAttempted = true;
-    }
-}
-
-function updateOrientationButtons() {
-    document.getElementById('orientBtnPortrait')
-        ?.classList.toggle('active', orientationPreference === 'portrait');
-    document.getElementById('orientBtnLandscape')
-        ?.classList.toggle('active', orientationPreference === 'landscape');
 }
 
 function backToMultiplayerMenu() {
@@ -9673,8 +9631,6 @@ function syncSettingsUI() {
     document.querySelectorAll('#settingsOverlay .mode-btn[data-quality]').forEach(b => {
         b.classList.toggle('active', b.dataset.quality === gameSettings.graphicsQuality);
     });
-
-    updateOrientationButtons();
 }
 
 function setMusicEnabled(enabled) {
@@ -9920,7 +9876,7 @@ window.hideGameFooter = function () {
 // ============================================================
 //  BOOT
 // ============================================================
-window.addEventListener('load', () => {
+window.onload = () => {
     // ★ ADD YOUR COPYRIGHT HERE ★
     console.log(
         '%c♞ TotallyIsAChess %c\n© 2026 TotallyIsAChess. All rights reserved.\nContact: your.email@gmail.com | @cysyuki13',
@@ -9952,45 +9908,35 @@ window.addEventListener('load', () => {
 
     setupMobileAutoFullscreen();
     setupForceLandscape();
-
-    // ★ DEBUG — remove once confirmed working
-    console.log('🧭 Orientation debug', {
-        IS_MOBILE_UA,
-        IS_TOUCH,
-        coarse: window.matchMedia('(pointer: coarse)').matches,
-        SHOULD_SHOW_ORIENTATION_PICKER,
-        orientationPreference,
-        search: location.search,
-    });
-
-    // ★ Force-show via URL:  index.html?setup
-    const params = new URLSearchParams(location.search);
-    if (params.has('setup')) {
-        try { localStorage.removeItem('chessOrientationPref'); } catch (_) { }
-        orientationPreference = null;
-    }
-
-    // ★ First-launch orientation picker (mobile / tablet only)
-    const showPicker = SHOULD_SHOW_ORIENTATION_PICKER && !orientationPreference;
-
-    if (showPicker) {
-        document.getElementById('mainMenu')?.classList.add('hidden');
-        document.getElementById('orientationOverlay')?.classList.remove('hidden');
-    } else {
-        document.getElementById('orientationOverlay')?.classList.add('hidden');
-        document.getElementById('mainMenu')?.classList.remove('hidden');
-        updateOrientationButtons();
-    }
-
     updateAIModeUI();
     updateTopBarReopenBtn();
     updateFullscreenBtnPosition();
 
-    // ...rest of your keydown Escape handler unchanged...
-}, { once: true });
-
-// ★ Console helper so you never have to dig around again:
-window.resetOrientationPref = function () {
-    try { localStorage.removeItem('chessOrientationPref'); } catch (_) { }
-    location.reload();
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const surrenderOverlay = document.getElementById('battleSurrenderConfirmOverlay');
+            if (surrenderOverlay && !surrenderOverlay.classList.contains('hidden')) {
+                e.preventDefault();
+                cancelBattleSurrenderConfirm();
+                return;
+            }
+            const menuOverlay = document.getElementById('backToMenuConfirmOverlay');
+            if (menuOverlay && !menuOverlay.classList.contains('hidden')) {
+                e.preventDefault();
+                cancelBackToMenuConfirm();
+                return;
+            }
+            const overlay = document.getElementById('restartConfirmOverlay');
+            if (overlay && !overlay.classList.contains('hidden')) {
+                e.preventDefault();
+                cancelRestartConfirm();
+                return;
+            }
+            const settingsOverlay = document.getElementById('settingsOverlay');
+            if (settingsOverlay && !settingsOverlay.classList.contains('hidden')) {
+                e.preventDefault();
+                closeSettings();
+            }
+        }
+    });
 };
