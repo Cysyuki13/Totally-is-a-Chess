@@ -229,19 +229,12 @@ async function enterMobileFullscreen() {
 }
 
 // ============================================================
-//  ★ Auto-Force Landscape System
+//  ★ Landscape lock (rotate-overlay UI has been removed)
 // ============================================================
 let _landscapeLockAttempted = false;
 
-function isPortraitOrientation() {
-    if (screen.orientation && typeof screen.orientation.type === 'string') {
-        return screen.orientation.type.startsWith('portrait');
-    }
-    return window.innerHeight > window.innerWidth;
-}
-
 async function tryLockLandscape() {
-    // iPhone 根本不支持 direction lock（即使全屏也不行）
+    // iPhone doesn't support direction lock — even in fullscreen.
     if (IS_IPHONE) return false;
     if (!screen.orientation || !screen.orientation.lock) return false;
     const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -254,32 +247,15 @@ async function tryLockLandscape() {
     }
 }
 
+// No-op kept for backwards compatibility — the rotate overlay is gone,
+// and we never force the body into landscape anymore.
 function updateRotateOverlay() {
-    if (!IS_MOBILE) {
-        document.body.classList.remove('force-landscape');
-        return;
-    }
-
-    // ★ Respect the player's choice. If they picked portrait (or haven't
-    //   picked yet), NEVER force landscape or show the rotate overlay.
-    if (orientationPreference !== 'landscape') {
-        document.body.classList.remove('force-landscape');
-        return;
-    }
-
-    if (isPortraitOrientation()) {
-        document.body.classList.add('force-landscape');
-    } else {
-        document.body.classList.remove('force-landscape');
-    }
+    document.body.classList.remove('force-landscape');
 }
 
 async function enforceLandscape() {
-    // ★ Only do anything if the player actually asked for landscape.
-    if (orientationPreference !== 'landscape') {
-        updateRotateOverlay();
-        return;
-    }
+    // ★ Only lock when the player explicitly asked for landscape.
+    if (orientationPreference !== 'landscape') return;
 
     _landscapeLockAttempted = true;
 
@@ -288,15 +264,10 @@ async function enforceLandscape() {
     }
 
     await tryLockLandscape();
-    updateRotateOverlay();
 }
 
 function setupForceLandscape() {
     if (!IS_MOBILE) return;
-
-    // ★ IMPORTANT: The old "auto-lock on first tap" behaviour is GONE.
-    //   The player's decision (portrait vs landscape) is now made in the
-    //   orientation picker overlay and stored in localStorage.
 
     const onFsChange = () => {
         if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -304,16 +275,12 @@ function setupForceLandscape() {
                 tryLockLandscape();
             }
         }
-        updateRotateOverlay();
     };
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
     document.addEventListener('mozfullscreenchange', onFsChange);
     document.addEventListener('MSFullscreenChange', onFsChange);
 
-    if (screen.orientation && screen.orientation.addEventListener) {
-        screen.orientation.addEventListener('change', updateRotateOverlay);
-    }
     window.addEventListener('orientationchange', () => {
         setTimeout(updateFullscreenBtnPosition, 120);
     });
@@ -323,14 +290,12 @@ function setupForceLandscape() {
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            updateRotateOverlay();
-            if (document.fullscreenElement || document.webkitFullscreenElement) {
-                if (orientationPreference === 'landscape') tryLockLandscape();
+            if ((document.fullscreenElement || document.webkitFullscreenElement) &&
+                orientationPreference === 'landscape') {
+                tryLockLandscape();
             }
         }
     });
-
-    updateRotateOverlay();
 }
 
 function setupMobileAutoFullscreen() {
@@ -7527,7 +7492,6 @@ function setOrientationPreference(pref) {
     } else {
         // Portrait chosen → never auto-enforce landscape again
         _landscapeLockAttempted = true;
-        updateRotateOverlay();
     }
 }
 
