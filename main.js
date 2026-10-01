@@ -4977,7 +4977,7 @@ function executeKnightAbilityMove(fromR, fromC, landingR, landingC, knockbackOpt
     knightAbilityState = null;
 
     const pieceObj = pieceObjects[`${fromR},${fromC}`];
-    if (!pieceObj) { isAnimating = false; return; }
+    if (!pieceObj) { isAnimating = false; deselectPiece(); return; }
 
     const startPos = pieceObj.position.clone();
     const targetPos = get3DPosition(landingR, landingC, 0);
@@ -5121,9 +5121,9 @@ function executeBishopAbility(fromR, fromC, toR, toC, ability, isRemote = false)
     gameState.putOnSkillCooldown(casterBishop);
 
     const pieceObj = pieceObjects[`${fromR},${fromC}`];
-    if (!pieceObj) { isAnimating = false; return; }
+    if (!pieceObj) { isAnimating = false; deselectPiece(); return; }
 
-    if (gameState.getPiece(toR, toC)) { isAnimating = false; return; }
+    if (gameState.getPiece(toR, toC)) { isAnimating = false; deselectPiece(); return; }
 
     const pathPieces = getBishopPathPieces(gameState, fromR, fromC, toR, toC);
 
@@ -5653,6 +5653,18 @@ function isPlayerTurn() {
     return true;
 }
 
+// Returns true if the current selection still points at a live piece.
+// If not, tears the selection down and returns false.
+function ensureSelectionIsValid() {
+    if (!selectedPiece) return false;
+    const live = gameState.getPiece(selectedPiece.row, selectedPiece.col);
+    if (!live || live.color !== selectedPiece.piece.color) {
+        deselectPiece();
+        return false;
+    }
+    return true;
+}
+
 function updateActionBar(show, hasTargets, cooldown = 0) {
     const bar = document.getElementById('actionBar');
     const attackBtn = document.getElementById('btnActionAttack');
@@ -6020,7 +6032,13 @@ function deselectPiece() {
 function attemptMove(fromR, fromC, toR, toC) {
     const move = validMoves.find(m => m.r === toR && m.c === toC);
     if (!move) return;
+
     const piece = gameState.getPiece(fromR, fromC);
+    if (!piece) {                  // ← stale selection, bail safely
+        deselectPiece();
+        return;
+    }
+
     const isPromotion = piece.type === 'pawn' && (toR === 0 || toR === 7);
     if (isPromotion && (currentMode !== 'multiplayer' || isPlayerTurn())) {
         pendingPromotion = { fromR, fromC, toR, toC };
@@ -6064,6 +6082,7 @@ function showDamageEffect(r, c, damage) {
             updateHealthVisuals(r, c, 0, 100);
             pieceObj.scale.set(0.1, 0.1, 0.1);
             setTimeout(() => {
+                if (pieceObjects[`${r},${c}`] !== pieceObj) return;   // stale — do nothing
                 if (pieceObj.parent) piecesGroup.remove(pieceObj);
                 delete pieceObjects[`${r},${c}`];
             }, 300);
@@ -6128,7 +6147,7 @@ function executePawnAbility(fromR, fromC, toR, toC, ability, isRemote = false) {
         return;
     }
 
-    if (!pieceObj) { isAnimating = false; return; }
+    if (!pieceObj) { isAnimating = false; deselectPiece(); return; }
 
     if (fromR === toR && fromC === toC) {
         createCrossExplosion(toR, toC, ability.damage, ability.selfDamage, () => {
@@ -6494,6 +6513,9 @@ function checkGameStatus() {
     if (status.over) {
         gameOverFlag = true;
         stopTimer();
+
+        // ★ Show the footer when the game ends
+        if (window.showGameFooter) window.showGameFooter();
 
         if (status.winner === 'draw') {
             playSFX('gameover');
@@ -7087,6 +7109,7 @@ function processInput(clientX, clientY) {
         const data = obj.userData;
 
         if (data.type === 'highlight' && actionMode === 'move') {
+            if (!ensureSelectionIsValid()) { clearHighlights(); return; }
             attemptMove(selectedPiece.row, selectedPiece.col, data.row, data.col);
         } else if (data.type === 'ability-target' && actionMode === 'attack') {
             const target = abilityTargets.find(t => t.r === data.row && t.c === data.col);
@@ -7096,13 +7119,18 @@ function processInput(clientX, clientY) {
             if (target) handleAbilityTargetClick(target);
         } else if (data.type === 'piece') {
             const piece = gameState.getPiece(data.row, data.col);
+
+            // ★ Guard against stale meshes: a mesh exists here but the board is empty.
+            if (!piece) {
+                deselectPiece();
+                return;
+            }
+
             if (actionMode === 'attack' && selectedPiece) {
                 const target = abilityTargets.find(t => t.r === data.row && t.c === data.col);
-                if (target) {
-                    handleAbilityTargetClick(target);
-                    return;
-                }
+                if (target) { handleAbilityTargetClick(target); return; }
             }
+
             if (piece.color === gameState.turn && isPlayerTurn()) {
                 selectPiece(data.row, data.col);
             } else if (selectedPiece && piece.color !== gameState.turn) {
@@ -7113,6 +7141,8 @@ function processInput(clientX, clientY) {
 }
 
 function handleSquareClick(row, col) {
+    if (!ensureSelectionIsValid()) return;   // ← guard stale selection
+
     const target = abilityTargets.find(t => t.r === row && t.c === col);
     if (target && actionMode === 'attack') {
         handleAbilityTargetClick(target);
@@ -7887,14 +7917,16 @@ function setupPeerConnection() {
 
                 const r = data.checkerR, c = data.checkerC;
                 if (r !== undefined && c !== undefined && gameState.board[r][c]) {
+                    const victimPiece = gameState.board[r][c];
                     gameState.board[r][c] = null;
                     gameState.moveHistory.push({
                         type: 'domain_kill',
-                        fromR: data.defenderKingR ?? null,   // ★ NEW
-                        fromC: data.defenderKingC ?? null,   // ★ NEW
-                        toR: r,
-                        toC: c,
+                        fromR: data.defenderKingR ?? null,
+                        fromC: data.defenderKingC ?? null,
+                        toR: r, toC: c,
                         r, c,
+                        piece: data.defenderKingPiece || null,
+                        captured: victimPiece ? { ...victimPiece } : null,
                     });
                     syncPiecesAfterMove();
                 }
@@ -8368,6 +8400,10 @@ window.chessHelp = function () {
     console.log('  %cforceDomainExpansion()%c', cmd, desc);
     console.log('  %c                                    %c     color: "white" | "black" (預設當前回合)', dim, desc);
     console.log('  %c                                    %c     type : 敵方棋子類型 (e.g. "queen", 預設隨機)', dim, desc);
+    // ★ NEW
+    console.log('  %cforceDomainWin(color?)%c       → 強制結束當前領域對決並指定勝方', cmd, desc);
+    console.log('  %c                                    %c     color: "white" | "black" (預設國王獲勝)', dim, desc);
+    console.log('  %c                                    %c     必須在對決進行中呼叫', dim, desc);
 
     console.log('%c🤖 AI 對戰專用', gold);
     console.log('  %cforceAISkill(type, pieceIndex?, targetIndex?)%c  → 強制 AI 使用指定棋子的技能',
@@ -8562,6 +8598,93 @@ window.forceWin = function () {
         'color:#2ecc71;font-weight:bold;font-size:14px;',
         'color:#f0e6d3;font-family:monospace;'
     );
+};
+
+// ============================================================
+//  ★ Developer Tool — Force the Domain Expansion winner
+// ============================================================
+//  Usage (in the browser console):
+//    forceDomainWin()          → default: the king (defender) wins
+//    forceDomainWin('white')   → the white side wins the duel
+//    forceDomainWin('black')   → the black side wins the duel
+//
+//  "The X side wins" means: whichever of {king, checker} is white
+//  survives the duel. The other one is destroyed.
+//    • King wins  → checker eliminated, game continues
+//    • Checker wins → king dies, game ends immediately
+//
+//  Notes:
+//    • Requires an active battle. Trigger one first with
+//      forceDomainExpansion().
+//    • Bypasses the entire RPS menu (buttons get disabled, no
+//      further input accepted) and jumps straight to resolution.
+//    • Multiplayer sync is handled by resolveDomainCheckerDies()
+//      / resolveDomainDefenderLose() as usual.
+// ============================================================
+window.forceDomainWin = function (winnerColor) {
+    // ── Guards ──
+    if (!battleState) {
+        console.warn('⚠️ 目前沒有進行中的領域對決。');
+        console.warn('💡 請先使用 forceDomainExpansion() 觸發領域展開。');
+        return;
+    }
+    if (battleState.over) {
+        return console.warn('⚠️ 領域對決已經結束了');
+    }
+
+    // ── Default: the king (defender) wins ──
+    if (winnerColor === undefined || winnerColor === null) {
+        winnerColor = battleState.defenderColor;
+    }
+
+    if (winnerColor !== 'white' && winnerColor !== 'black') {
+        console.warn('⚠️ 用法: forceDomainWin() 或 forceDomainWin("white") 或 forceDomainWin("black")');
+        return;
+    }
+
+    const defenderColor = battleState.defenderColor; // 國王（防守方）的顏色
+    const attackerColor = battleState.attackerColor; // 將軍者（攻擊方）的顏色
+    const defenderLabel = defenderColor === 'white' ? '白方' : '黑方';
+    const attackerLabel = attackerColor === 'white' ? '白方' : '黑方';
+
+    // ── Lock the UI & state ──
+    document.querySelectorAll('.battle-menu-btn').forEach(b => b.disabled = true);
+    hideOpponentChoiceBubble();
+    hidePlayerChoiceBubble();
+    battleState.over = true;
+    battleState.myChoice = null;
+    battleState.opponentChoice = null;
+
+    if (winnerColor === defenderColor) {
+        // ── 國王（防守方）獲勝 → 將軍者被消滅 ──
+        battleState.defenderHearts = 2;
+        battleState.attackerHearts = 0;
+        updateBattleHealthBars();
+        renderBattleHearts();
+        setBattleMessage(`👑 ${defenderLabel} 國王獲勝！`);
+
+        console.log(
+            `%c👑 強制領域結果：${defenderLabel} 國王獲勝（${attackerLabel} 將軍者被消滅）`,
+            'color:#e8c547; font-weight:bold; font-size:14px;'
+        );
+
+        // Route through the normal resolution so cinematics + MP sync fire
+        setTimeout(() => resolveDomainCheckerDies(), 800);
+    } else {
+        // ── 將軍者獲勝 → 國王敗北，整場對局結束 ──
+        battleState.defenderHearts = 0;
+        battleState.attackerHearts = 1;
+        updateBattleHealthBars();
+        renderBattleHearts();
+        setBattleMessage(`💀 ${defenderLabel} 國王敗北...`);
+
+        console.log(
+            `%c💀 強制領域結果：${attackerLabel} 將軍者獲勝（${defenderLabel} 國王敗北）`,
+            'color:#e74c3c; font-weight:bold; font-size:14px;'
+        );
+
+        setTimeout(() => resolveDomainDefenderLose(), 800);
+    }
 };
 
 window.forceLose = function () {
@@ -9738,9 +9861,29 @@ function markBattleCombatantHit(which) {
 }
 
 // ============================================================
+//  ★ COPYRIGHT FOOTER CONTROLS
+// ============================================================
+window.showGameFooter = function () {
+    const footer = document.getElementById('gameFooter');
+    if (footer) footer.classList.add('force-visible');
+};
+
+window.hideGameFooter = function () {
+    const footer = document.getElementById('gameFooter');
+    if (footer) footer.classList.remove('force-visible');
+};
+
+// ============================================================
 //  BOOT
 // ============================================================
 window.onload = () => {
+    // ★ ADD YOUR COPYRIGHT HERE ★
+    console.log(
+        '%c♞ TotallyIsAChess %c\n© 2026 TotallyIsAChess. All rights reserved.\nContact: your.email@gmail.com | @cysyuki13',
+        'color:#e8c547; font-weight:bold; font-size:16px;',
+        'color:#f0e6d3; font-family:monospace; font-size:12px;'
+    );
+
     initThree();
 
     loadGameSettings();

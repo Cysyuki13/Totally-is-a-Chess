@@ -5059,7 +5059,7 @@ function playKillAnimation(kingColor, checker) {
 
     // ★ 依「將軍者的棋子類型」挑選處決風格
     const killSignature = buildKillSignature(
-        (checker.piece && checker.piece.type) || 'pawn',
+        'king',
         {
             scene, track, T,
             kingPos, checkerPos, orbPos, impactPos,
@@ -5299,19 +5299,33 @@ function playKillAnimation(kingColor, checker) {
 }
 
 function finalizeDomainKill(defenderColor, checker) {
+    if (!checker) {                                   // ← safety guard
+        kingSkillState.active = false;
+        kingSkillState.context = null;
+        battleState = null;
+        isAnimating = false;
+        return;
+    }
+
     const r = checker.r, c = checker.c;
     const victimPiece = gameState.board[r][c];
+    const defenderKing = gameState.findKing(defenderColor);   // ← the missing declaration
 
     if (victimPiece) {
         gameState.board[r][c] = null;
         gameState.moveHistory.push({
             type: 'domain_kill',
-            fromR: defenderKing ? defenderKing.r : null,      // ★ NEW
-            fromC: defenderKing ? defenderKing.c : null,      // ★ NEW
-            toR: r,                                           // ★ NEW
-            toC: c,                                           // ★ NEW
+            fromR: defenderKing ? defenderKing.r : null,
+            fromC: defenderKing ? defenderKing.c : null,
+            toR: r,
+            toC: c,
             r, c,
-            piece: { ...victimPiece },
+            // ★ actor = the defending king (so stats credit the right side)
+            piece: defenderKing
+                ? { ...gameState.board[defenderKing.r][defenderKing.c] }
+                : null,
+            // ★ victim = the killed checker (so the move log shows what died)
+            captured: { ...victimPiece },
         });
     }
 
@@ -5325,8 +5339,8 @@ function finalizeDomainKill(defenderColor, checker) {
             winner: 'defender',
             checkerR: r,
             checkerC: c,
-            defenderKingR: dk ? dk.r : null,
-            defenderKingC: dk ? dk.c : null,
+            defenderKingR: defenderKing ? defenderKing.r : null,
+            defenderKingC: defenderKing ? defenderKing.c : null,
         });
     }
 
@@ -5690,9 +5704,9 @@ function playKillKingAnimation(kingColor, checker) {
     const CASTER_AURA = new THREE.Color(T.casterAura);
     const VICTIM_FLASH = new THREE.Color(T.flashColor);
 
-    // ★ 依「攻擊者的棋子類型」挑選處決國王的風格
-    //   注意：這裡 kingPos 是「被處決的國王」、attackerPos 是「施術者」
-    //   ctx 傳入時，把 attacker 當作施術方、king 當作受害者
+    // ★ 依「攻擊者的棋子類型」挑選處決國王的風格。
+    //   這裡 kingPos 是「被處決的國王」、attackerPos 是「施術者」，
+    //   所以把 attacker 當作施術方、king 當作受害者傳入 ctx。
     const killSignature = buildKillSignature(
         (checker.piece && checker.piece.type) || 'pawn',
         {
@@ -5918,12 +5932,14 @@ function finalizeKingKill(kingColor, checker) {
             gameState.board[king.r][king.c] = null;
             gameState.moveHistory.push({
                 type: 'domain_kill_king',
-                fromR: checker ? checker.r : null,            // ★ NEW
-                fromC: checker ? checker.c : null,            // ★ NEW
-                toR: king.r,                                  // ★ NEW
-                toC: king.c,                                  // ★ NEW
+                fromR: checker ? checker.r : null,
+                fromC: checker ? checker.c : null,
+                toR: king.r,
+                toC: king.c,
                 r: king.r, c: king.c,
-                piece: { ...kingPiece },
+                // ★ actor = the attacking checker that just slayed the king
+                piece: checker ? { ...checker.piece } : null,   // actor
+                captured: { ...kingPiece },                     // victim
             });
         }
     }
