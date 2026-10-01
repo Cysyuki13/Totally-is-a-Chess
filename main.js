@@ -157,8 +157,15 @@ const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const IS_IPHONE = /iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !/iPad/.test(navigator.userAgent));
-const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true;
+// ★ Broad "should this device see the orientation picker?" check.
+//   Some mobile browsers don't report `pointer: coarse` reliably, so we
+//   also look at the user-agent + touch capability.
+const IS_MOBILE_UA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet|Kindle|Silk/i
+    .test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const SHOULD_SHOW_ORIENTATION_PICKER =
+    IS_MOBILE_UA || (IS_TOUCH && window.matchMedia('(pointer: coarse)').matches);
 
 // ============================================================
 //  ★ MULTIPLAYER RECONNECTION STATE
@@ -190,9 +197,8 @@ let _mobileFsAttempted = false;
 async function enterMobileFullscreen() {
     if (IS_STANDALONE) return;
 
-    // 检测是否为 iPhone
+    // iPhone uses a CSS-only "fake fullscreen"
     if (IS_IPHONE) {
-        // 为 <body> 添加一个类，触发 CSS 全屏样式
         document.body.classList.add('css-fullscreen');
         return;
     }
@@ -212,16 +218,11 @@ async function enterMobileFullscreen() {
         }
     } catch (err) { }
 
-    // ★ Only lock landscape if the player explicitly chose landscape.
-    //   This removes the previous "force rotate the phone" behaviour.
-    try {
-        if (orientationPreference === 'landscape' &&
-            screen.orientation && screen.orientation.lock) {
-            await screen.orientation.lock('landscape').catch(() => { });
-        }
-    } catch (_) { }
+    // ★ NOTE: NO orientation lock here anymore. Fullscreen ≠ landscape.
+    //   Landscape locking is ONLY done by enforceLandscape() when the
+    //   player explicitly picks landscape in the picker / settings.
 
-    // iOS 特定的滚动条隐藏逻辑（保留）
+    // iOS-specific scrollbar hiding
     if (IS_IOS && !IS_STANDALONE) {
         window.scrollTo(0, 1);
         setTimeout(() => window.scrollTo(0, 1), 120);
@@ -269,17 +270,12 @@ async function enforceLandscape() {
 function setupForceLandscape() {
     if (!IS_MOBILE) return;
 
-    const onFsChange = () => {
-        if (document.fullscreenElement || document.webkitFullscreenElement) {
-            if (orientationPreference === 'landscape') {
-                tryLockLandscape();
-            }
-        }
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    document.addEventListener('mozfullscreenchange', onFsChange);
-    document.addEventListener('MSFullscreenChange', onFsChange);
+    // ★ We no longer re-lock landscape when fullscreen changes.
+    //   Fullscreen toggle (⛶ button) must be a pure fullscreen toggle —
+    //   it should NOT affect portrait / landscape at all.
+    //
+    //   The only place landscape is locked now is enforceLandscape(),
+    //   which is called once when the player explicitly taps "橫向".
 
     window.addEventListener('orientationchange', () => {
         setTimeout(updateFullscreenBtnPosition, 120);
@@ -287,15 +283,6 @@ function setupForceLandscape() {
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', updateFullscreenBtnPosition);
     }
-
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            if ((document.fullscreenElement || document.webkitFullscreenElement) &&
-                orientationPreference === 'landscape') {
-                tryLockLandscape();
-            }
-        }
-    });
 }
 
 function setupMobileAutoFullscreen() {
@@ -6964,34 +6951,32 @@ function resetCameraForPlayer() {
 }
 
 async function toggleFullscreen() {
-    // ★ iPhone: 用 CSS 类的有无来判断当前是否在"全屏"
+    // ★ The fullscreen button ONLY toggles fullscreen. It must never
+    //   change the player's orientation mode (portrait ⇄ landscape).
+    //   Orientation lock only happens when the player explicitly picks
+    //   "橫向" in the orientation picker / settings.
+
+    // ── iPhone: CSS-only "fake fullscreen" ──
     if (IS_IPHONE) {
-        if (document.body.classList.contains('css-fullscreen')) {
-            document.body.classList.remove('css-fullscreen');
-            try {
-                if (screen.orientation && screen.orientation.unlock) {
-                    screen.orientation.unlock();
-                }
-            } catch (_) { }
-        } else {
-            document.body.classList.add('css-fullscreen');
-        }
+        document.body.classList.toggle('css-fullscreen');
         return;
     }
 
-    // 以下保持原本的原生全屏逻辑
+    // ── Exiting fullscreen ──
     if (document.fullscreenElement || document.webkitFullscreenElement) {
-        try {
-            if (screen.orientation && screen.orientation.unlock) {
-                screen.orientation.unlock();
-            }
-        } catch (_) { }
-        if (document.exitFullscreen) await document.exitFullscreen().catch(() => { });
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-        else if (document.msExitFullscreen) document.msExitFullscreen();
+        if (document.exitFullscreen) {
+            await document.exitFullscreen().catch(() => { });
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+        // NOTE: deliberately NOT calling screen.orientation.unlock() here.
+        //       Whatever lock the player chose stays in effect.
         return;
     }
 
+    // ── Entering fullscreen ──
     _mobileFsAttempted = true;
     await enterMobileFullscreen();
 }
@@ -9971,8 +9956,11 @@ window.onload = () => {
     setupMobileAutoFullscreen();
     setupForceLandscape();
 
-    // ★ First-launch orientation picker (mobile only)
-    if (IS_MOBILE && !orientationPreference) {
+    // ★ First-launch orientation picker (mobile / tablet only)
+    //   Uses the broad SHOULD_SHOW_ORIENTATION_PICKER check so it
+    //   fires on every mobile browser — not just ones that happen to
+    //   report `pointer: coarse`.
+    if (SHOULD_SHOW_ORIENTATION_PICKER && !orientationPreference) {
         document.getElementById('mainMenu')?.classList.add('hidden');
         document.getElementById('orientationOverlay')?.classList.remove('hidden');
     } else {
