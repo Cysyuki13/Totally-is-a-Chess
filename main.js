@@ -248,12 +248,6 @@ async function tryLockLandscape() {
     }
 }
 
-// No-op kept for backwards compatibility — the rotate overlay is gone,
-// and we never force the body into landscape anymore.
-function updateRotateOverlay() {
-    document.body.classList.remove('force-landscape');
-}
-
 async function enforceLandscape() {
     // ★ Only lock when the player explicitly asked for landscape.
     if (orientationPreference !== 'landscape') return;
