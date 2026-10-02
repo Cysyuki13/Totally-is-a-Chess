@@ -180,6 +180,21 @@ const RECONNECT_GRACE_MS = 60000;
 
 let _mobileFsAttempted = false;
 
+// ============================================================
+//  ★ Fullscreen capability detection
+//  iPhone (non-PWA) can NEVER use the Fullscreen API for
+//  arbitrary elements — only <video> can go fullscreen there.
+//  iPad and Android are fine. PWA-standalone doesn't need it.
+// ============================================================
+function canUseFullscreen() {
+    if (IS_IPHONE && !IS_STANDALONE) return false;
+    const el = document.documentElement;
+    return !!(el.requestFullscreen
+        || el.webkitRequestFullscreen
+        || el.mozRequestFullScreen
+        || el.msRequestFullscreen);
+}
+
 async function enterMobileFullscreen() {
     if (IS_STANDALONE) return;
 
@@ -222,6 +237,11 @@ function isPortraitOrientation() {
     return window.innerHeight > window.innerWidth;
 }
 
+// ★ 直向時是否應完全封鎖遊戲輸入與計時
+function isGameplayBlocked() {
+    return IS_MOBILE && isPortraitOrientation();
+}
+
 async function tryLockLandscape() {
     if (!screen.orientation || !screen.orientation.lock) return false;
     const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -234,15 +254,84 @@ async function tryLockLandscape() {
     }
 }
 
+let _portraitBlocked = false;
+
 function updateRotateOverlay() {
     if (!IS_MOBILE) {
         document.body.classList.remove('force-landscape');
+        if (_portraitBlocked) {
+            _portraitBlocked = false;
+            resumeFromPortraitBlock();
+        }
         return;
     }
-    if (isPortraitOrientation()) {
+
+    const nowBlocked = isPortraitOrientation();
+
+    if (nowBlocked) {
         document.body.classList.add('force-landscape');
+        if (!_portraitBlocked) {
+            _portraitBlocked = true;
+            pauseForPortraitBlock();
+        }
     } else {
         document.body.classList.remove('force-landscape');
+        if (_portraitBlocked) {
+            _portraitBlocked = false;
+            resumeFromPortraitBlock();
+        }
+    }
+}
+
+// ── 進入直向：暫停計時、清除選取與瞄準狀態 ──
+function pauseForPortraitBlock() {
+    // 1. 暫停計時器（保留 currentPlayer，不重置）
+    if (typeof timerState !== 'undefined' &&
+        timerState.active && !timerState.paused) {
+        timerState.paused = true;
+        if (timerState.interval) {
+            clearInterval(timerState.interval);
+            timerState.interval = null;
+        }
+        if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
+    }
+
+    // 2. 取消任何正在進行的瞄準 / 選取 / 騎士三步驟
+    if (typeof isAiming !== 'undefined' && isAiming &&
+        typeof cancelAiming === 'function') {
+        try { cancelAiming(); } catch (_) { }
+    }
+    if (typeof knightAbilityActive !== 'undefined' && knightAbilityActive &&
+        typeof cancelKnightAbilityMode === 'function') {
+        try { cancelKnightAbilityMode(); } catch (_) { }
+    }
+    if (typeof selectedPiece !== 'undefined' && selectedPiece &&
+        typeof deselectPiece === 'function') {
+        try { deselectPiece(); } catch (_) { }
+    }
+}
+
+// ── 回到橫向：恢復計時器 ──
+function resumeFromPortraitBlock() {
+    if (typeof timerState === 'undefined') return;
+    if (typeof gameOverFlag !== 'undefined' && gameOverFlag) return;
+    if (timerState.active && timerState.paused) {
+        // startTimer() 會保留 currentPlayer，只重建 interval
+        if (typeof startTimer === 'function') startTimer();
+    }
+    if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
+
+    // 如果轉回橫向時剛好是 AI 的回合，讓它繼續
+    if (typeof currentMode !== 'undefined' && currentMode === 'ai' &&
+        typeof gameState !== 'undefined' && gameState &&
+        typeof playerColor !== 'undefined' &&
+        gameState.turn !== playerColor &&
+        !aiThinking &&
+        !gameOverFlag &&
+        (typeof kingSkillState === 'undefined' || !kingSkillState.active) &&
+        !isAnimating) {
+        aiThinking = true;
+        setTimeout(() => { if (typeof makeAIMove === 'function') makeAIMove(); }, 400);
     }
 }
 
@@ -327,14 +416,23 @@ function setupMobileAutoFullscreen() {
     if (IS_IPHONE && !IS_STANDALONE) showIOSFullscreenHintOnce();
 }
 
-function showIOSFullscreenHintOnce() {
+function showIOSFullscreenHintOnce(force = false) {
     if (!IS_IPHONE || IS_STANDALONE) return;
-    try {
-        if (localStorage.getItem('iosFsHintShown') === '1') return;
-        localStorage.setItem('iosFsHintShown', '1');
-    } catch (_) { }
+
+    // Only suppress repeats on the *automatic* call (force=false).
+    if (!force) {
+        try {
+            if (localStorage.getItem('iosFsHintShown') === '1') return;
+            localStorage.setItem('iosFsHintShown', '1');
+        } catch (_) { }
+    }
+
+    // Remove any existing hint so we don't stack them.
+    const existing = document.getElementById('iosFullscreenHint');
+    if (existing) existing.remove();
 
     const hint = document.createElement('div');
+    hint.id = 'iosFullscreenHint';
     hint.textContent = '📱 點「分享」→「加入主畫面」以獲得全螢幕體驗';
     Object.assign(hint.style, {
         position: 'fixed',
@@ -6968,6 +7066,18 @@ function resetCameraForPlayer() {
 }
 
 async function toggleFullscreen() {
+    // ★ iPhone (non-PWA): the element Fullscreen API does not exist.
+    //   Show the "add to home screen" hint instead of failing silently.
+    if (IS_IPHONE && !IS_STANDALONE) {
+        showIOSFullscreenHintOnce(true);
+        return;
+    }
+
+    if (!canUseFullscreen()) {
+        console.warn('⚠️ Fullscreen API not supported on this device');
+        return;
+    }
+
     if (document.fullscreenElement || document.webkitFullscreenElement) {
         try {
             if (screen.orientation && screen.orientation.unlock) {
@@ -6983,6 +7093,36 @@ async function toggleFullscreen() {
     await enterMobileFullscreen();
 }
 
+// ============================================================
+//  ★ Fullscreen UI gate
+//  On iPhone (non-PWA) the ⛶ button is a lie — hide it, and
+//  turn the in-settings button into a helpful prompt.
+// ============================================================
+function applyFullscreenCapabilityUI() {
+    if (canUseFullscreen()) return;   // iPad / Android / desktop → nothing to do
+
+    // 1. Hide the floating ⛶ button
+    const floatBtn = document.getElementById('globalFullscreenBtn');
+    if (floatBtn) {
+        floatBtn.textContent = '📱';
+        floatBtn.title = '加入主畫面以獲得全螢幕';
+        floatBtn.setAttribute('aria-hidden', 'true');
+        floatBtn.setAttribute('tabindex', '-1');
+    }
+
+    // 2. In the settings panel, replace the fullscreen toggle with
+    //    a friendly "加入主畫面" prompt button.
+    document.querySelectorAll('#settingsOverlay button').forEach(btn => {
+        if (btn.getAttribute('onclick') !== 'toggleFullscreen()') return;
+        btn.textContent = '📱 加入主畫面以全螢幕';
+        btn.style.fontSize = '0.75rem';
+        btn.style.padding = '6px 12px';
+        btn.style.whiteSpace = 'nowrap';
+        btn.style.opacity = '0.9';
+        // Keep the onclick — it now shows the hint instead of failing.
+    });
+}
+
 function toggleFreeCamera() {
     isFreeCameraActive = !isFreeCameraActive;
     updateFreeCamButton();
@@ -6996,6 +7136,7 @@ function toggleFreeCamera() {
 //  INPUT HANDLING
 // ============================================================
 function processInput(clientX, clientY) {
+    if (isGameplayBlocked()) return;
     if (isAnimating || aiThinking || gameOverFlag || !!pendingPromotion || pendingRevive || suppressClick) return;
     if (currentMode === 'multiplayer' && !isPlayerTurn()) return;
 
@@ -7165,6 +7306,7 @@ function handleAbilityTargetClick(target) {
 }
 
 function onClick(e) {
+    if (isGameplayBlocked()) return;
     if (touchActive || dragMoved) return;
     if (isAiming) {
         if (aimValid) fireAimedCannon();
@@ -7174,6 +7316,7 @@ function onClick(e) {
 }
 
 function onMouseDown(e) {
+    if (isGameplayBlocked()) return;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
     isDraggingCamera = e.button === 2 || isFreeCameraActive;
@@ -7183,11 +7326,13 @@ function onMouseDown(e) {
 }
 
 function onMouseUp(e) {
+    if (isGameplayBlocked()) return;
     isDraggingCamera = false;
     setTimeout(() => { suppressClick = false; }, 50);
 }
 
 function onMouseMove(e) {
+    if (isGameplayBlocked()) return;
     if (isAiming && !isDraggingCamera) {
         const aimData = getFreeAimPosition(e.clientX, e.clientY);
         if (aimData) {
@@ -7224,6 +7369,7 @@ function onMouseMove(e) {
 }
 
 function onTouchStart(e) {
+    if (isGameplayBlocked()) return;
     touchActive = true;
     if (e.touches.length === 1) {
         dragStartX = e.touches[0].clientX;
@@ -7240,6 +7386,7 @@ function onTouchStart(e) {
 }
 
 function onTouchMove(e) {
+    if (isGameplayBlocked()) return;
     if (e.touches.length === 2) {
         e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -7286,6 +7433,7 @@ function onTouchMove(e) {
 }
 
 function onTouchEnd(e) {
+    if (isGameplayBlocked()) return;
     setTimeout(() => { touchActive = false; }, 200);
 
     const wasPinching = (window._pinchStartDist !== null);
@@ -9093,6 +9241,7 @@ function hideOpponentChoiceBubble() {
 }
 
 function onBattleChoice(playerChoice) {
+    if (isGameplayBlocked()) return;
     if (!battleState || battleState.over || battleState.busy) return;
     if (battleState.myChoice) return;
 
@@ -9127,6 +9276,7 @@ function onOpponentChoiceReceived(choice) {
 }
 
 function onBattleSurrender() {
+    if (isGameplayBlocked()) return;
     if (!battleState || battleState.over || battleState.busy) return;
 
     const confirmOverlay = document.getElementById('battleSurrenderConfirmOverlay');
@@ -9208,6 +9358,7 @@ function playSurrenderDrainAnimation(localSurrendering) {
 }
 
 function doBattleSurrenderConfirm() {
+    if (isGameplayBlocked()) return;
     const confirmOverlay = document.getElementById('battleSurrenderConfirmOverlay');
     if (confirmOverlay) confirmOverlay.classList.add('hidden');
 
@@ -9908,6 +10059,8 @@ window.onload = () => {
 
     setupMobileAutoFullscreen();
     setupForceLandscape();
+    applyFullscreenCapabilityUI();
+
     updateAIModeUI();
     updateTopBarReopenBtn();
     updateFullscreenBtnPosition();

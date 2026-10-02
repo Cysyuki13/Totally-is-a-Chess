@@ -1006,6 +1006,11 @@ async function selectBestAction(game, aiSide, cfg) {
 // ============================================================
 async function makeAIMove() {
     if (gameOverFlag || currentMode !== 'ai') { aiThinking = false; return; }
+    // ★ NEW — 直向時不思考，等使用者轉回橫向再繼續
+    if (typeof isGameplayBlocked === 'function' && isGameplayBlocked()) {
+        aiThinking = false;
+        return;
+    }
     aiThinking = true;
     showAIThinking(true);
 

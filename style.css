@@ -3543,6 +3543,10 @@ body {
         'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
     text-align: center;
     padding: 24px;
+    pointer-events: auto;
+    touch-action: none;
+    overscroll-behavior: contain;
+
     user-select: none;
     -webkit-user-select: none;
 }
@@ -3574,6 +3578,16 @@ body {
     animation: spinArrow 1.6s linear infinite;
 }
 
+#rotateDeviceOverlay .rotate-paused {
+    margin-top: 14px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: #ff8a70;
+    opacity: 0.9;
+    text-shadow: 0 0 12px rgba(255, 138, 112, 0.55);
+}
+
 @keyframes rotatePhone {
 
     0%,
@@ -3600,6 +3614,13 @@ body {
 
 body.force-landscape #rotateDeviceOverlay {
     display: flex;
+    /* ★ 確保遮罩層是唯一能接收事件的元素 */
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    /* ★ 阻斷底層任何 hover / pointer 事件 */
+    isolation: isolate;
 }
 
 /* ============================================================
