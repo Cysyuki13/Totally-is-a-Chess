@@ -1009,6 +1009,7 @@ async function makeAIMove() {
     // ★ NEW — 直向時不思考，等使用者轉回橫向再繼續
     if (typeof isGameplayBlocked === 'function' && isGameplayBlocked()) {
         aiThinking = false;
+        showAIThinking(false); 
         return;
     }
     aiThinking = true;

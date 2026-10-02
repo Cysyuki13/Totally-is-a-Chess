@@ -187,7 +187,9 @@ let _mobileFsAttempted = false;
 //  iPad and Android are fine. PWA-standalone doesn't need it.
 // ============================================================
 function canUseFullscreen() {
-    if (IS_IPHONE && !IS_STANDALONE) return false;
+    // ★ PWA 已經是全螢幕，無需再切換
+    if (IS_STANDALONE) return true;
+    if (IS_IPHONE) return false;
     const el = document.documentElement;
     return !!(el.requestFullscreen
         || el.webkitRequestFullscreen
@@ -296,6 +298,10 @@ function pauseForPortraitBlock() {
         if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
     }
 
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        peerConnection.send({ type: 'portrait_pause' });
+    }
+
     // 2. 取消任何正在進行的瞄準 / 選取 / 騎士三步驟
     if (typeof isAiming !== 'undefined' && isAiming &&
         typeof cancelAiming === 'function') {
@@ -320,6 +326,10 @@ function resumeFromPortraitBlock() {
         if (typeof startTimer === 'function') startTimer();
     }
     if (typeof updateTimerDisplay === 'function') updateTimerDisplay();
+
+    if (currentMode === 'multiplayer' && peerConnection?.open) {
+        peerConnection.send({ type: 'portrait_resume' });
+    }
 
     // 如果轉回橫向時剛好是 AI 的回合，讓它繼續
     if (typeof currentMode !== 'undefined' && currentMode === 'ai' &&
